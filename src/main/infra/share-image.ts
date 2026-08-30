@@ -4,17 +4,18 @@ import {
   BrowserWindow,
   dialog,
   nativeImage,
-  type SaveDialogOptions,
-  type WebContents
+  webContents,
+  type SaveDialogOptions
 } from 'electron'
 
-import type { ShareImageSaveResult } from '../shared/share-image'
+import type { ShareImageSaveResult } from '../../shared/share-image'
 
 const MAX_IMAGE_DATA_URL_SIZE = 40 * 1024 * 1024
 const PNG_DATA_URL_PREFIX = 'data:image/png;base64,'
 
-function ownerWindow(webContents: WebContents): BrowserWindow | null {
-  return BrowserWindow.fromWebContents(webContents)
+function ownerWindow(ownerId: number): BrowserWindow | null {
+  const owner = webContents.fromId(ownerId)
+  return owner ? BrowserWindow.fromWebContents(owner) : null
 }
 
 function imageFromDataUrl(value: unknown): Electron.NativeImage {
@@ -43,7 +44,7 @@ function defaultShareImageName(accountName: unknown): string {
 }
 
 export async function saveShareImage(
-  webContents: WebContents,
+  ownerId: number,
   dataUrl: unknown,
   accountName: unknown
 ): Promise<ShareImageSaveResult> {
@@ -53,7 +54,7 @@ export async function saveShareImage(
     defaultPath: defaultShareImageName(accountName),
     filters: [{ name: 'PNG 图片', extensions: ['png'] }]
   }
-  const owner = ownerWindow(webContents)
+  const owner = ownerWindow(ownerId)
   const result = owner
     ? await dialog.showSaveDialog(owner, options)
     : await dialog.showSaveDialog(options)

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import {
+  Coins,
   Ellipsis,
   Plus,
   ShieldAlert,
@@ -51,20 +52,30 @@ import {
   TableRow
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import type { ExchangeRateState } from '@/lib/exchange-rates'
 import {
   ANCHOR_CURRENCIES,
   assetAccountTypeLabels,
   defaultCurrencyByMarket,
   DEFAULT_ANCHOR_CURRENCY,
+  DEFAULT_EXCHANGE_RATE_PROVIDER,
+  DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   DEFAULT_FUTU_OPEND_HOST,
   DEFAULT_FUTU_OPEND_PORT,
+  DEFAULT_IBKR_GATEWAY_HOST,
+  DEFAULT_IBKR_GATEWAY_PORT,
   DEFAULT_SYNC_INTERVAL,
+  exchangeRateProviderLabels,
+  EXCHANGE_RATE_PROVIDERS,
+  MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   marketMeta,
   marketOrder,
+  MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   type AssetAccount,
   type AssetAccountInput,
   type AssetAccountType,
   type AnchorCurrency,
+  type ExchangeRateProvider,
   type Holder,
   type Market,
   type Position,
@@ -83,6 +94,88 @@ type BaseDialogProps = {
 
 function FieldMessage({ children }: { children: string }) {
   return <p className="text-xs leading-5 text-destructive">{children}</p>
+}
+
+function operationErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+}
+
+type ExchangeRateView = Pick<ExchangeRateState, 'snapshot' | 'status' | 'error'>
+
+function formatReferenceRate(value: number): string {
+  return new Intl.NumberFormat('zh-CN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4
+  }).format(value)
+}
+
+function formatExchangeRateTime(value: string): string {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return '-'
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).format(date)
+}
+
+function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRateView }) {
+  const cnyRate = exchangeRates.snapshot?.rates.CNY
+  const hkdRate = exchangeRates.snapshot?.rates.HKD
+  const rates: Array<{ label: string; value: number }> = []
+  if (typeof cnyRate === 'number' && Number.isFinite(cnyRate) && cnyRate > 0) {
+    rates.push({ label: 'USD/CNY', value: cnyRate })
+  }
+  if (typeof hkdRate === 'number' && Number.isFinite(hkdRate) && hkdRate > 0) {
+    rates.push({ label: 'USD/HKD', value: hkdRate })
+  }
+  if (
+    typeof cnyRate === 'number' &&
+    Number.isFinite(cnyRate) &&
+    cnyRate > 0 &&
+    typeof hkdRate === 'number' &&
+    Number.isFinite(hkdRate) &&
+    hkdRate > 0
+  ) {
+    rates.push({ label: 'HKD/CNY', value: cnyRate / hkdRate })
+  }
+
+  const status = exchangeRates.snapshot
+    ? `${exchangeRates.status === 'error' ? '使用缓存' : exchangeRates.status === 'refreshing' ? '正在刷新' : '更新时间'} ${formatExchangeRateTime(exchangeRates.snapshot.fetchedAt)}`
+    : exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing'
+      ? '正在获取汇率'
+      : exchangeRates.error || '暂无汇率数据'
+
+  return (
+    <div className="grid gap-3 rounded-xl border bg-muted/20 p-4" role="status">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">参考汇率</p>
+        <span className="text-xs text-muted-foreground">{status}</span>
+      </div>
+      {rates.length ? (
+        <div className="grid grid-cols-3 gap-3">
+          {rates.map((rate) => (
+            <div key={rate.label} className="rounded-lg bg-background px-3 py-2.5">
+              <p className="text-[11px] text-muted-foreground">{rate.label}</p>
+              <p className="mt-1 font-medium tabular-nums">
+                {formatReferenceRate(rate.value)}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">暂时没有可用的参考汇率</p>
+      )}
+      {exchangeRates.error && (
+        <p className="text-xs leading-5 text-destructive">{exchangeRates.error}</p>
+      )}
+    </div>
+  )
 }
 
 function HolderDialog({
@@ -167,7 +260,7 @@ export function ProductAccountDialog({
   onOpenChange,
   onSubmit
 }: BaseDialogProps & {
-  onSubmit: (input: ProductAccountInput) => void
+  onSubmit: (input: ProductAccountInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
   const [anchorCurrency, setAnchorCurrency] = useState<AnchorCurrency>(
@@ -182,14 +275,18 @@ export function ProductAccountDialog({
     setError('')
   }, [open])
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (!name.trim()) {
       setError('请输入账户名称')
       return
     }
-    onSubmit({ name, anchorCurrency })
-    onOpenChange(false)
+    try {
+      await onSubmit({ name, anchorCurrency })
+      onOpenChange(false)
+    } catch (submitError) {
+      setError(operationErrorMessage(submitError))
+    }
   }
 
   return (
@@ -255,19 +352,30 @@ export function ProductAccountSettingsDialog({
   open,
   onOpenChange,
   account,
+  exchangeRates,
+  initialSection = 'basic',
   onSubmit,
   onRequestDelete
 }: BaseDialogProps & {
   account: ProductAccount
-  onSubmit: (input: ProductAccountSettingsInput) => void
+  exchangeRates: ExchangeRateView
+  initialSection?: 'basic' | 'currency' | 'holders' | 'other'
+  onSubmit: (input: ProductAccountSettingsInput) => Promise<void>
   onRequestDelete: () => void
 }) {
   const [name, setName] = useState('')
   const [anchorCurrency, setAnchorCurrency] = useState<AnchorCurrency>(
     DEFAULT_ANCHOR_CURRENCY
   )
+  const [exchangeRateProvider, setExchangeRateProvider] =
+    useState<ExchangeRateProvider>(DEFAULT_EXCHANGE_RATE_PROVIDER)
+  const [exchangeRateRefreshInterval, setExchangeRateRefreshInterval] = useState(
+    String(DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES)
+  )
   const [holders, setHolders] = useState<Holder[]>([])
-  const [section, setSection] = useState<'basic' | 'holders' | 'other'>('basic')
+  const [section, setSection] = useState<
+    'basic' | 'currency' | 'holders' | 'other'
+  >('basic')
   const [holderDialog, setHolderDialog] = useState<{
     open: boolean
     holderId?: string
@@ -278,17 +386,45 @@ export function ProductAccountSettingsDialog({
     if (!open) return
     setName(account.name)
     setAnchorCurrency(account.anchorCurrency)
+    setExchangeRateProvider(
+      EXCHANGE_RATE_PROVIDERS.includes(account.exchangeRateProvider)
+        ? account.exchangeRateProvider
+        : DEFAULT_EXCHANGE_RATE_PROVIDER
+    )
+    setExchangeRateRefreshInterval(
+      String(
+        Number.isInteger(account.exchangeRateRefreshIntervalMinutes) &&
+          account.exchangeRateRefreshIntervalMinutes >=
+            MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES &&
+          account.exchangeRateRefreshIntervalMinutes <=
+            MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
+          ? account.exchangeRateRefreshIntervalMinutes
+          : DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
+      )
+    )
     setHolders(account.holders.map((holder) => ({ ...holder })))
-    setSection('basic')
+    setSection(initialSection)
     setHolderDialog({ open: false })
     setError('')
-  }, [account.id, open])
+  }, [account.id, initialSection, open])
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (!name.trim()) {
       setSection('basic')
       setError('请输入账户名称')
+      return
+    }
+    const refreshInterval = Number(exchangeRateRefreshInterval)
+    if (
+      !Number.isInteger(refreshInterval) ||
+      refreshInterval < MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES ||
+      refreshInterval > MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
+    ) {
+      setSection('currency')
+      setError(
+        `刷新间隔请输入 ${MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}–${MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES} 分钟之间的整数`
+      )
       return
     }
     const normalizedHolderNames = holders.map((holder) => holder.name.trim())
@@ -305,26 +441,35 @@ export function ProductAccountSettingsDialog({
       setError('持有人名称不能重复')
       return
     }
-    onSubmit({
-      name,
-      anchorCurrency,
-      holders: holders.map((holder) => ({ ...holder, name: holder.name.trim() }))
-    })
-    onOpenChange(false)
+    try {
+      await onSubmit({
+        name,
+        anchorCurrency,
+        exchangeRateProvider,
+        exchangeRateRefreshIntervalMinutes: refreshInterval,
+        holders: holders.map((holder) => ({ ...holder, name: holder.name.trim() }))
+      })
+      onOpenChange(false)
+    } catch (submitError) {
+      setError(operationErrorMessage(submitError))
+    }
   }
 
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-[760px] gap-0 overflow-hidden p-0">
+      <DialogContent className="h-[640px] max-h-[calc(100vh-2rem)] max-w-[760px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>账户设置</DialogTitle>
           <DialogDescription className="sr-only">
-            管理账户基础信息、持有人和账户状态
+            管理账户基础信息、币种与汇率、持有人和账户状态
           </DialogDescription>
         </DialogHeader>
-        <form className="grid" onSubmit={handleSubmit}>
-          <div className="grid min-h-[320px] max-h-[60vh] grid-cols-[10.5rem_minmax(0,1fr)] overflow-hidden">
+        <form
+          className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]"
+          onSubmit={handleSubmit}
+        >
+          <div className="grid min-h-0 grid-cols-[10.5rem_minmax(0,1fr)] overflow-hidden">
             <aside className="border-r bg-muted/25 p-3">
               <nav className="grid content-start gap-1" aria-label="账户设置菜单">
                 <Button
@@ -339,6 +484,19 @@ export function ProductAccountSettingsDialog({
                 >
                   <SlidersHorizontal className="size-4" />
                   基础信息
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    'h-9 justify-start gap-2.5 px-3 font-normal',
+                    section === 'currency' &&
+                      'bg-background font-medium shadow-xs hover:bg-background'
+                  )}
+                  onClick={() => setSection('currency')}
+                >
+                  <Coins className="size-4" />
+                  币种与汇率
                 </Button>
                 <Button
                   type="button"
@@ -386,8 +544,17 @@ export function ProductAccountSettingsDialog({
                       maxLength={40}
                     />
                   </div>
+                </section>
+              )}
+
+              {section === 'currency' && (
+                <section className="grid gap-5">
+                  <h3 className="text-base font-semibold">币种与汇率</h3>
+                  <ReferenceExchangeRates exchangeRates={exchangeRates} />
                   <div className="grid gap-2">
-                    <Label htmlFor="account-settings-anchor-currency">锚定币种</Label>
+                    <Label htmlFor="account-settings-anchor-currency">
+                      锚定币种
+                    </Label>
                     <Select
                       value={anchorCurrency}
                       onValueChange={(value) => {
@@ -406,6 +573,57 @@ export function ProductAccountSettingsDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      自动换算锚定市值，并据此计算全部持仓占比
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="account-settings-exchange-rate-provider">
+                      汇率数据源
+                    </Label>
+                    <Select
+                      value={exchangeRateProvider}
+                      onValueChange={(value) => {
+                        setExchangeRateProvider(value as ExchangeRateProvider)
+                        setError('')
+                      }}
+                    >
+                      <SelectTrigger id="account-settings-exchange-rate-provider">
+                        <SelectValue placeholder="选择汇率数据源">
+                          {exchangeRateProviderLabels[exchangeRateProvider]}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {EXCHANGE_RATE_PROVIDERS.map((provider) => (
+                          <SelectItem key={provider} value={provider}>
+                            {exchangeRateProviderLabels[provider]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      用于获取不同持仓币种之间的参考汇率
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="account-settings-exchange-rate-refresh-interval">
+                      刷新间隔（分钟）
+                    </Label>
+                    <Input
+                      id="account-settings-exchange-rate-refresh-interval"
+                      type="number"
+                      min={MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}
+                      max={MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}
+                      step={1}
+                      value={exchangeRateRefreshInterval}
+                      onChange={(event) => {
+                        setExchangeRateRefreshInterval(event.target.value)
+                        setError('')
+                      }}
+                    />
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      打开账户后立即同步，之后按此间隔自动刷新
+                    </p>
                   </div>
                 </section>
               )}
@@ -477,6 +695,12 @@ export function ProductAccountSettingsDialog({
                                         <DropdownMenuItem
                                           variant="destructive"
                                           onSelect={() => {
+                                            if (assetAccountCount > 0) {
+                                              setError(
+                                                '请先为该持有人名下的资产账户重新指定持有人'
+                                              )
+                                              return
+                                            }
                                             setHolders((current) =>
                                               current.filter((item) => item.id !== holder.id)
                                             )
@@ -573,7 +797,7 @@ export function PositionGroupDialog({
   onSubmit
 }: BaseDialogProps & {
   group?: PositionGroup
-  onSubmit: (input: PositionGroupInput) => void
+  onSubmit: (input: PositionGroupInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
@@ -584,14 +808,18 @@ export function PositionGroupDialog({
     setError('')
   }, [group, open])
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (!name.trim()) {
       setError('请输入持仓分组名称')
       return
     }
-    onSubmit({ name })
-    onOpenChange(false)
+    try {
+      await onSubmit({ name })
+      onOpenChange(false)
+    } catch (submitError) {
+      setError(operationErrorMessage(submitError))
+    }
   }
 
   return (
@@ -640,7 +868,7 @@ export function GroupPositionsDialog({
   group: PositionGroup
   assetAccounts: AssetAccount[]
   positionGroups: PositionGroup[]
-  onSubmit: (positionIds: string[]) => string | null
+  onSubmit: (positionIds: string[]) => Promise<string | null>
 }) {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [query, setQuery] = useState('')
@@ -695,13 +923,17 @@ export function GroupPositionsDialog({
     setError('')
   }
 
-  function handleSubmit(): void {
-    const submitError = onSubmit(selectedKeys)
-    if (submitError) {
-      setError(submitError)
-      return
+  async function handleSubmit(): Promise<void> {
+    try {
+      const submitError = await onSubmit(selectedKeys)
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onOpenChange(false)
+    } catch (submitError) {
+      setError(operationErrorMessage(submitError))
     }
-    onOpenChange(false)
   }
 
   return (
@@ -787,7 +1019,7 @@ export function GroupPositionsDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               取消
             </Button>
-            <Button type="button" onClick={handleSubmit}>
+            <Button type="button" onClick={() => void handleSubmit()}>
               保存
             </Button>
           </div>
@@ -860,7 +1092,7 @@ export function ImportBackupDialog({
   groupCount: number
   positionCount: number
   snapshotCount: number
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -879,7 +1111,7 @@ export function ImportBackupDialog({
           <Button
             onClick={() => {
               onOpenChange(false)
-              onConfirm()
+              void onConfirm()
             }}
           >
             导入
@@ -895,7 +1127,7 @@ export function ExportBackupDialog({
   onOpenChange,
   onConfirm
 }: BaseDialogProps & {
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -911,7 +1143,7 @@ export function ExportBackupDialog({
           <Button
             onClick={() => {
               onOpenChange(false)
-              onConfirm()
+              void onConfirm()
             }}
           >
             导出
@@ -927,11 +1159,13 @@ export function AssetAccountDialog({
   onOpenChange,
   account,
   holders,
+  onManageHolders,
   onSubmit
 }: BaseDialogProps & {
   account?: AssetAccount
   holders: Holder[]
-  onSubmit: (input: AssetAccountInput) => void
+  onManageHolders: () => void
+  onSubmit: (input: AssetAccountInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
   const [holderId, setHolderId] = useState('unassigned')
@@ -944,12 +1178,19 @@ export function AssetAccountDialog({
   const [okxApiKey, setOkxApiKey] = useState('')
   const [okxSecretKey, setOkxSecretKey] = useState('')
   const [okxPassphrase, setOkxPassphrase] = useState('')
+  const [ibkrGatewayHost, setIbkrGatewayHost] = useState(DEFAULT_IBKR_GATEWAY_HOST)
+  const [ibkrGatewayPort, setIbkrGatewayPort] = useState(
+    String(DEFAULT_IBKR_GATEWAY_PORT)
+  )
+  const [binanceApiKey, setBinanceApiKey] = useState('')
+  const [binanceSecretKey, setBinanceSecretKey] = useState('')
   const [error, setError] = useState('')
-  const supportsAutoSync = type === 'Futu' || type === 'Okx'
+  const supportsAutoSync =
+    type === 'Futu' || type === 'Okx' || type === 'Ibkr' || type === 'Binance'
 
   useEffect(() => {
     if (!open) return
-    setName(account?.type === 'General' ? account.name : '')
+    setName(account?.name ?? assetAccountTypeLabels[account?.type ?? 'Futu'])
     setHolderId(account?.holderId ?? 'unassigned')
     setType(account?.type ?? 'Futu')
     setAutoSync(Boolean(account?.sync))
@@ -960,13 +1201,24 @@ export function AssetAccountDialog({
     setOkxApiKey(account?.sync?.api?.apiKey ?? '')
     setOkxSecretKey(account?.sync?.api?.secretKey ?? '')
     setOkxPassphrase(account?.sync?.api?.passphrase ?? '')
+    setIbkrGatewayHost(account?.sync?.gateway?.host ?? DEFAULT_IBKR_GATEWAY_HOST)
+    setIbkrGatewayPort(
+      String(account?.sync?.gateway?.port ?? DEFAULT_IBKR_GATEWAY_PORT)
+    )
+    setBinanceApiKey(account?.sync?.api?.apiKey ?? '')
+    setBinanceSecretKey(account?.sync?.api?.secretKey ?? '')
     setError('')
   }, [account, open])
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
-    if (type === 'General' && !name.trim()) {
+    if (!name.trim()) {
       setError('请输入资产账户名称')
+      return
+    }
+    const holder = holders.find((item) => item.id === holderId)
+    if (!holder) {
+      setError(holders.length ? '请选择持有人' : '请先添加持有人')
       return
     }
     const parsedSyncPort = Number(syncPort)
@@ -999,17 +1251,47 @@ export function AssetAccountDialog({
       setError('请填写完整的 OKX API 配置')
       return
     }
+    const parsedIbkrGatewayPort = Number(ibkrGatewayPort)
+    const normalizedIbkrGatewayHost = ibkrGatewayHost
+      .trim()
+      .toLowerCase()
+      .replace(/^\[|\]$/g, '')
+    if (
+      type === 'Ibkr' &&
+      syncEnabled &&
+      !['127.0.0.1', 'localhost', '::1'].includes(normalizedIbkrGatewayHost)
+    ) {
+      setError('IBKR Client Portal Gateway 地址必须是本机回环地址')
+      return
+    }
+    if (
+      type === 'Ibkr' &&
+      syncEnabled &&
+      (!Number.isInteger(parsedIbkrGatewayPort) ||
+        parsedIbkrGatewayPort < 1 ||
+        parsedIbkrGatewayPort > 65535)
+    ) {
+      setError('IBKR Client Portal Gateway 端口需为 1–65535')
+      return
+    }
+    if (
+      type === 'Binance' &&
+      syncEnabled &&
+      (!binanceApiKey.trim() || !binanceSecretKey)
+    ) {
+      setError('请填写完整的币安 API 配置')
+      return
+    }
     const lastSyncedAt =
       account?.type === type ? account.sync?.lastSyncedAt : undefined
-    onSubmit({
-      name: type === 'General' ? name : assetAccountTypeLabels[type],
-      type,
-      ...(holderId !== 'unassigned' && holders.some((holder) => holder.id === holderId)
-        ? { holderId }
-        : {}),
-      ...(syncEnabled
-        ? {
-            sync: {
+    try {
+      await onSubmit({
+        name: name.trim(),
+        type,
+        holderId: holder.id,
+        ...(syncEnabled
+          ? {
+              sync: {
               interval:
                 Number.isInteger(parsedSyncInterval) &&
                 parsedSyncInterval >= 5 &&
@@ -1029,24 +1311,41 @@ export function AssetAccountDialog({
                       ...(syncKey.trim() ? { key: syncKey.trim() } : {})
                     }
                   }
-                : {
-                    api: {
-                      apiKey: okxApiKey.trim(),
-                      secretKey: okxSecretKey,
-                      passphrase: okxPassphrase
+                : type === 'Ibkr'
+                  ? {
+                      gateway: {
+                        host: normalizedIbkrGatewayHost,
+                        port: parsedIbkrGatewayPort
+                      }
                     }
-                  }),
+                  : type === 'Okx'
+                    ? {
+                        api: {
+                          apiKey: okxApiKey.trim(),
+                          secretKey: okxSecretKey,
+                          passphrase: okxPassphrase
+                        }
+                      }
+                    : {
+                        api: {
+                          apiKey: binanceApiKey.trim(),
+                          secretKey: binanceSecretKey
+                        }
+                      }),
               ...(lastSyncedAt ? { lastSyncedAt } : {})
+              }
             }
-          }
-        : {})
-    })
-    onOpenChange(false)
+          : {})
+      })
+      onOpenChange(false)
+    } catch (submitError) {
+      setError(operationErrorMessage(submitError))
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-xl">
+      <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{account ? '编辑资产账户' : '添加资产账户'}</DialogTitle>
           <DialogDescription>选择资产账户的持有人和来源</DialogDescription>
@@ -1058,6 +1357,12 @@ export function AssetAccountDialog({
               value={type}
               onValueChange={(value) => {
                 const nextType = value as AssetAccountType
+                setName((currentName) =>
+                  !currentName.trim() ||
+                  currentName === assetAccountTypeLabels[type]
+                    ? assetAccountTypeLabels[nextType]
+                    : currentName
+                )
                 setType(nextType)
                 if (
                   nextType === 'Boci' ||
@@ -1076,8 +1381,10 @@ export function AssetAccountDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Futu">富途牛牛</SelectItem>
+                <SelectItem value="Ibkr">盈透证券</SelectItem>
                 <SelectItem value="Boci">中银国际</SelectItem>
                 <SelectItem value="Okx">欧易</SelectItem>
+                <SelectItem value="Binance">币安</SelectItem>
                 <SelectItem value="Alipay">支付宝</SelectItem>
                 <SelectItem value="Cmb">招商银行</SelectItem>
                 <SelectItem value="Boc">中国银行</SelectItem>
@@ -1085,25 +1392,24 @@ export function AssetAccountDialog({
               </SelectContent>
             </Select>
           </div>
-          {type === 'General' && (
-            <div className="grid gap-2">
-              <Label htmlFor="asset-account-name">账户名称</Label>
-              <Input
-                id="asset-account-name"
-                value={name}
-                onChange={(event) => {
-                  setName(event.target.value)
-                  setError('')
-                }}
-                placeholder="例如：其他资产"
-                maxLength={50}
-              />
-            </div>
-          )}
+          <div className="grid gap-2">
+            <Label htmlFor="asset-account-name">账户名称</Label>
+            <Input
+              id="asset-account-name"
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value)
+                setError('')
+              }}
+              placeholder="例如：我的美股账户"
+              maxLength={50}
+            />
+          </div>
           <div className="grid gap-2">
             <Label htmlFor="asset-account-holder">持有人</Label>
             <Select
               value={holderId}
+              disabled={!holders.length}
               onValueChange={(value) => {
                 setHolderId(value)
                 setError('')
@@ -1113,7 +1419,9 @@ export function AssetAccountDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="unassigned">未指定</SelectItem>
+                <SelectItem value="unassigned" disabled>
+                  请选择持有人
+                </SelectItem>
                 {holders.map((holder) => (
                   <SelectItem key={holder.id} value={holder.id}>
                     {holder.name}
@@ -1121,11 +1429,22 @@ export function AssetAccountDialog({
                 ))}
               </SelectContent>
             </Select>
-            {!holders.length && (
+            <div className="flex items-center justify-between gap-3">
               <p className="text-xs leading-5 text-muted-foreground">
-                可先在账户设置中新增持有人
+                {holders.length
+                  ? '每个资产账户都需要指定持有人'
+                  : '请先在账户设置中添加持有人'}
               </p>
-            )}
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto shrink-0 px-0 py-0"
+                onClick={onManageHolders}
+              >
+                {holders.length ? '管理持有人' : '添加持有人'}
+              </Button>
+            </div>
           </div>
           {supportsAutoSync && (
             <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 px-4 py-3.5">
@@ -1134,7 +1453,11 @@ export function AssetAccountDialog({
                 <p className="mt-1 text-xs text-muted-foreground">
                   {type === 'Futu'
                     ? '通过本机 Futu OpenD 同步持仓'
-                    : '通过 OKX 只读 API 同步资产'}
+                    : type === 'Ibkr'
+                      ? '通过本机 Client Portal Gateway 同步资产'
+                      : type === 'Okx'
+                        ? '通过 OKX 只读 API 同步资产'
+                        : '通过币安只读 API 同步资产'}
                 </p>
               </div>
               <Switch
@@ -1300,6 +1623,113 @@ export function AssetAccountDialog({
               </div>
             </div>
           )}
+          {type === 'Ibkr' && autoSync && (
+            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+              <div>
+                <p className="text-sm font-medium">IBKR Client Portal Gateway</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  请先启动本机 Gateway，并在浏览器完成登录；仅支持回环地址
+                </p>
+              </div>
+              <div className="grid grid-cols-[1fr_8rem] gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="asset-account-ibkr-host">地址</Label>
+                  <Input
+                    id="asset-account-ibkr-host"
+                    value={ibkrGatewayHost}
+                    onChange={(event) => {
+                      setIbkrGatewayHost(event.target.value)
+                      setError('')
+                    }}
+                    placeholder={DEFAULT_IBKR_GATEWAY_HOST}
+                    maxLength={64}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="asset-account-ibkr-port">端口</Label>
+                  <Input
+                    id="asset-account-ibkr-port"
+                    type="number"
+                    value={ibkrGatewayPort}
+                    onChange={(event) => {
+                      setIbkrGatewayPort(event.target.value)
+                      setError('')
+                    }}
+                    min="1"
+                    max="65535"
+                    step="1"
+                  />
+                </div>
+              </div>
+              <div className="grid max-w-40 gap-2">
+                <Label htmlFor="asset-account-ibkr-sync-interval">间隔（秒）</Label>
+                <Input
+                  id="asset-account-ibkr-sync-interval"
+                  type="number"
+                  value={syncInterval}
+                  onChange={(event) => {
+                    setSyncInterval(event.target.value)
+                    setError('')
+                  }}
+                  min="5"
+                  max="3600"
+                  step="1"
+                />
+              </div>
+            </div>
+          )}
+          {type === 'Binance' && autoSync && (
+            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+              <div>
+                <p className="text-sm font-medium">币安 API 配置</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  使用 HMAC API Key，仅需读取权限
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="asset-account-binance-api-key">API Key</Label>
+                <Input
+                  id="asset-account-binance-api-key"
+                  value={binanceApiKey}
+                  onChange={(event) => {
+                    setBinanceApiKey(event.target.value)
+                    setError('')
+                  }}
+                  autoComplete="off"
+                  maxLength={256}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="asset-account-binance-secret-key">Secret Key</Label>
+                <Input
+                  id="asset-account-binance-secret-key"
+                  type="password"
+                  value={binanceSecretKey}
+                  onChange={(event) => {
+                    setBinanceSecretKey(event.target.value)
+                    setError('')
+                  }}
+                  autoComplete="new-password"
+                  maxLength={512}
+                />
+              </div>
+              <div className="grid max-w-40 gap-2">
+                <Label htmlFor="asset-account-binance-sync-interval">间隔（秒）</Label>
+                <Input
+                  id="asset-account-binance-sync-interval"
+                  type="number"
+                  value={syncInterval}
+                  onChange={(event) => {
+                    setSyncInterval(event.target.value)
+                    setError('')
+                  }}
+                  min="5"
+                  max="3600"
+                  step="1"
+                />
+              </div>
+            </div>
+          )}
           {error && <FieldMessage>{error}</FieldMessage>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -1320,7 +1750,7 @@ export function PositionDialog({
   onSubmit
 }: BaseDialogProps & {
   position?: Position
-  onSubmit: (input: PositionInput) => string | null
+  onSubmit: (input: PositionInput) => Promise<string | null>
 }) {
   const [market, setMarket] = useState<Market>('US')
   const [symbol, setSymbol] = useState('')
@@ -1348,7 +1778,7 @@ export function PositionDialog({
     if (!currency || currency === previousDefault) setCurrency(defaultCurrencyByMarket[nextMarket])
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     const parsedQuantity = Number(quantity)
     const parsedPrice = price.trim() ? Number(price) : undefined
@@ -1365,19 +1795,23 @@ export function PositionDialog({
       return
     }
 
-    const submitError = onSubmit({
-      market,
-      symbol,
-      name,
-      currency,
-      quantity: parsedQuantity,
-      ...(parsedPrice === undefined ? {} : { price: parsedPrice })
-    })
-    if (submitError) {
-      setError(submitError)
-      return
+    try {
+      const submitError = await onSubmit({
+        market,
+        symbol,
+        name,
+        currency,
+        quantity: parsedQuantity,
+        ...(parsedPrice === undefined ? {} : { price: parsedPrice })
+      })
+      if (submitError) {
+        setError(submitError)
+        return
+      }
+      onOpenChange(false)
+    } catch (submitError) {
+      setError(operationErrorMessage(submitError))
     }
-    onOpenChange(false)
   }
 
   return (
@@ -1500,7 +1934,7 @@ export function DeleteConfirmDialog({
   title: string
   description: string
   actionLabel?: string
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
 }) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -1511,7 +1945,9 @@ export function DeleteConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>取消</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{actionLabel}</AlertDialogAction>
+          <AlertDialogAction onClick={() => void onConfirm()}>
+            {actionLabel}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

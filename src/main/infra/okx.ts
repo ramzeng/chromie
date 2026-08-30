@@ -6,7 +6,7 @@ import type {
   OkxSyncedPosition,
   OkxSyncOptions,
   OkxSyncResult
-} from '../shared/okx'
+} from '../../shared/okx'
 
 const OKX_BASE_URL = 'https://www.okx.com'
 const REQUEST_TIMEOUT_MS = 10_000

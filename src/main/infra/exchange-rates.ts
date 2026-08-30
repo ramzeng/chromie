@@ -1,6 +1,9 @@
 import { net } from 'electron'
 
-import type { ExchangeRateSnapshot } from '../shared/exchange-rates'
+import type {
+  ExchangeRateProvider,
+  ExchangeRateSnapshot
+} from '../../shared/exchange-rates'
 
 const EXCHANGE_RATES_URL = 'https://api.coinbase.com/v2/exchange-rates?currency=USD'
 const REQUEST_TIMEOUT_MS = 10_000
@@ -37,7 +40,9 @@ function normalizeRates(value: unknown): Record<string, number> {
   return rates
 }
 
-export async function fetchExchangeRates(): Promise<ExchangeRateSnapshot> {
+export async function fetchExchangeRates(
+  provider: ExchangeRateProvider
+): Promise<ExchangeRateSnapshot> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
@@ -61,7 +66,7 @@ export async function fetchExchangeRates(): Promise<ExchangeRateSnapshot> {
     }
 
     return {
-      provider: 'coinbase',
+      provider,
       baseCurrency: 'USD',
       rates: normalizeRates(body.data.rates),
       fetchedAt: new Date().toISOString()

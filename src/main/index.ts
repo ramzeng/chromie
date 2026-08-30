@@ -1,33 +1,34 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 
-import { exportBackup, importBackup } from './backup'
-import { fetchExchangeRates } from './exchange-rates'
-import { syncFutuPositions } from './futu'
-import type { FutuSyncOptions } from '../shared/futu'
-import { saveShareImage } from './share-image'
-import { syncOkxPositions } from './okx'
-import type { OkxSyncOptions } from '../shared/okx'
+import { exportBackup, importBackup } from './infra/backup'
+import { syncBinancePositions } from './infra/binance'
+import { fetchExchangeRates } from './infra/exchange-rates'
+import { PlainTextFileStore, SecureFileStore } from './infra/file-store'
+import { syncFutuPositions } from './infra/futu'
+import { syncIbkrPositions } from './infra/ibkr'
+import { syncOkxPositions } from './infra/okx'
+import { saveShareImage } from './infra/share-image'
+import { FileExchangeRateRepository } from './repository/exchange-rate-repository'
+import { SecurePortfolioRepository } from './repository/portfolio-repository'
+import { DesktopService } from './service/desktop-service'
+import { ExchangeRateService } from './service/exchange-rate-service'
+import { PortfolioService } from './service/portfolio-service'
+import { registerDesktopIpc } from './transport/electron-ipc'
 
 app.setName('Chromie')
 
-ipcMain.handle('futu:sync-positions', (_event, options?: FutuSyncOptions) =>
-  syncFutuPositions(options)
-)
-ipcMain.handle('okx:sync-positions', (_event, options?: OkxSyncOptions) =>
-  syncOkxPositions(options)
-)
-ipcMain.handle('exchange-rates:fetch', () => fetchExchangeRates())
-ipcMain.handle('backup:export', (event, content: unknown) =>
-  exportBackup(event.sender, content)
-)
-ipcMain.handle('backup:import', (event) => importBackup(event.sender))
-ipcMain.handle(
-  'share-image:save',
-  (event, dataUrl: unknown, accountName: unknown) =>
-    saveShareImage(event.sender, dataUrl, accountName)
-)
+const trustedWebContentsIds = new Set<number>()
+
+function isSafeExternalUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl)
+    return url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -46,11 +47,18 @@ function createWindow(): void {
       sandbox: true
     }
   })
+  const webContentsId = window.webContents.id
+  trustedWebContentsIds.add(webContentsId)
+  window.webContents.once('destroyed', () => {
+    trustedWebContentsIds.delete(webContentsId)
+  })
 
   window.on('ready-to-show', () => window.show())
 
+  window.webContents.on('will-navigate', (event) => event.preventDefault())
+
   window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (isSafeExternalUrl(url)) void shell.openExternal(url)
     return { action: 'deny' }
   })
 
@@ -62,6 +70,32 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  const portfolioRepository = new SecurePortfolioRepository(
+    new SecureFileStore(join(app.getPath('userData'), 'portfolio.secure'))
+  )
+  const exchangeRateRepository = new FileExchangeRateRepository(
+    new PlainTextFileStore(join(app.getPath('userData'), 'exchange-rates.json'))
+  )
+  const portfolioService = new PortfolioService(portfolioRepository)
+  const exchangeRateService = new ExchangeRateService(exchangeRateRepository)
+  const desktopService = new DesktopService({
+    syncFutuPositions,
+    syncOkxPositions,
+    syncBinancePositions,
+    syncIbkrPositions,
+    fetchExchangeRates: (provider) =>
+      exchangeRateService.refresh(provider, { fetch: fetchExchangeRates }),
+    loadExchangeRates: (legacyContent) => exchangeRateService.load(legacyContent),
+    exportBackup,
+    importBackup,
+    saveShareImage
+  })
+
+  registerDesktopIpc(
+    desktopService,
+    portfolioService,
+    (sender) => trustedWebContentsIds.has(sender.id)
+  )
   createWindow()
 
   app.on('activate', () => {

@@ -6,7 +6,7 @@ import {
   type FutuSyncedPosition,
   type FutuSyncOptions,
   type FutuSyncResult
-} from '../shared/futu'
+} from '../../shared/futu'
 
 const FutuClient =
   (FutuWebSocket as typeof FutuWebSocket & { default?: typeof FutuWebSocket }).default ??

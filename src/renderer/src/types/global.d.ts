@@ -1,9 +1,23 @@
 export {}
 
 import type { BackupExportResult, BackupImportResult } from '../../../shared/backup'
-import type { ExchangeRateSnapshot } from '../../../shared/exchange-rates'
+import type {
+  BinanceSyncOptions,
+  BinanceSyncResult
+} from '../../../shared/binance'
+import type {
+  ExchangeRateProvider,
+  ExchangeRateSnapshot
+} from '../../../shared/exchange-rates'
 import type { FutuSyncOptions, FutuSyncResult } from '../../../shared/futu'
+import type { IbkrSyncOptions, IbkrSyncResult } from '../../../shared/ibkr'
 import type { OkxSyncOptions, OkxSyncResult } from '../../../shared/okx'
+import type {
+  AccountBackup,
+  PortfolioCommand,
+  PortfolioCommandResponse,
+  PortfolioLoadResponse
+} from '../../../shared/portfolio'
 import type { ShareImageSaveResult } from '../../../shared/share-image'
 
 declare global {
@@ -16,8 +30,21 @@ declare global {
       okx?: {
         syncPositions: (options: OkxSyncOptions) => Promise<OkxSyncResult>
       }
+      binance?: {
+        syncPositions: (options: BinanceSyncOptions) => Promise<BinanceSyncResult>
+      }
+      ibkr?: {
+        syncPositions: (options?: IbkrSyncOptions) => Promise<IbkrSyncResult>
+      }
       exchangeRates?: {
-        fetch: () => Promise<ExchangeRateSnapshot>
+        load: (legacyContent?: string) => Promise<ExchangeRateSnapshot | null>
+        fetch: (provider: ExchangeRateProvider) => Promise<ExchangeRateSnapshot>
+      }
+      portfolio?: {
+        load: (legacyContent?: string) => Promise<PortfolioLoadResponse>
+        execute: (command: PortfolioCommand) => Promise<PortfolioCommandResponse>
+        inspectBackup: (content: string) => Promise<AccountBackup | null>
+        exportActiveAccount: () => Promise<string>
       }
       backup?: {
         exportData: (content: string) => Promise<BackupExportResult>

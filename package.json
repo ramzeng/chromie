@@ -8,9 +8,10 @@
     "postinstall": "install-electron",
     "dev": "electron-vite dev",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "build": "pnpm typecheck && electron-vite build",
-    "build:mac": "pnpm build && electron-builder --mac"
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "typecheck": "node scripts/check-boundaries.mjs && tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "build": "npm run typecheck && electron-vite build",
+    "build:mac": "npm run build && electron-builder --mac"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.23",

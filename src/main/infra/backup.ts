@@ -3,17 +3,18 @@ import { readFile, stat, writeFile } from 'node:fs/promises'
 import {
   BrowserWindow,
   dialog,
+  webContents,
   type OpenDialogOptions,
-  type SaveDialogOptions,
-  type WebContents
+  type SaveDialogOptions
 } from 'electron'
 
-import type { BackupExportResult, BackupImportResult } from '../shared/backup'
+import type { BackupExportResult, BackupImportResult } from '../../shared/backup'
 
 const MAX_BACKUP_SIZE = 10 * 1024 * 1024
 
-function ownerWindow(webContents: WebContents): BrowserWindow | null {
-  return BrowserWindow.fromWebContents(webContents)
+function ownerWindow(ownerId: number): BrowserWindow | null {
+  const owner = webContents.fromId(ownerId)
+  return owner ? BrowserWindow.fromWebContents(owner) : null
 }
 
 function defaultBackupName(): string {
@@ -25,7 +26,7 @@ function defaultBackupName(): string {
 }
 
 export async function exportBackup(
-  webContents: WebContents,
+  ownerId: number,
   content: unknown
 ): Promise<BackupExportResult> {
   if (typeof content !== 'string' || !content || Buffer.byteLength(content) > MAX_BACKUP_SIZE) {
@@ -37,7 +38,7 @@ export async function exportBackup(
     defaultPath: defaultBackupName(),
     filters: [{ name: 'Chromie 账户', extensions: ['json'] }]
   }
-  const owner = ownerWindow(webContents)
+  const owner = ownerWindow(ownerId)
   const result = owner
     ? await dialog.showSaveDialog(owner, options)
     : await dialog.showSaveDialog(options)
@@ -48,14 +49,14 @@ export async function exportBackup(
 }
 
 export async function importBackup(
-  webContents: WebContents
+  ownerId: number
 ): Promise<BackupImportResult> {
   const options: OpenDialogOptions = {
     title: '导入账户',
     filters: [{ name: 'Chromie 账户', extensions: ['json'] }],
     properties: ['openFile']
   }
-  const owner = ownerWindow(webContents)
+  const owner = ownerWindow(ownerId)
   const result = owner
     ? await dialog.showOpenDialog(owner, options)
     : await dialog.showOpenDialog(options)

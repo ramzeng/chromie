@@ -26,7 +26,8 @@ import {
   Trash2,
   Upload,
   UsersRound,
-  WalletCards
+  WalletCards,
+  Wrench
 } from 'lucide-react'
 
 import {
@@ -85,11 +86,12 @@ import { convertToAnchorCurrency, valuePositions } from '@/lib/valuation'
 import {
   DEFAULT_FUTU_OPEND_HOST,
   DEFAULT_FUTU_OPEND_PORT,
+  DEFAULT_IBKR_GATEWAY_HOST,
+  DEFAULT_IBKR_GATEWAY_PORT,
   DEFAULT_SYNC_INTERVAL,
   formatMoney,
   formatNumber,
   marketMeta,
-  parseAccountBackup,
   type AssetAccount,
   type AssetAccountInput,
   type Market,
@@ -178,6 +180,17 @@ function accountSyncPort(account: AssetAccount): number {
   return Number.isInteger(port) && port !== undefined && port >= 1 && port <= 65535
     ? port
     : DEFAULT_FUTU_OPEND_PORT
+}
+
+function accountIbkrGatewayHost(account: AssetAccount): string {
+  return account.sync?.gateway?.host.trim() || DEFAULT_IBKR_GATEWAY_HOST
+}
+
+function accountIbkrGatewayPort(account: AssetAccount): number {
+  const port = account.sync?.gateway?.port
+  return Number.isInteger(port) && port !== undefined && port >= 1 && port <= 65535
+    ? port
+    : DEFAULT_IBKR_GATEWAY_PORT
 }
 
 function formatAmount(value: number): string {
@@ -311,14 +324,51 @@ function AccountTypeIcon({ type, className }: { type: string; className?: string
     )
   }
 
-  return (
-    <img
-      src={OKX_ICON_DATA_URL}
-      alt=""
-      aria-hidden="true"
-      className={cn('shrink-0', className)}
-    />
-  )
+  if (type === 'Ibkr') {
+    return (
+      <span
+        aria-hidden="true"
+        className={cn(
+          'grid shrink-0 place-items-center rounded-[18%] bg-[#d81222] text-[0.42em] font-bold tracking-[-0.04em] text-white',
+          className
+        )}
+      >
+        IB
+      </span>
+    )
+  }
+
+  if (type === 'Binance') {
+    return (
+      <svg
+        viewBox="0 0 48 48"
+        aria-hidden="true"
+        className={cn('shrink-0', className)}
+      >
+        <rect width="48" height="48" rx="9" fill="#181a20" />
+        <g fill="#f3ba2f">
+          <path d="M24 10l5.1 5.1L24 20.2l-5.1-5.1L24 10Z" />
+          <path d="m15.1 18.9 5.1 5.1-5.1 5.1L10 24l5.1-5.1Z" />
+          <path d="m32.9 18.9 5.1 5.1-5.1 5.1-5.1-5.1 5.1-5.1Z" />
+          <path d="m24 27.8 5.1 5.1L24 38l-5.1-5.1 5.1-5.1Z" />
+          <path d="m24 20.3 3.7 3.7-3.7 3.7-3.7-3.7 3.7-3.7Z" />
+        </g>
+      </svg>
+    )
+  }
+
+  if (type === 'Okx') {
+    return (
+      <img
+        src={OKX_ICON_DATA_URL}
+        alt=""
+        aria-hidden="true"
+        className={cn('shrink-0', className)}
+      />
+    )
+  }
+
+  return <ShieldCheck aria-hidden="true" className={cn('shrink-0', className)} />
 }
 
 function LocalMark() {
@@ -1338,14 +1388,31 @@ function AssetAccountDetail({
             />
           </span>
           <div className="min-w-0">
-            <h1 className="truncate text-3xl font-semibold tracking-[-0.04em]">{account.name}</h1>
-            <p className="mt-1.5 flex items-center gap-1.5 text-sm text-muted-foreground">
-              <UsersRound aria-hidden="true" className="size-3.5 shrink-0" />
-              <span>持有人</span>
-              <span className="truncate font-medium text-foreground">
-                {holderName ?? '-'}
-              </span>
-            </p>
+            <h1 className="truncate text-3xl font-semibold tracking-[-0.04em]">
+              {account.name}
+            </h1>
+            <dl className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <UsersRound
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
+                <dt className="shrink-0 text-muted-foreground">持有人</dt>
+                <dd className="ml-0.5 truncate font-medium text-foreground">
+                  {holderName ?? '-'}
+                </dd>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Wrench
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                />
+                <dt className="shrink-0 text-muted-foreground">维护模式</dt>
+                <dd className="ml-0.5 font-medium text-foreground">
+                  {account.sync ? '自动' : '手动'}
+                </dd>
+              </div>
+            </dl>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -1836,6 +1903,8 @@ export function App(): React.JSX.Element {
     portfolio.activeSnapshots.find((snapshot) => snapshot.id === selectedSnapshotId) ?? null
   const latestProductAccount = portfolio.activeProductAccount
   const liveExchangeRates = useExchangeRates(
+    latestProductAccount?.exchangeRateProvider,
+    latestProductAccount?.exchangeRateRefreshIntervalMinutes,
     Boolean(latestProductAccount) && !selectedSnapshot
   )
   const exchangeRates: ExchangeRateView = selectedSnapshot
@@ -1851,6 +1920,9 @@ export function App(): React.JSX.Element {
   const [showTimeMachine, setShowTimeMachine] = useState(false)
   const [productDialog, setProductDialog] = useState<ProductDialogState>({ open: false })
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false)
+  const [accountSettingsSection, setAccountSettingsSection] = useState<
+    'basic' | 'currency' | 'holders' | 'other'
+  >('basic')
   const [assetDialog, setAssetDialog] = useState<AssetDialogState>({ open: false })
   const [positionDialog, setPositionDialog] = useState<PositionDialogState>({ open: false })
   const [positionGroupDialog, setPositionGroupDialog] = useState<PositionGroupDialogState>({
@@ -1867,6 +1939,11 @@ export function App(): React.JSX.Element {
   const [assetValuesMasked, setAssetValuesMasked] = useState(loadAssetValueMask)
   const syncingAccountIds = useRef(new Set<string>())
   const shownSyncErrors = useRef(new Map<string, string>())
+
+  function reportPortfolioError(error: unknown): void {
+    const rawMessage = error instanceof Error ? error.message : String(error)
+    setBackupError(rawMessage.replace(/^Error invoking remote method '[^']+': Error: /, ''))
+  }
 
   const activeProductAccount = selectedSnapshot?.account ?? latestProductAccount
   const selectedAssetAccount =
@@ -1903,7 +1980,14 @@ export function App(): React.JSX.Element {
       ...current,
       [assetAccountId]: {
         status: 'syncing',
-        message: assetAccount.type === 'Futu' ? '正在连接 Futu OpenD…' : '正在同步 OKX…'
+        message:
+          assetAccount.type === 'Futu'
+            ? '正在连接 Futu OpenD…'
+            : assetAccount.type === 'Ibkr'
+              ? '正在连接 IBKR Gateway…'
+              : assetAccount.type === 'Binance'
+                ? '正在同步币安…'
+                : '正在同步 OKX…'
       }
     }))
     try {
@@ -1920,16 +2004,49 @@ export function App(): React.JSX.Element {
           port: accountSyncPort(assetAccount),
           key: assetAccount.sync.websocket.key
         })
-      } else {
+      } else if (assetAccount.type === 'Ibkr') {
+        if (!window.desktop.ibkr?.syncPositions) {
+          throw new Error('同步组件尚未加载，请重启 Chromie')
+        }
+        if (!assetAccount.sync.gateway) {
+          throw new Error('请补充 IBKR Client Portal Gateway 配置')
+        }
+        result = await window.desktop.ibkr.syncPositions({
+          host: accountIbkrGatewayHost(assetAccount),
+          port: accountIbkrGatewayPort(assetAccount)
+        })
+      } else if (assetAccount.type === 'Okx') {
         if (!window.desktop.okx?.syncPositions) {
           throw new Error('同步组件尚未加载，请重启 Chromie')
         }
-        if (!assetAccount.sync.api) {
+        if (!assetAccount.sync.api?.passphrase) {
           throw new Error('请补充 OKX API 配置')
         }
-        result = await window.desktop.okx.syncPositions(assetAccount.sync.api)
+        result = await window.desktop.okx.syncPositions({
+          apiKey: assetAccount.sync.api.apiKey,
+          secretKey: assetAccount.sync.api.secretKey,
+          passphrase: assetAccount.sync.api.passphrase
+        })
+      } else if (assetAccount.type === 'Binance') {
+        if (!window.desktop.binance?.syncPositions) {
+          throw new Error('同步组件尚未加载，请重启 Chromie')
+        }
+        if (!assetAccount.sync.api) {
+          throw new Error('请补充币安 API 配置')
+        }
+        result = await window.desktop.binance.syncPositions({
+          apiKey: assetAccount.sync.api.apiKey,
+          secretKey: assetAccount.sync.api.secretKey
+        })
+      } else {
+        throw new Error('此资产账户不支持自动同步')
       }
-      portfolio.replacePositions(latestProductAccount.id, assetAccountId, result.positions, result.syncedAt)
+      await portfolio.replacePositions(
+        latestProductAccount.id,
+        assetAccountId,
+        result.positions,
+        result.syncedAt
+      )
       setSyncStates((current) => ({
         ...current,
         [assetAccountId]: {
@@ -1978,11 +2095,16 @@ export function App(): React.JSX.Element {
                           port: accountSyncPort(account),
                           key: account.sync.websocket?.key ?? ''
                         }
-                      : {
-                          apiKey: account.sync.api?.apiKey ?? '',
-                          secretKey: account.sync.api?.secretKey ?? '',
-                          passphrase: account.sync.api?.passphrase ?? ''
-                        }
+                      : account.type === 'Ibkr'
+                        ? {
+                            host: accountIbkrGatewayHost(account),
+                            port: accountIbkrGatewayPort(account)
+                          }
+                        : {
+                            apiKey: account.sync.api?.apiKey ?? '',
+                            secretKey: account.sync.api?.secretKey ?? '',
+                            passphrase: account.sync.api?.passphrase ?? ''
+                          }
                 }
               ]
             : []
@@ -2008,7 +2130,7 @@ export function App(): React.JSX.Element {
       if (!window.desktop.backup?.exportData) {
         throw new Error('数据组件尚未加载，请重启 Chromie')
       }
-      await window.desktop.backup.exportData(portfolio.exportAccount())
+      await window.desktop.backup.exportData(await portfolio.exportAccount())
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error)
       setBackupError(rawMessage.replace(/^Error invoking remote method '[^']+': Error: /, ''))
@@ -2051,7 +2173,7 @@ export function App(): React.JSX.Element {
       }
       const result = await window.desktop.backup.importData()
       if (result.canceled || !result.content) return
-      const backup = parseAccountBackup(result.content)
+      const backup = await portfolio.inspectBackup(result.content)
       if (!backup) {
         setBackupError('备份文件无效或版本不受支持')
         return
@@ -2074,12 +2196,33 @@ export function App(): React.JSX.Element {
     }
   }
 
-  function confirmImportAccount(): void {
+  async function confirmImportAccount(): Promise<void> {
     if (!pendingImport) return
-    setSelectedAssetAccountId(null)
-    setSelectedPositionGroupId(null)
-    portfolio.importAccount(pendingImport.account, pendingImport.snapshots)
-    setPendingImport(null)
+    try {
+      setSelectedAssetAccountId(null)
+      setSelectedPositionGroupId(null)
+      await portfolio.importAccount(pendingImport.account, pendingImport.snapshots)
+      setPendingImport(null)
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : String(error)
+      setBackupError(rawMessage.replace(/^Error invoking remote method '[^']+': Error: /, ''))
+    }
+  }
+
+  if (portfolio.loading) {
+    return (
+      <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">
+        正在加载资产数据…
+      </div>
+    )
+  }
+
+  if (portfolio.error) {
+    return (
+      <div className="grid min-h-screen place-items-center px-6 text-center text-sm text-destructive">
+        {portfolio.error}
+      </div>
+    )
   }
 
   if (!activeProductAccount) {
@@ -2092,7 +2235,7 @@ export function App(): React.JSX.Element {
         <ProductAccountDialog
           open={productDialog.open}
           onOpenChange={(open) => setProductDialog({ open })}
-          onSubmit={(input) => portfolio.createProductAccount(input)}
+          onSubmit={(input) => portfolio.createProductAccount(input).then(() => undefined)}
         />
         <ImportBackupDialog
           open={pendingImport !== null}
@@ -2117,48 +2260,56 @@ export function App(): React.JSX.Element {
     )
   }
 
-  function submitProductAccount(input: ProductAccountInput): void {
-    portfolio.createProductAccount(input)
+  async function submitProductAccount(input: ProductAccountInput): Promise<void> {
+    await portfolio.createProductAccount(input)
   }
 
-  function createCurrentSnapshot(): void {
+  async function createCurrentSnapshot(): Promise<void> {
     if (!latestProductAccount || selectedSnapshot) return
-    portfolio.createSnapshot(latestProductAccount.id, liveExchangeRates.snapshot)
+    try {
+      await portfolio.createSnapshot(latestProductAccount.id, liveExchangeRates.snapshot)
+    } catch (error) {
+      reportPortfolioError(error)
+    }
   }
 
-  function submitProductAccountSettings(input: ProductAccountSettingsInput): void {
+  async function submitProductAccountSettings(
+    input: ProductAccountSettingsInput
+  ): Promise<void> {
     if (!activeProductAccount) return
-    portfolio.updateProductAccount(activeProductAccount.id, input)
+    await portfolio.updateProductAccount(activeProductAccount.id, input)
   }
 
-  function submitAssetAccount(input: AssetAccountInput): void {
+  async function submitAssetAccount(input: AssetAccountInput): Promise<void> {
     if (!activeProductAccount) return
     if (assetDialog.account) {
-      portfolio.updateAssetAccount(activeProductAccount.id, assetDialog.account.id, input)
+      await portfolio.updateAssetAccount(activeProductAccount.id, assetDialog.account.id, input)
       return
     }
-    const id = portfolio.createAssetAccount(activeProductAccount.id, input)
+    const id = await portfolio.createAssetAccount(activeProductAccount.id, input)
     setSelectedPositionGroupId(null)
     setSelectedAssetAccountId(id)
   }
 
-  function submitPositionGroup(input: PositionGroupInput): void {
+  async function submitPositionGroup(input: PositionGroupInput): Promise<void> {
     if (!activeProductAccount) return
     if (positionGroupDialog.group) {
-      portfolio.updatePositionGroup(
+      await portfolio.updatePositionGroup(
         activeProductAccount.id,
         positionGroupDialog.group.id,
         input
       )
       return
     }
-    const id = portfolio.createPositionGroup(activeProductAccount.id, input)
+    const id = await portfolio.createPositionGroup(activeProductAccount.id, input)
     setSelectedAssetAccountId(null)
     setSelectedPositionGroupId(id)
   }
 
-  function submitGroupPositions(positionIds: string[]): string | null {
-    if (!activeProductAccount || !selectedPositionGroup) return '没有找到对应的持仓分组'
+  function submitGroupPositions(positionIds: string[]): Promise<string | null> {
+    if (!activeProductAccount || !selectedPositionGroup) {
+      return Promise.resolve('没有找到对应的持仓分组')
+    }
     return portfolio.setPositionGroupPositions(
       activeProductAccount.id,
       selectedPositionGroup.id,
@@ -2166,8 +2317,10 @@ export function App(): React.JSX.Element {
     )
   }
 
-  function submitPosition(input: PositionInput): string | null {
-    if (!activeProductAccount || !positionDialog.accountId) return '没有找到对应的资产账户'
+  function submitPosition(input: PositionInput): Promise<string | null> {
+    if (!activeProductAccount || !positionDialog.accountId) {
+      return Promise.resolve('没有找到对应的资产账户')
+    }
     return portfolio.savePosition(
       activeProductAccount.id,
       positionDialog.accountId,
@@ -2176,31 +2329,35 @@ export function App(): React.JSX.Element {
     )
   }
 
-  function confirmDelete(): void {
+  async function confirmDelete(): Promise<void> {
     if (!deleteTarget) return
-    if (deleteTarget.kind === 'snapshot') {
-      portfolio.deleteSnapshot(deleteTarget.snapshot.id)
-      if (deleteTarget.snapshot.id === selectedSnapshotId) {
-        setSelectedSnapshotId(null)
+    try {
+      if (deleteTarget.kind === 'snapshot') {
+        await portfolio.deleteSnapshot(deleteTarget.snapshot.id)
+        if (deleteTarget.snapshot.id === selectedSnapshotId) {
+          setSelectedSnapshotId(null)
+        }
+      } else if (!latestProductAccount) {
+        return
+      } else if (deleteTarget.kind === 'product') {
+        await portfolio.deleteProductAccount(deleteTarget.account.id)
+      } else if (deleteTarget.kind === 'asset') {
+        await portfolio.deleteAssetAccount(latestProductAccount.id, deleteTarget.account.id)
+        setSelectedAssetAccountId(null)
+      } else if (deleteTarget.kind === 'group') {
+        await portfolio.deletePositionGroup(latestProductAccount.id, deleteTarget.group.id)
+        setSelectedPositionGroupId(null)
+      } else {
+        await portfolio.deletePosition(
+          latestProductAccount.id,
+          deleteTarget.account.id,
+          deleteTarget.position.id
+        )
       }
-    } else if (!latestProductAccount) {
-      return
-    } else if (deleteTarget.kind === 'product') {
-      portfolio.deleteProductAccount(deleteTarget.account.id)
-    } else if (deleteTarget.kind === 'asset') {
-      portfolio.deleteAssetAccount(latestProductAccount.id, deleteTarget.account.id)
-      setSelectedAssetAccountId(null)
-    } else if (deleteTarget.kind === 'group') {
-      portfolio.deletePositionGroup(latestProductAccount.id, deleteTarget.group.id)
-      setSelectedPositionGroupId(null)
-    } else {
-      portfolio.deletePosition(
-        latestProductAccount.id,
-        deleteTarget.account.id,
-        deleteTarget.position.id
-      )
+      setDeleteTarget(null)
+    } catch (error) {
+      reportPortfolioError(error)
     }
-    setDeleteTarget(null)
   }
 
   function toggleAssetValueMask(): void {
@@ -2296,7 +2453,9 @@ export function App(): React.JSX.Element {
                   key={account.id}
                   onSelect={() => {
                     setSelectedSnapshotId(null)
-                    portfolio.setActiveProductAccount(account.id)
+                    void portfolio
+                      .setActiveProductAccount(account.id)
+                      .catch(reportPortfolioError)
                   }}
                 >
                   <span className="grid size-7 place-items-center rounded-md bg-secondary text-xs font-semibold">
@@ -2308,7 +2467,12 @@ export function App(): React.JSX.Element {
               ))}
               <DropdownMenuSeparator />
               {!selectedSnapshot && (
-                <DropdownMenuItem onSelect={() => setAccountSettingsOpen(true)}>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setAccountSettingsSection('basic')
+                    setAccountSettingsOpen(true)
+                  }}
+                >
                   <Pencil className="size-4" />
                   账户设置
                 </DropdownMenuItem>
@@ -2572,13 +2736,15 @@ export function App(): React.JSX.Element {
               void exportImage({ kind: 'position-group', group: selectedPositionGroup })
             }
             onManagePositions={() => setGroupPositionsDialogOpen(true)}
-            onRemovePosition={(positionId) =>
-              portfolio.removePositionFromGroup(
-                activeProductAccount.id,
-                selectedPositionGroup.id,
-                positionId
-              )
-            }
+            onRemovePosition={(positionId) => {
+              void portfolio
+                .removePositionFromGroup(
+                  activeProductAccount.id,
+                  selectedPositionGroup.id,
+                  positionId
+                )
+                .catch(reportPortfolioError)
+            }}
           />
         ) : selectedAssetAccount ? (
           <AssetAccountDetail
@@ -2640,6 +2806,8 @@ export function App(): React.JSX.Element {
         open={accountSettingsOpen}
         onOpenChange={setAccountSettingsOpen}
         account={activeProductAccount}
+        exchangeRates={liveExchangeRates}
+        initialSection={accountSettingsSection}
         onSubmit={submitProductAccountSettings}
         onRequestDelete={() =>
           setDeleteTarget({ kind: 'product', account: activeProductAccount })
@@ -2650,6 +2818,10 @@ export function App(): React.JSX.Element {
         onOpenChange={(open) => setAssetDialog((current) => ({ ...current, open }))}
         account={assetDialog.account}
         holders={activeProductAccount.holders}
+        onManageHolders={() => {
+          setAccountSettingsSection('holders')
+          setAccountSettingsOpen(true)
+        }}
         onSubmit={submitAssetAccount}
       />
       <PositionDialog
