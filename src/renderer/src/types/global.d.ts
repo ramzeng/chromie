@@ -19,8 +19,8 @@ import type { OkxSyncOptions, OkxSyncResult } from '../../../shared/okx'
 import type {
   AccountBackup,
   PortfolioCommand,
-  PortfolioCommandResponse,
-  PortfolioLoadResponse,
+  PortfolioClientCommandResponse,
+  PortfolioClientLoadResponse,
   PortfolioSyncResponse
 } from '../../../shared/portfolio'
 import type { ShareImageSaveResult } from '../../../shared/share-image'
@@ -46,13 +46,13 @@ declare global {
         fetch: (provider: ExchangeRateProvider) => Promise<ExchangeRateSnapshot>
       }
       portfolio?: {
-        load: () => Promise<PortfolioLoadResponse>
-        execute: (command: PortfolioCommand) => Promise<PortfolioCommandResponse>
+        load: () => Promise<PortfolioClientLoadResponse>
+        execute: (command: PortfolioCommand) => Promise<PortfolioClientCommandResponse>
         syncAssetAccount: (
           accountId: string,
           assetAccountId: string
         ) => Promise<PortfolioSyncResponse>
-        onChanged: (listener: (revision: string) => void) => () => void
+        onChanged: (listener: () => void) => () => void
         inspectBackup: (content: string) => Promise<AccountBackup | null>
         exportActiveAccount: () => Promise<string>
       }

@@ -78,18 +78,12 @@ test('MCP starts disabled and read-only access cannot mutate', async () => {
       error instanceof McpOperationError && error.code === 'MCP_DISABLED'
   )
 
-  const listed = await module.callMcpTool(
-    'chromie_list_accounts',
-    {},
-    readAccess
-  )
   await assert.rejects(
     () => module.callMcpTool(
       'chromie_create_account',
       {
         name: '家庭资产',
-        anchor_currency: 'CNY',
-        expected_revision: listed.revision
+        anchor_currency: 'CNY'
       },
       readAccess
     ),
@@ -98,46 +92,25 @@ test('MCP starts disabled and read-only access cannot mutate', async () => {
   )
 })
 
-test('MCP CRUD returns revisions and rejects stale writes', async () => {
+test('MCP CRUD reads and writes portfolio data', async () => {
   const module = createModule()
-  const initial = await module.callMcpTool(
-    'chromie_list_accounts',
-    {},
-    fullAccess
-  )
   const createdAccount = await module.callMcpTool(
     'chromie_create_account',
     {
       name: '家庭资产',
-      anchor_currency: 'CNY',
-      expected_revision: initial.revision
+      anchor_currency: 'CNY'
     },
     fullAccess
   )
   const accountId = dataOf<{ account_id: string }>(createdAccount).account_id
   assert.ok(accountId)
 
-  await assert.rejects(
-    () => module.callMcpTool(
-      'chromie_update_account',
-      {
-        account_id: accountId,
-        name: '过期写入',
-        expected_revision: initial.revision
-      },
-      fullAccess
-    ),
-    (error: unknown) =>
-      error instanceof McpOperationError && error.code === 'CONFLICT'
-  )
-
   const holderResult = await module.callMcpTool(
     'chromie_save_holder',
     {
       mode: 'create',
       account_id: accountId,
-      name: 'Moon',
-      expected_revision: createdAccount.revision
+      name: 'Moon'
     },
     fullAccess
   )
@@ -148,8 +121,7 @@ test('MCP CRUD returns revisions and rejects stale writes', async () => {
       account_id: accountId,
       name: '券商账户',
       type: 'General',
-      holder_id: holderId,
-      expected_revision: holderResult.revision
+      holder_id: holderId
     },
     fullAccess
   )
@@ -166,8 +138,7 @@ test('MCP CRUD returns revisions and rejects stale writes', async () => {
       name: 'Apple',
       currency: 'USD',
       quantity: 2,
-      price: 100,
-      expected_revision: assetResult.revision
+      price: 100
     },
     fullAccess
   )
@@ -209,24 +180,17 @@ test('MCP CRUD returns revisions and rejects stale writes', async () => {
 
 test('delete requires explicit confirmation and reports cascading impact', async () => {
   const module = createModule()
-  const initial = await module.callMcpTool(
-    'chromie_list_accounts',
-    {},
-    fullAccess
-  )
   const created = await module.callMcpTool(
     'chromie_create_account',
     {
       name: '待删除账户',
-      anchor_currency: 'USD',
-      expected_revision: initial.revision
+      anchor_currency: 'USD'
     },
     fullAccess
   )
   const accountId = dataOf<{ account_id: string }>(created).account_id
   const argumentsValue = {
-    target: { kind: 'account', account_id: accountId },
-    expected_revision: created.revision
+    target: { kind: 'account', account_id: accountId }
   }
   const preview = await module.previewMcpDelete(argumentsValue, fullAccess)
   assert.match(preview.description, /历史快照/)
@@ -241,7 +205,7 @@ test('delete requires explicit confirmation and reports cascading impact', async
       error instanceof McpOperationError && error.code === 'CONFIRMATION_REQUIRED'
   )
 
-  const deleted = await module.callMcpTool(
+  await module.callMcpTool(
     'chromie_delete_item',
     argumentsValue,
     fullAccess,
@@ -252,23 +216,16 @@ test('delete requires explicit confirmation and reports cascading impact', async
     {},
     readAccess
   )
-  assert.notEqual(deleted.revision, created.revision)
   assert.deepEqual(dataOf<{ accounts: unknown[] }>(listed).accounts, [])
 })
 
-test('invalid group and snapshot writes leave the revision unchanged', async () => {
+test('invalid group and snapshot writes leave portfolio data unchanged', async () => {
   const module = createModule()
-  const initial = await module.callMcpTool(
-    'chromie_list_accounts',
-    {},
-    fullAccess
-  )
   const created = await module.callMcpTool(
     'chromie_create_account',
     {
       name: '边界测试',
-      anchor_currency: 'CNY',
-      expected_revision: initial.revision
+      anchor_currency: 'CNY'
     },
     fullAccess
   )
@@ -281,8 +238,7 @@ test('invalid group and snapshot writes leave the revision unchanged', async () 
         mode: 'update',
         account_id: accountId,
         group_id: 'missing-group',
-        name: '不存在',
-        expected_revision: created.revision
+        name: '不存在'
       },
       fullAccess
     ),
@@ -292,10 +248,7 @@ test('invalid group and snapshot writes leave the revision unchanged', async () 
   await assert.rejects(
     () => module.callMcpTool(
       'chromie_create_snapshot',
-      {
-        account_id: 'missing-account',
-        expected_revision: created.revision
-      },
+      { account_id: 'missing-account' },
       fullAccess
     ),
     (error: unknown) =>
@@ -307,5 +260,10 @@ test('invalid group and snapshot writes leave the revision unchanged', async () 
     {},
     readAccess
   )
-  assert.equal(listed.revision, created.revision)
+  const accounts = dataOf<{ accounts: Array<{ id: string; name: string }> }>(
+    listed
+  ).accounts
+  assert.equal(accounts.length, 1)
+  assert.equal(accounts[0].id, accountId)
+  assert.equal(accounts[0].name, '边界测试')
 })

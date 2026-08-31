@@ -35,7 +35,7 @@ Chromie 必须保持运行。MCP 客户端启动的 `--mcp` 辅助进程只负�
 - 使用 Chromie 中已有的凭据同步资产账户或刷新汇率
 - 在客户端展示级联影响并经用户确认后删除数据
 
-所有写操作都使用读取结果中的 `revision` 做并发检查。历史快照始终只读；MCP 不接受、读取或返回 API Key、Secret Key、Passphrase 等同步凭据。
+写操作由主进程顺序执行。历史快照始终只读；MCP 不接受、读取或返回 API Key、Secret Key、Passphrase 等同步凭据。
 
 ## 资产快照
 

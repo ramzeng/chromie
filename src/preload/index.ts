@@ -16,8 +16,8 @@ import type { OkxSyncOptions, OkxSyncResult } from '../shared/okx'
 import type {
   AccountBackup,
   PortfolioCommand,
-  PortfolioCommandResponse,
-  PortfolioLoadResponse,
+  PortfolioClientCommandResponse,
+  PortfolioClientLoadResponse,
   PortfolioSyncResponse
 } from '../shared/portfolio'
 import type { ShareImageSaveResult } from '../shared/share-image'
@@ -47,8 +47,8 @@ contextBridge.exposeInMainWorld('desktop', {
       ipcRenderer.invoke('exchange-rates:fetch', provider)
   },
   portfolio: {
-    load: (): Promise<PortfolioLoadResponse> => ipcRenderer.invoke('portfolio:load'),
-    execute: (command: PortfolioCommand): Promise<PortfolioCommandResponse> =>
+    load: (): Promise<PortfolioClientLoadResponse> => ipcRenderer.invoke('portfolio:load'),
+    execute: (command: PortfolioCommand): Promise<PortfolioClientCommandResponse> =>
       ipcRenderer.invoke('portfolio:execute', command),
     syncAssetAccount: (
       accountId: string,
@@ -59,9 +59,9 @@ contextBridge.exposeInMainWorld('desktop', {
         accountId,
         assetAccountId
       ),
-    onChanged: (listener: (revision: string) => void): (() => void) => {
-      const handleChange = (_event: Electron.IpcRendererEvent, revision: string) => {
-        listener(revision)
+    onChanged: (listener: () => void): (() => void) => {
+      const handleChange = () => {
+        listener()
       }
       ipcRenderer.on('portfolio:changed', handleChange)
       return () => ipcRenderer.removeListener('portfolio:changed', handleChange)

@@ -23,7 +23,6 @@ export const MCP_TOOL_NAMES = [
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number]
 
 const id = z.string().trim().min(1).max(128)
-const expectedRevision = z.string().trim().min(1).max(160)
 const name = z.string().trim().min(1).max(60)
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,12}$/)
 const market = z.enum(['CN', 'HK', 'US', 'CC'])
@@ -76,8 +75,7 @@ export const listSnapshotsInputSchema = z.object({ account_id: id }).strict()
 
 export const createAccountInputSchema = z.object({
   name: z.string().trim().min(1).max(40),
-  anchor_currency: anchorCurrency,
-  expected_revision: expectedRevision
+  anchor_currency: anchorCurrency
 }).strict()
 
 export const updateAccountInputSchema = z.object({
@@ -85,8 +83,7 @@ export const updateAccountInputSchema = z.object({
   name: z.string().trim().min(1).max(40).optional(),
   anchor_currency: anchorCurrency.optional(),
   exchange_rate_provider: z.literal('coinbase').optional(),
-  exchange_rate_refresh_interval_minutes: z.number().int().min(1).max(1440).optional(),
-  expected_revision: expectedRevision
+  exchange_rate_refresh_interval_minutes: z.number().int().min(1).max(1440).optional()
 }).strict().refine(
   ({
     name,
@@ -105,15 +102,13 @@ export const saveHolderInputSchema = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('create'),
     account_id: id,
-    name,
-    expected_revision: expectedRevision
+    name
   }).strict(),
   z.object({
     mode: z.literal('update'),
     account_id: id,
     holder_id: id,
-    name,
-    expected_revision: expectedRevision
+    name
   }).strict()
 ])
 
@@ -121,8 +116,7 @@ export const createAssetAccountInputSchema = z.object({
   account_id: id,
   name,
   type: assetAccountType,
-  holder_id: id,
-  expected_revision: expectedRevision
+  holder_id: id
 }).strict()
 
 export const updateAssetAccountInputSchema = z.object({
@@ -130,8 +124,7 @@ export const updateAssetAccountInputSchema = z.object({
   asset_account_id: id,
   name: name.optional(),
   type: assetAccountType.optional(),
-  holder_id: id.optional(),
-  expected_revision: expectedRevision
+  holder_id: id.optional()
 }).strict().refine(
   ({ name, type, holder_id }) =>
     name !== undefined || type !== undefined || holder_id !== undefined,
@@ -152,8 +145,7 @@ export const savePositionInputSchema = z.discriminatedUnion('mode', [
     mode: z.literal('create'),
     account_id: id,
     asset_account_id: id,
-    ...positionCreateFields,
-    expected_revision: expectedRevision
+    ...positionCreateFields
   }).strict(),
   z.object({
     mode: z.literal('update'),
@@ -165,8 +157,7 @@ export const savePositionInputSchema = z.discriminatedUnion('mode', [
     name: name.optional(),
     currency: currency.optional(),
     quantity: z.number().finite().positive().optional(),
-    price: z.number().finite().nonnegative().nullable().optional(),
-    expected_revision: expectedRevision
+    price: z.number().finite().nonnegative().nullable().optional()
   }).strict().refine(
     ({ market, symbol, name, currency, quantity, price }) =>
       market !== undefined ||
@@ -183,34 +174,29 @@ export const savePositionGroupInputSchema = z.discriminatedUnion('mode', [
   z.object({
     mode: z.literal('create'),
     account_id: id,
-    name,
-    expected_revision: expectedRevision
+    name
   }).strict(),
   z.object({
     mode: z.literal('update'),
     account_id: id,
     group_id: id,
-    name,
-    expected_revision: expectedRevision
+    name
   }).strict()
 ])
 
 export const setGroupMembersInputSchema = z.object({
   account_id: id,
   group_id: id,
-  position_ids: z.array(id).max(10000),
-  expected_revision: expectedRevision
+  position_ids: z.array(id).max(10000)
 }).strict()
 
 export const createSnapshotInputSchema = z.object({
-  account_id: id,
-  expected_revision: expectedRevision
+  account_id: id
 }).strict()
 
 export const syncAssetAccountInputSchema = z.object({
   account_id: id,
-  asset_account_id: id,
-  expected_revision: expectedRevision
+  asset_account_id: id
 }).strict()
 
 export const refreshExchangeRatesInputSchema = z.object({
@@ -236,8 +222,7 @@ export const deleteTargetSchema = z.discriminatedUnion('kind', [
 ])
 
 export const deleteItemInputSchema = z.object({
-  target: deleteTargetSchema,
-  expected_revision: expectedRevision
+  target: deleteTargetSchema
 }).strict()
 
 export const mcpToolInputSchemas = {
@@ -266,7 +251,6 @@ export type McpToolArguments = {
 
 export const mcpToolOutputSchema = z.object({
   ok: z.literal(true),
-  revision: z.string(),
   summary: z.string(),
   data: z.unknown().optional()
 })

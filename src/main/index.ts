@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, nativeTheme, shell } from 'electron'
 
 import { exportBackup, importBackup } from './infra/backup'
 import { syncBinancePositions } from './infra/binance'
@@ -49,7 +49,7 @@ function createWindow(): void {
     show: false,
     title: 'Chromie',
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#f7f7f5',
+    backgroundColor: '#0a0a0a',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -140,6 +140,7 @@ async function startApplication(): Promise<void> {
 let activeMcpHost: McpHostOperations | null = null
 
 app.whenReady().then(() => {
+  nativeTheme.themeSource = 'dark'
   if (mcpMode) {
     void import('./mcp-server').then(({ runChromieMcpServer }) => {
       runChromieMcpServer({

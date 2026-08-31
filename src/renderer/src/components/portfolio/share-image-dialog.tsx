@@ -42,19 +42,64 @@ const FONT_FAMILY =
   '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif'
 const DISPLAY_CURRENCIES = ['USD', 'HKD', 'CNY'] as const
 
-const palette = {
-  background: '#f5f4ef',
-  card: '#ffffff',
-  foreground: '#23241f',
-  muted: '#777970',
-  faint: '#a5a79f',
-  border: '#e2e1da',
-  green: '#153f32',
-  greenSoft: '#e9f0eb',
-  greenMuted: '#557266',
-  header: '#f8f8f5',
-  rowAlt: '#fbfbf8'
+type CanvasPalette = {
+  background: string
+  card: string
+  foreground: string
+  muted: string
+  mutedForeground: string
+  subtle: string
+  border: string
+  primary: string
+  primaryForeground: string
+}
+
+const DARK_CANVAS_PALETTE_FALLBACK: CanvasPalette = {
+  background: '#0a0a0a',
+  card: '#171717',
+  foreground: '#fafafa',
+  muted: '#262626',
+  mutedForeground: '#a3a3a3',
+  subtle: '#737373',
+  border: 'rgba(255, 255, 255, 0.1)',
+  primary: '#e5e5e5',
+  primaryForeground: '#171717'
 } as const
+
+const CANVAS_RADIUS = {
+  small: 6,
+  medium: 10,
+  large: 14
+} as const
+
+function resolveCanvasPalette(): CanvasPalette {
+  const styles = window.getComputedStyle(document.documentElement)
+  const color = (token: string, fallback: string): string => {
+    const value = styles.getPropertyValue(`--${token}`).trim()
+    if (!value || (typeof CSS !== 'undefined' && !CSS.supports('color', value))) {
+      return fallback
+    }
+    return value
+  }
+
+  return {
+    background: color('background', DARK_CANVAS_PALETTE_FALLBACK.background),
+    card: color('card', DARK_CANVAS_PALETTE_FALLBACK.card),
+    foreground: color('foreground', DARK_CANVAS_PALETTE_FALLBACK.foreground),
+    muted: color('muted', DARK_CANVAS_PALETTE_FALLBACK.muted),
+    mutedForeground: color(
+      'muted-foreground',
+      DARK_CANVAS_PALETTE_FALLBACK.mutedForeground
+    ),
+    subtle: color('ring', DARK_CANVAS_PALETTE_FALLBACK.subtle),
+    border: color('border', DARK_CANVAS_PALETTE_FALLBACK.border),
+    primary: color('primary', DARK_CANVAS_PALETTE_FALLBACK.primary),
+    primaryForeground: color(
+      'primary-foreground',
+      DARK_CANVAS_PALETTE_FALLBACK.primaryForeground
+    )
+  }
+}
 
 function setFont(
   context: CanvasRenderingContext2D,
@@ -116,7 +161,7 @@ function drawText(
   value: string,
   x: number,
   y: number,
-  color: string = palette.foreground,
+  color: string,
   align: CanvasTextAlign = 'left'
 ): void {
   context.fillStyle = color
@@ -333,13 +378,14 @@ function scopeLabel(scope: ShareImageScope): string {
 
 function drawSectionTitle(
   context: CanvasRenderingContext2D,
+  palette: CanvasPalette,
   index: string,
   title: string,
   y: number
 ): void {
-  fillRoundedRect(context, PAGE_PADDING, y - 17, 36, 36, 10, palette.green)
+  fillRoundedRect(context, PAGE_PADDING, y - 17, 36, 36, CANVAS_RADIUS.small, palette.primary)
   setFont(context, 17, 700)
-  drawText(context, index, PAGE_PADDING + 18, y + 1, '#ffffff', 'center')
+  drawText(context, index, PAGE_PADDING + 18, y + 1, palette.primaryForeground, 'center')
   setFont(context, 27, 600)
   drawText(context, title, PAGE_PADDING + 54, y, palette.foreground)
 }
@@ -371,28 +417,19 @@ function renderShareImage(
   canvas.height = canvasHeight
   const context = canvas.getContext('2d')
   if (!context) throw new Error('当前环境无法生成分享图片')
+  const palette = resolveCanvasPalette()
 
   context.clearRect(0, 0, CANVAS_WIDTH, canvasHeight)
-  const background = context.createLinearGradient(0, 0, CANVAS_WIDTH, canvasHeight)
-  background.addColorStop(0, '#f1f5f0')
-  background.addColorStop(0.42, palette.background)
-  background.addColorStop(1, '#f8f1e8')
-  context.fillStyle = background
+  context.fillStyle = palette.background
   context.fillRect(0, 0, CANVAS_WIDTH, canvasHeight)
 
-  const glow = context.createRadialGradient(1220, 80, 0, 1220, 80, 360)
-  glow.addColorStop(0, 'rgba(202, 221, 207, 0.48)')
-  glow.addColorStop(1, 'rgba(202, 221, 207, 0)')
-  context.fillStyle = glow
-  context.fillRect(840, 0, 600, 440)
-
-  fillRoundedRect(context, PAGE_PADDING, 66, 58, 58, 17, palette.green)
+  fillRoundedRect(context, PAGE_PADDING, 66, 58, 58, CANVAS_RADIUS.medium, palette.primary)
   setFont(context, 28, 700)
-  drawText(context, 'C', PAGE_PADDING + 29, 96, '#ffffff', 'center')
+  drawText(context, 'C', PAGE_PADDING + 29, 96, palette.primaryForeground, 'center')
   setFont(context, 30, 700)
-  drawText(context, 'Chromie', PAGE_PADDING + 78, 86)
+  drawText(context, 'Chromie', PAGE_PADDING + 78, 86, palette.foreground)
   setFont(context, 18, 400)
-  drawText(context, '资产分享', PAGE_PADDING + 80, 116, palette.muted)
+  drawText(context, '资产分享', PAGE_PADDING + 80, 116, palette.mutedForeground)
 
   setFont(context, 24, 600)
   drawText(
@@ -414,11 +451,11 @@ function renderShareImage(
     ),
     CANVAS_WIDTH - PAGE_PADDING,
     116,
-    palette.muted,
+    palette.mutedForeground,
     'right'
   )
 
-  drawSectionTitle(context, '01', '市值 & 汇率', 194)
+  drawSectionTitle(context, palette, '01', '市值 & 汇率', 194)
 
   const cardTop = 230
   const cardHeight = 170
@@ -426,19 +463,14 @@ function renderShareImage(
   const cardWidth = (CONTENT_WIDTH - cardGap * 2) / 3
   DISPLAY_CURRENCIES.forEach((currency, index) => {
     const x = PAGE_PADDING + index * (cardWidth + cardGap)
-    context.save()
-    context.shadowColor = 'rgba(36, 39, 31, 0.055)'
-    context.shadowBlur = 24
-    context.shadowOffsetY = 8
-    fillRoundedRect(context, x, cardTop, cardWidth, cardHeight, 22, palette.card)
-    context.restore()
-    strokeRoundedRect(context, x, cardTop, cardWidth, cardHeight, 22, palette.border)
+    fillRoundedRect(context, x, cardTop, cardWidth, cardHeight, CANVAS_RADIUS.large, palette.card)
+    strokeRoundedRect(context, x, cardTop, cardWidth, cardHeight, CANVAS_RADIUS.large, palette.border)
 
     const valuation = valuePositions(positions, currency, exchangeRates.snapshot?.rates)
     const hasCompleteValue =
       valuation.isComplete && valuation.totalAnchoredMarketValue !== undefined
     setFont(context, 19, 500)
-    drawText(context, `${currency} 市值`, x + 28, cardTop + 38, palette.muted)
+    drawText(context, `${currency} 市值`, x + 28, cardTop + 38, palette.mutedForeground)
     setFont(context, masked && hasCompleteValue ? 38 : 35, 600)
     const value = hasCompleteValue
       ? masked
@@ -455,14 +487,14 @@ function renderShareImage(
     if (!hasCompleteValue && valuation.missingCurrencies.length) {
       setFont(context, 15, 400)
       const hint = `缺少 ${valuation.missingCurrencies.join('、')} 汇率`
-      drawText(context, hint, x + 28, cardTop + 137, palette.faint)
+      drawText(context, hint, x + 28, cardTop + 137, palette.subtle)
     }
   })
 
   const rateTop = 420
-  fillRoundedRect(context, PAGE_PADDING, rateTop, CONTENT_WIDTH, 82, 18, palette.greenSoft)
+  fillRoundedRect(context, PAGE_PADDING, rateTop, CONTENT_WIDTH, 82, CANVAS_RADIUS.medium, palette.muted)
   setFont(context, 17, 600)
-  drawText(context, '参考汇率', PAGE_PADDING + 26, rateTop + 41, palette.green)
+  drawText(context, '参考汇率', PAGE_PADDING + 26, rateTop + 41, palette.foreground)
   let rateX = PAGE_PADDING + 132
   const cnyRate = exchangeRates.snapshot?.rates.CNY
   const hkdRate = exchangeRates.snapshot?.rates.HKD
@@ -483,8 +515,8 @@ function renderShareImage(
     const label = `${item.label}  ${formatRate(item.value)}`
     setFont(context, 17, 500)
     const width = context.measureText(label).width + 30
-    fillRoundedRect(context, rateX, rateTop + 22, width, 40, 12, '#ffffffb8')
-    drawText(context, label, rateX + 15, rateTop + 42, palette.green)
+    fillRoundedRect(context, rateX, rateTop + 22, width, 40, CANVAS_RADIUS.small, palette.card)
+    drawText(context, label, rateX + 15, rateTop + 42, palette.foreground)
     rateX += width + 10
   })
   setFont(context, 15, 400)
@@ -498,11 +530,11 @@ function renderShareImage(
     rateStatus,
     CANVAS_WIDTH - PAGE_PADDING - 26,
     rateTop + 42,
-    palette.greenMuted,
+    palette.mutedForeground,
     'right'
   )
 
-  drawSectionTitle(context, '02', '持仓分布', 584)
+  drawSectionTitle(context, palette, '02', '持仓分布', 584)
   setFont(context, 16, 400)
   drawText(
     context,
@@ -511,23 +543,23 @@ function renderShareImage(
       : `${holdingRows.length} 项持仓`,
     CANVAS_WIDTH - PAGE_PADDING,
     584,
-    palette.muted,
+    palette.mutedForeground,
     'right'
   )
 
   context.save()
-  roundedRect(context, PAGE_PADDING, tableY, CONTENT_WIDTH, tableHeight, 22)
+  roundedRect(context, PAGE_PADDING, tableY, CONTENT_WIDTH, tableHeight, CANVAS_RADIUS.large)
   context.clip()
   context.fillStyle = palette.card
   context.fillRect(PAGE_PADDING, tableY, CONTENT_WIDTH, tableHeight)
-  context.fillStyle = palette.header
+  context.fillStyle = palette.muted
   context.fillRect(PAGE_PADDING, tableY, CONTENT_WIDTH, tableHeaderHeight)
 
   const columnWidths = scope.kind === 'overview'
     ? [250, 170, 145, 145, 145, 245, 132]
     : scope.kind === 'asset-account'
       ? [280, 110, 140, 160, 220, 220, 102]
-      : [160, 110, 200, 110, 130, 180, 220, 122]
+      : [155, 105, 190, 100, 155, 180, 220, 127]
   const columnLabels = scope.kind === 'overview'
     ? [
         scope.mode === 'accounts' ? '资产账户' : '持仓分组',
@@ -572,7 +604,7 @@ function renderShareImage(
       label,
       numeric ? columnX + columnWidths[index] - 8 : columnX,
       tableY + tableHeaderHeight / 2,
-      palette.muted,
+      palette.mutedForeground,
       numeric ? 'right' : 'left'
     )
     columnX += columnWidths[index]
@@ -587,17 +619,13 @@ function renderShareImage(
         : '暂无持仓',
       CANVAS_WIDTH / 2,
       tableY + tableHeaderHeight + tableRowHeight / 2,
-      palette.faint,
+      palette.subtle,
       'center'
     )
   }
 
   Array.from({ length: rowCount }).forEach((_, rowIndex) => {
     const rowY = tableY + tableHeaderHeight + rowIndex * tableRowHeight
-    if (rowIndex % 2 === 1) {
-      context.fillStyle = palette.rowAlt
-      context.fillRect(PAGE_PADDING, rowY, CONTENT_WIDTH, tableRowHeight)
-    }
     context.fillStyle = palette.border
     context.fillRect(PAGE_PADDING + 24, rowY, CONTENT_WIDTH - 48, 1)
   })
@@ -611,7 +639,8 @@ function renderShareImage(
       context,
       truncateText(context, row.name, columnWidths[0] - 26),
       x,
-      rowY + tableRowHeight / 2
+      rowY + tableRowHeight / 2,
+      palette.foreground
     )
     x += columnWidths[0]
     setFont(context, 16, 400)
@@ -620,7 +649,7 @@ function renderShareImage(
       truncateText(context, row.holder, columnWidths[1] - 24),
       x,
       rowY + tableRowHeight / 2,
-      palette.muted
+      palette.mutedForeground
     )
     x += columnWidths[1]
 
@@ -633,7 +662,7 @@ function renderShareImage(
         label,
         x + columnWidths[currencyIndex + 2] - 8,
         rowY + tableRowHeight / 2,
-        value === undefined ? palette.faint : palette.foreground,
+        value === undefined ? palette.subtle : palette.foreground,
         'right'
       )
       x += columnWidths[currencyIndex + 2]
@@ -650,7 +679,7 @@ function renderShareImage(
       truncateText(context, anchoredLabel, columnWidths[5] - 16),
       x + columnWidths[5] - 8,
       rowY + tableRowHeight / 2,
-      row.anchoredValue === undefined ? palette.faint : palette.foreground,
+      row.anchoredValue === undefined ? palette.subtle : palette.foreground,
       'right'
     )
     x += columnWidths[5]
@@ -660,7 +689,7 @@ function renderShareImage(
       row.percentage === undefined ? '-' : `${formatDecimal(row.percentage)}%`,
       x + columnWidths[6] - 8,
       rowY + tableRowHeight / 2,
-      palette.muted,
+      palette.mutedForeground,
       'right'
     )
   })
@@ -693,7 +722,8 @@ function renderShareImage(
         context,
         truncateText(context, row.accountName, columnWidths[0] - 20),
         x,
-        centerY
+        centerY,
+        palette.foreground
       )
       x += columnWidths[0]
       setFont(context, 15, 400)
@@ -702,7 +732,7 @@ function renderShareImage(
         truncateText(context, row.holder, columnWidths[1] - 18),
         x,
         centerY,
-        palette.muted
+        palette.mutedForeground
       )
       x += columnWidths[1]
     }
@@ -717,7 +747,8 @@ function renderShareImage(
         columnWidths[nameColumnIndex] - 20
       ),
       x,
-      centerY - 12
+      centerY - 12,
+      palette.foreground
     )
     setFont(context, 13, 400)
     drawText(
@@ -725,13 +756,13 @@ function renderShareImage(
       truncateText(context, position.name, columnWidths[nameColumnIndex] - 20),
       x,
       centerY + 15,
-      palette.muted
+      palette.mutedForeground
     )
     x += columnWidths[nameColumnIndex]
 
     if (scope.kind === 'asset-account') {
       setFont(context, 15, 500)
-      drawText(context, position.currency, x, centerY, palette.muted)
+      drawText(context, position.currency, x, centerY, palette.mutedForeground)
       x += columnWidths[1]
     }
 
@@ -751,23 +782,23 @@ function renderShareImage(
         truncateText(context, value, columnWidths[columnIndex] - 16),
         x + columnWidths[columnIndex] - 8,
         centerY,
-        value === '-' || valueIndex === 4 ? palette.muted : palette.foreground,
+        value === '-' || valueIndex === 4 ? palette.mutedForeground : palette.foreground,
         'right'
       )
       x += columnWidths[columnIndex]
     })
   })
   context.restore()
-  strokeRoundedRect(context, PAGE_PADDING, tableY, CONTENT_WIDTH, tableHeight, 22, palette.border)
+  strokeRoundedRect(context, PAGE_PADDING, tableY, CONTENT_WIDTH, tableHeight, CANVAS_RADIUS.large, palette.border)
 
   setFont(context, 15, 400)
-  drawText(context, '数据来自本地 Chromie 账户', PAGE_PADDING, canvasHeight - 64, palette.faint)
+  drawText(context, '数据来自本地 Chromie 账户', PAGE_PADDING, canvasHeight - 64, palette.subtle)
   drawText(
     context,
     masked ? '资产数值已遮蔽' : '市值仅供个人记录参考',
     CANVAS_WIDTH - PAGE_PADDING,
     canvasHeight - 64,
-    palette.faint,
+    palette.subtle,
     'right'
   )
 }

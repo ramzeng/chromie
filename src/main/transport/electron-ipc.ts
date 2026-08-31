@@ -9,6 +9,10 @@ import type { McpAccessSettings } from '../../shared/mcp'
 import type { DesktopOperations } from '../service/desktop-service'
 import type { PortfolioModuleOperations } from '../service/portfolio-module'
 import type { McpHostOperations } from './mcp-socket'
+import {
+  executePortfolioClientCommand,
+  loadPortfolioClientState
+} from './portfolio-client'
 
 export type IpcSenderValidator = (sender: WebContents) => boolean
 
@@ -32,13 +36,13 @@ export function registerDesktopIpc(
   validateSender: IpcSenderValidator
 ): void {
   const portfolioSubscribers = new Set<WebContents>()
-  portfolio.subscribe((revision) => {
+  portfolio.subscribe(() => {
     portfolioSubscribers.forEach((sender) => {
       if (sender.isDestroyed()) {
         portfolioSubscribers.delete(sender)
         return
       }
-      sender.send('portfolio:changed', revision)
+      sender.send('portfolio:changed')
     })
   })
   ipcMain.handle('futu:sync-positions', (event, options?: FutuSyncOptions) => {
@@ -73,14 +77,14 @@ export function registerDesktopIpc(
         portfolioSubscribers.delete(event.sender)
       })
     }
-    return portfolio.load()
+    return loadPortfolioClientState(portfolio)
   })
   ipcMain.handle('portfolio:execute', (event, command: PortfolioCommand) => {
     assertTrustedSender(event, validateSender)
     if (!command || typeof command !== 'object' || typeof command.type !== 'string') {
       throw new Error('资产命令无效')
     }
-    return portfolio.execute(command)
+    return executePortfolioClientCommand(portfolio, command)
   })
   ipcMain.handle(
     'portfolio:sync-asset-account',

@@ -45,9 +45,7 @@ import {
 import { valuePositions } from '../../shared/valuation'
 import type { DesktopOperations } from './desktop-service'
 import {
-  PortfolioRevisionConflictError,
   type PortfolioChangeListener,
-  type PortfolioExecuteOptions,
   type PortfolioOperations
 } from './portfolio-service'
 
@@ -56,7 +54,6 @@ export type McpErrorCode =
   | 'PERMISSION_DENIED'
   | 'VALIDATION_ERROR'
   | 'NOT_FOUND'
-  | 'CONFLICT'
   | 'READ_ONLY'
   | 'SYNC_NOT_CONFIGURED'
   | 'SYNC_FAILED'
@@ -75,7 +72,6 @@ export class McpOperationError extends Error {
 }
 
 export type McpDeletePreview = {
-  revision: string
   title: string
   description: string
 }
@@ -93,8 +89,7 @@ export interface PortfolioModuleOperations extends PortfolioOperations {
   ): Promise<McpDeletePreview>
   syncAssetAccount(
     accountId: string,
-    assetAccountId: string,
-    expectedRevision?: string
+    assetAccountId: string
   ): Promise<PortfolioSyncResponse>
 }
 
@@ -121,14 +116,9 @@ const SYNC_TOOLS = new Set<McpToolName>([
   'chromie_refresh_exchange_rates'
 ])
 
-function success(
-  revision: string,
-  summary: string,
-  data?: unknown
-): McpToolSuccess {
+function success(summary: string, data?: unknown): McpToolSuccess {
   return {
     ok: true,
-    revision,
     summary,
     ...(data === undefined ? {} : { data })
   }
@@ -212,15 +202,28 @@ function integrationInput(
   integration: AssetAccountIntegration
 ): AssetAccountInput['integration'] {
   if (integration.provider === 'Futu') {
-    return { provider: 'Futu', websocket: { ...integration.websocket } }
+    return {
+      provider: 'Futu',
+      websocket: {
+        host: integration.websocket.host,
+        port: integration.websocket.port,
+        credential: { mode: 'keep' }
+      }
+    }
   }
   if (integration.provider === 'Ibkr') {
     return { provider: 'Ibkr', gateway: { ...integration.gateway } }
   }
   if (integration.provider === 'Okx') {
-    return { provider: 'Okx', api: { ...integration.api } }
+    return {
+      provider: 'Okx',
+      api: { credential: { mode: 'keep' } }
+    }
   }
-  return { provider: 'Binance', api: { ...integration.api } }
+  return {
+    provider: 'Binance',
+    api: { credential: { mode: 'keep' } }
+  }
 }
 
 function positionValue(
@@ -259,11 +262,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     return this.portfolio.load()
   }
 
-  execute(
-    command: PortfolioCommand,
-    options?: PortfolioExecuteOptions
-  ): Promise<PortfolioCommandResponse> {
-    return this.portfolio.execute(command, options)
+  execute(command: PortfolioCommand): Promise<PortfolioCommandResponse> {
+    return this.portfolio.execute(command)
   }
 
   inspectBackup(content: unknown) {
@@ -296,8 +296,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
       )
     }
 
-    try {
-      switch (name) {
+    switch (name) {
         case 'chromie_list_accounts':
           return await this.listAccounts(listAccountsInputSchema.parse(parsed.data))
         case 'chromie_get_account':
@@ -346,16 +345,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
             )
           }
           return await this.deleteItem(deleteItemInputSchema.parse(parsed.data))
-      }
-    } catch (error) {
-      if (error instanceof McpOperationError) throw error
-      if (error instanceof PortfolioRevisionConflictError) {
-        throw new McpOperationError('CONFLICT', error.message, true, {
-          expected_revision: error.expectedRevision,
-          actual_revision: error.actualRevision
-        })
-      }
-      throw error
     }
   }
 
@@ -372,17 +361,14 @@ export class PortfolioModule implements PortfolioModuleOperations {
       )
     }
     const state = await this.portfolio.load()
-    this.assertRevision(input.data.expected_revision, state.revision)
     return this.describeDeletion(state, input.data.target)
   }
 
   async syncAssetAccount(
     accountId: string,
-    assetAccountId: string,
-    expectedRevision?: string
+    assetAccountId: string
   ): Promise<PortfolioSyncResponse> {
     const state = await this.portfolio.load()
-    if (expectedRevision) this.assertRevision(expectedRevision, state.revision)
     const account = requireAccount(state.data, accountId)
     const assetAccount = requireAssetAccount(account, assetAccountId)
     const integration = state.integrations.find(
@@ -427,26 +413,19 @@ export class PortfolioModule implements PortfolioModuleOperations {
         )
       }
 
-      const response = await this.portfolio.execute(
-        {
-          type: 'replace-positions',
-          productAccountId: accountId,
-          assetAccountId,
-          positions: result.positions,
-          lastSyncedAt: result.syncedAt
-        },
-        { expectedRevision: state.revision }
-      )
+      await this.portfolio.execute({
+        type: 'replace-positions',
+        productAccountId: accountId,
+        assetAccountId,
+        positions: result.positions,
+        lastSyncedAt: result.syncedAt
+      })
       return {
-        revision: response.revision,
         positionCount: result.positions.length,
         syncedAt: result.syncedAt
       }
     } catch (error) {
-      if (
-        error instanceof McpOperationError ||
-        error instanceof PortfolioRevisionConflictError
-      ) {
+      if (error instanceof McpOperationError) {
         throw error
       }
       const message = error instanceof Error ? error.message : String(error)
@@ -469,17 +448,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }
     if (SYNC_TOOLS.has(name) && (!access.allowWrite || !access.allowSync)) {
       throw new McpOperationError('PERMISSION_DENIED', 'Chromie 未授权 MCP 执行同步')
-    }
-  }
-
-  private assertRevision(expected: string, actual: string): void {
-    if (expected !== actual) {
-      throw new McpOperationError(
-        'CONFLICT',
-        '资产数据已发生变化，请重新读取后再试',
-        true,
-        { expected_revision: expected, actual_revision: actual }
-      )
     }
   }
 
@@ -542,7 +510,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         missing_currencies: valuation.missingCurrencies
       }
     })
-    return success(state.revision, `找到 ${accounts.length} 个账户`, {
+    return success(`找到 ${accounts.length} 个账户`, {
       active_account_id: state.data.activeProductAccountId,
       exchange_rates: exchangeRates,
       accounts
@@ -554,7 +522,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const resolved = await this.resolveView(state, input.account_id, input.view)
-    return success(state.revision, `已读取账户“${resolved.account.name}”`, {
+    return success(`已读取账户“${resolved.account.name}”`, {
       view: resolved.view,
       exchange_rates: resolved.exchangeRates,
       account: safeAccount(
@@ -659,7 +627,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         (left.anchored_market_value ?? Number.NEGATIVE_INFINITY)
     )
 
-    return success(state.revision, `已生成“${account.name}”资产透视`, {
+    return success(`已生成“${account.name}”资产透视`, {
       view: resolved.view,
       group_by: input.group_by,
       anchor_currency: account.anchorCurrency,
@@ -719,7 +687,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const offset = Number(input.cursor ?? '0')
     const page = rows.slice(offset, offset + input.limit)
     const nextOffset = offset + page.length
-    return success(state.revision, `找到 ${rows.length} 项持仓`, {
+    return success(`找到 ${rows.length} 项持仓`, {
       view: resolved.view,
       total: rows.length,
       positions: page,
@@ -745,7 +713,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         ),
         exchange_rates_fetched_at: snapshot.exchangeRates?.fetchedAt ?? null
       }))
-    return success(state.revision, `找到 ${snapshots.length} 个历史快照`, {
+    return success(`找到 ${snapshots.length} 个历史快照`, {
       account: { id: account.id, name: account.name },
       snapshots
     })
@@ -754,14 +722,11 @@ export class PortfolioModule implements PortfolioModuleOperations {
   private async createAccount(
     input: McpToolArguments['chromie_create_account']
   ): Promise<McpToolSuccess> {
-    const response = await this.portfolio.execute(
-      {
-        type: 'create-product-account',
-        input: { name: input.name, anchorCurrency: input.anchor_currency }
-      },
-      { expectedRevision: input.expected_revision }
-    )
-    return success(response.revision, `已创建账户“${input.name}”`, {
+    const response = await this.portfolio.execute({
+      type: 'create-product-account',
+      input: { name: input.name, anchorCurrency: input.anchor_currency }
+    })
+    return success(`已创建账户“${input.name}”`, {
       account_id: response.result
     })
   }
@@ -770,7 +735,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_update_account']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    this.assertRevision(input.expected_revision, state.revision)
     const account = requireAccount(state.data, input.account_id)
     const settings: ProductAccountSettingsInput = {
       name: input.name ?? account.name,
@@ -782,11 +746,12 @@ export class PortfolioModule implements PortfolioModuleOperations {
         account.exchangeRateRefreshIntervalMinutes,
       holders: account.holders
     }
-    const response = await this.portfolio.execute(
-      { type: 'update-product-account', id: account.id, input: settings },
-      { expectedRevision: state.revision }
-    )
-    return success(response.revision, `已更新账户“${settings.name}”`, {
+    await this.portfolio.execute({
+      type: 'update-product-account',
+      id: account.id,
+      input: settings
+    })
+    return success(`已更新账户“${settings.name}”`, {
       account_id: account.id
     })
   }
@@ -795,7 +760,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_save_holder']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    this.assertRevision(input.expected_revision, state.revision)
     const account = requireAccount(state.data, input.account_id)
     const existing = input.mode === 'update'
       ? account.holders.find((holder) => holder.id === input.holder_id)
@@ -819,23 +783,19 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const holders = existing
       ? account.holders.map((item) => item.id === holder.id ? holder : item)
       : [...account.holders, holder]
-    const response = await this.portfolio.execute(
-      {
-        type: 'update-product-account',
-        id: account.id,
-        input: {
-          name: account.name,
-          anchorCurrency: account.anchorCurrency,
-          exchangeRateProvider: account.exchangeRateProvider,
-          exchangeRateRefreshIntervalMinutes:
-            account.exchangeRateRefreshIntervalMinutes,
-          holders
-        }
-      },
-      { expectedRevision: state.revision }
-    )
+    await this.portfolio.execute({
+      type: 'update-product-account',
+      id: account.id,
+      input: {
+        name: account.name,
+        anchorCurrency: account.anchorCurrency,
+        exchangeRateProvider: account.exchangeRateProvider,
+        exchangeRateRefreshIntervalMinutes:
+          account.exchangeRateRefreshIntervalMinutes,
+        holders
+      }
+    })
     return success(
-      response.revision,
       existing ? `已更新持有人“${holder.name}”` : `已创建持有人“${holder.name}”`,
       { holder }
     )
@@ -844,19 +804,16 @@ export class PortfolioModule implements PortfolioModuleOperations {
   private async createAssetAccount(
     input: McpToolArguments['chromie_create_asset_account']
   ): Promise<McpToolSuccess> {
-    const response = await this.portfolio.execute(
-      {
-        type: 'create-asset-account',
-        productAccountId: input.account_id,
-        input: {
-          name: input.name,
-          type: input.type,
-          holderId: input.holder_id
-        }
-      },
-      { expectedRevision: input.expected_revision }
-    )
-    return success(response.revision, `已创建资产账户“${input.name}”`, {
+    const response = await this.portfolio.execute({
+      type: 'create-asset-account',
+      productAccountId: input.account_id,
+      input: {
+        name: input.name,
+        type: input.type,
+        holderId: input.holder_id
+      }
+    })
+    return success(`已创建资产账户“${input.name}”`, {
       asset_account_id: response.result
     })
   }
@@ -865,7 +822,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_update_asset_account']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    this.assertRevision(input.expected_revision, state.revision)
     const account = requireAccount(state.data, input.account_id)
     const assetAccount = requireAssetAccount(account, input.asset_account_id)
     const integration = state.integrations.find(
@@ -878,22 +834,19 @@ export class PortfolioModule implements PortfolioModuleOperations {
         '已配置自动同步的资产账户不能通过 MCP 修改类型，请在 Chromie 中操作'
       )
     }
-    const response = await this.portfolio.execute(
-      {
-        type: 'update-asset-account',
-        productAccountId: account.id,
-        assetAccountId: assetAccount.id,
-        input: {
-          name: input.name ?? assetAccount.name,
-          type: nextType,
-          holderId: input.holder_id ?? assetAccount.holderId,
-          sync: assetAccount.sync,
-          ...(integration ? { integration: integrationInput(integration) } : {})
-        }
-      },
-      { expectedRevision: state.revision }
-    )
-    return success(response.revision, `已更新资产账户“${input.name ?? assetAccount.name}”`, {
+    await this.portfolio.execute({
+      type: 'update-asset-account',
+      productAccountId: account.id,
+      assetAccountId: assetAccount.id,
+      input: {
+        name: input.name ?? assetAccount.name,
+        type: nextType,
+        holderId: input.holder_id ?? assetAccount.holderId,
+        sync: assetAccount.sync,
+        ...(integration ? { integration: integrationInput(integration) } : {})
+      }
+    })
+    return success(`已更新资产账户“${input.name ?? assetAccount.name}”`, {
       asset_account_id: assetAccount.id
     })
   }
@@ -902,7 +855,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_save_position']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    this.assertRevision(input.expected_revision, state.revision)
     const account = requireAccount(state.data, input.account_id)
     const assetAccount = requireAssetAccount(account, input.asset_account_id)
     if (assetAccount.sync) {
@@ -930,16 +882,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
               : { price: existing.price }
       )
     }
-    const response = await this.portfolio.execute(
-      {
-        type: 'save-position',
-        productAccountId: account.id,
-        assetAccountId: assetAccount.id,
-        input: positionInput,
-        ...(existing ? { positionId: existing.id } : {})
-      },
-      { expectedRevision: state.revision }
-    )
+    const response = await this.portfolio.execute({
+      type: 'save-position',
+      productAccountId: account.id,
+      assetAccountId: assetAccount.id,
+      input: positionInput,
+      ...(existing ? { positionId: existing.id } : {})
+    })
     assertCommandResult(response)
     const stored = response.data.productAccounts
       .find((item) => item.id === account.id)
@@ -951,7 +900,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
             position.symbol === positionInput.symbol.trim().toUpperCase()
       )
     return success(
-      response.revision,
       existing ? `已更新持仓 ${positionInput.symbol}` : `已创建持仓 ${positionInput.symbol}`,
       { position: stored }
     )
@@ -961,7 +909,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_save_position_group']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    this.assertRevision(input.expected_revision, state.revision)
     const account = requireAccount(state.data, input.account_id)
     if (
       input.mode === 'update' &&
@@ -981,11 +928,9 @@ export class PortfolioModule implements PortfolioModuleOperations {
             productAccountId: input.account_id,
             groupId: input.group_id,
             input: { name: input.name }
-          },
-      { expectedRevision: state.revision }
+          }
     )
     return success(
-      response.revision,
       input.mode === 'create'
         ? `已创建持仓分组“${input.name}”`
         : `已更新持仓分组“${input.name}”`,
@@ -997,22 +942,18 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_set_group_members']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    this.assertRevision(input.expected_revision, state.revision)
     const account = requireAccount(state.data, input.account_id)
     if (!account.positionGroups.some((group) => group.id === input.group_id)) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
     }
-    const response = await this.portfolio.execute(
-      {
-        type: 'set-position-group-positions',
-        productAccountId: input.account_id,
-        groupId: input.group_id,
-        positionIds: input.position_ids
-      },
-      { expectedRevision: state.revision }
-    )
+    const response = await this.portfolio.execute({
+      type: 'set-position-group-positions',
+      productAccountId: input.account_id,
+      groupId: input.group_id,
+      positionIds: input.position_ids
+    })
     assertCommandResult(response)
-    return success(response.revision, `持仓分组现包含 ${input.position_ids.length} 项持仓`, {
+    return success(`持仓分组现包含 ${input.position_ids.length} 项持仓`, {
       group_id: input.group_id,
       position_ids: input.position_ids
     })
@@ -1022,21 +963,17 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_create_snapshot']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    this.assertRevision(input.expected_revision, state.revision)
     requireAccount(state.data, input.account_id)
     const exchangeRates = await this.desktop.loadExchangeRates()
-    const response = await this.portfolio.execute(
-      {
-        type: 'create-snapshot',
-        productAccountId: input.account_id,
-        exchangeRates
-      },
-      { expectedRevision: state.revision }
-    )
+    const response = await this.portfolio.execute({
+      type: 'create-snapshot',
+      productAccountId: input.account_id,
+      exchangeRates
+    })
     if (!response.result) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的账户')
     }
-    return success(response.revision, '已创建资产快照', {
+    return success('已创建资产快照', {
       snapshot_id: response.result,
       exchange_rates_fetched_at: exchangeRates?.fetchedAt ?? null
     })
@@ -1047,10 +984,9 @@ export class PortfolioModule implements PortfolioModuleOperations {
   ): Promise<McpToolSuccess> {
     const result = await this.syncAssetAccount(
       input.account_id,
-      input.asset_account_id,
-      input.expected_revision
+      input.asset_account_id
     )
-    return success(result.revision, `已同步 ${result.positionCount} 项持仓`, {
+    return success(`已同步 ${result.positionCount} 项持仓`, {
       asset_account_id: input.asset_account_id,
       position_count: result.positionCount,
       synced_at: result.syncedAt
@@ -1065,7 +1001,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
       ? requireAccount(state.data, input.account_id).exchangeRateProvider
       : DEFAULT_EXCHANGE_RATE_PROVIDER
     const snapshot = await this.desktop.fetchExchangeRates(provider)
-    return success(state.revision, `已刷新 ${snapshot.provider} 汇率`, {
+    return success(`已刷新 ${snapshot.provider} 汇率`, {
       exchange_rates: snapshot
     })
   }
@@ -1074,7 +1010,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_delete_item']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    this.assertRevision(input.expected_revision, state.revision)
     const target = input.target
     const account = requireAccount(state.data, target.account_id)
     let command: PortfolioCommand
@@ -1141,10 +1076,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }
 
     const preview = this.describeDeletion(state, target)
-    const response = await this.portfolio.execute(command, {
-      expectedRevision: state.revision
-    })
-    return success(response.revision, preview.title, { target })
+    await this.portfolio.execute(command)
+    return success(preview.title, { target })
   }
 
   private describeDeletion(
@@ -1161,7 +1094,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
         (item) => item.productAccountId === account.id
       ).length
       return {
-        revision: state.revision,
         title: `删除账户“${account.name}”`,
         description: `将同时删除 ${account.holders.length} 个持有人、${account.assetAccounts.length} 个资产账户、${account.positionGroups.length} 个持仓分组、${positionCount} 项持仓和 ${snapshotCount} 个历史快照。此操作无法撤销。`
       }
@@ -1173,7 +1105,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
         (item) => item.holderId === holder.id
       ).length
       return {
-        revision: state.revision,
         title: `删除持有人“${holder.name}”`,
         description: assetAccountCount
           ? `该持有人仍有 ${assetAccountCount} 个资产账户，当前无法删除。`
@@ -1190,7 +1121,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
         0
       )
       return {
-        revision: state.revision,
         title: `删除资产账户“${assetAccount.name}”`,
         description: `将同时删除 ${assetAccount.positions.length} 项持仓和 ${membershipCount} 个分组引用，并移除同步配置。此操作无法撤销。`
       }
@@ -1205,7 +1135,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
         item.positionIds.includes(position.id)
       )
       return {
-        revision: state.revision,
         title: `删除持仓 ${position.symbol}`,
         description: `将从“${assetAccount.name}”移除${group ? `，并退出分组“${group.name}”` : ''}。此操作无法撤销。`
       }
@@ -1214,7 +1143,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
       const group = account.positionGroups.find((item) => item.id === target.group_id)
       if (!group) throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
       return {
-        revision: state.revision,
         title: `删除持仓分组“${group.name}”`,
         description: `只会删除分组及其 ${group.positionIds.length} 个引用，不会删除原持仓。此操作无法撤销。`
       }
@@ -1224,7 +1152,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
     )
     if (!snapshot) throw new McpOperationError('NOT_FOUND', '没有找到对应的快照')
     return {
-      revision: state.revision,
       title: `删除 ${snapshot.createdAt} 的历史快照`,
       description: '只会删除这个历史版本，最新版资产不会受到影响。此操作无法撤销。'
     }

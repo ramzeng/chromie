@@ -11,7 +11,8 @@ import { DEFAULT_FUTU_OPEND_HOST, DEFAULT_FUTU_OPEND_PORT } from './futu'
 import { DEFAULT_IBKR_GATEWAY_HOST, DEFAULT_IBKR_GATEWAY_PORT } from './ibkr'
 import type {
   AssetAccountIntegration,
-  AssetAccountIntegrationInput
+  AssetAccountIntegrationInput,
+  AssetAccountIntegrationView
 } from './integrations'
 
 export type Market = 'CN' | 'HK' | 'US' | 'CC'
@@ -193,20 +194,31 @@ export type PortfolioCommand =
     }
 
 export type PortfolioCommandResponse = {
-  revision: string
   data: AppData
   integrations: AssetAccountIntegration[]
   result?: string | null
 }
 
 export type PortfolioLoadResponse = {
-  revision: string
   data: AppData
   integrations: AssetAccountIntegration[]
 }
 
+export type PortfolioClientCommandResponse = Omit<
+  PortfolioCommandResponse,
+  'integrations'
+> & {
+  integrations: AssetAccountIntegrationView[]
+}
+
+export type PortfolioClientLoadResponse = Omit<
+  PortfolioLoadResponse,
+  'integrations'
+> & {
+  integrations: AssetAccountIntegrationView[]
+}
+
 export type PortfolioSyncResponse = {
-  revision: string
   positionCount: number
   syncedAt: string
 }

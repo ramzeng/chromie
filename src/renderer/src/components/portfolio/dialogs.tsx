@@ -1,5 +1,7 @@
 import {
   useEffect,
+  useId,
+  useRef,
   useState,
   type Dispatch,
   type FormEvent,
@@ -25,7 +27,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -37,18 +41,29 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle
+} from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Spinner } from '@/components/ui/spinner'
 import { Switch } from '@/components/ui/switch'
 import {
   Table,
@@ -80,7 +95,7 @@ import {
   marketOrder,
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   type AssetAccount,
-  type AssetAccountIntegration,
+  type AssetAccountIntegrationView,
   type AssetAccountInput,
   type AssetAccountType,
   type AnchorCurrency,
@@ -108,6 +123,25 @@ function FieldMessage({ children }: { children: string }) {
 function operationErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+}
+
+function useSubmissionGuard() {
+  const [submitting, setSubmitting] = useState(false)
+  const submissionInFlight = useRef(false)
+
+  function beginSubmission(): boolean {
+    if (submissionInFlight.current) return false
+    submissionInFlight.current = true
+    setSubmitting(true)
+    return true
+  }
+
+  function endSubmission(): void {
+    submissionInFlight.current = false
+    setSubmitting(false)
+  }
+
+  return { submitting, submissionInFlight, beginSubmission, endSubmission }
 }
 
 type ExchangeRateView = Pick<ExchangeRateState, 'snapshot' | 'status' | 'error'>
@@ -276,13 +310,27 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
     : exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing'
       ? '正在获取汇率'
       : '暂无汇率数据'
+  const loadingWithoutSnapshot =
+    !exchangeRates.snapshot &&
+    (exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing')
+  const hasError = exchangeRates.status === 'error' && Boolean(exchangeRates.error)
+
   return (
     <div className="grid gap-3 rounded-xl border bg-muted/20 p-4" role="status">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium">参考汇率</p>
         <span className="text-xs text-muted-foreground">{status}</span>
       </div>
-      {rates.length ? (
+      {loadingWithoutSnapshot ? (
+        <div className="grid grid-cols-3 gap-3" aria-label="正在加载参考汇率">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={index} className="rounded-lg bg-background px-3 py-2.5">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="mt-2 h-5 w-20" />
+            </div>
+          ))}
+        </div>
+      ) : rates.length ? (
         <div className="grid grid-cols-3 gap-3">
           {rates.map((rate) => (
             <div key={rate.label} className="rounded-lg bg-background px-3 py-2.5">
@@ -295,6 +343,15 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">暂时没有可用的参考汇率</p>
+      )}
+      {hasError && (
+        <Alert variant={exchangeRates.snapshot ? 'default' : 'destructive'}>
+          <ShieldAlert data-icon="inline-start" />
+          <AlertTitle>
+            {exchangeRates.snapshot ? '汇率刷新失败，正在使用缓存' : '汇率加载失败'}
+          </AlertTitle>
+          <AlertDescription>{exchangeRates.error}</AlertDescription>
+        </Alert>
       )}
     </div>
   )
@@ -389,6 +446,8 @@ export function ProductAccountDialog({
     DEFAULT_ANCHOR_CURRENCY
   )
   const [error, setError] = useState('')
+  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
+    useSubmissionGuard()
 
   useEffect(() => {
     if (!open) return
@@ -399,20 +458,29 @@ export function ProductAccountDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    if (submissionInFlight.current) return
     if (!name.trim()) {
       setError('请输入账户名称')
       return
     }
+    if (!beginSubmission()) return
     try {
       await onSubmit({ name, anchorCurrency })
       onOpenChange(false)
     } catch (submitError) {
       setError(operationErrorMessage(submitError))
+    } finally {
+      endSubmission()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>新建账户</DialogTitle>
@@ -446,11 +514,13 @@ export function ProductAccountDialog({
                 <SelectValue placeholder="选择锚定币种" />
               </SelectTrigger>
               <SelectContent>
-                {ANCHOR_CURRENCIES.map((currency) => (
-                  <SelectItem key={currency} value={currency}>
-                    {currency}
-                  </SelectItem>
-                ))}
+                <SelectGroup>
+                  {ANCHOR_CURRENCIES.map((currency) => (
+                    <SelectItem key={currency} value={currency}>
+                      {currency}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
             <p className="text-xs leading-5 text-muted-foreground">
@@ -459,10 +529,18 @@ export function ProductAccountDialog({
           </div>
           {error && <FieldMessage>{error}</FieldMessage>}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
               取消
             </Button>
-            <Button type="submit">创建账户</Button>
+            <Button type="submit" disabled={submitting} aria-busy={submitting}>
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting ? '创建中…' : '创建账户'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -507,7 +585,8 @@ export function ProductAccountSettingsDialog({
   const [mcpAccess, setMcpAccess] =
     useState<McpAccessSettings>(DISABLED_MCP_ACCESS)
   const [mcpLoading, setMcpLoading] = useState(false)
-  const [mcpSaving, setMcpSaving] = useState(false)
+  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
+    useSubmissionGuard()
   const [mcpError, setMcpError] = useState('')
   const [error, setError] = useState('')
 
@@ -573,13 +652,14 @@ export function ProductAccountSettingsDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    if (submissionInFlight.current) return
     if (section === 'mcp') {
       if (!window.desktop.mcp) {
         setMcpError('MCP 组件尚未加载，请重启 Chromie')
         return
       }
+      if (!beginSubmission()) return
       try {
-        setMcpSaving(true)
         setMcpError('')
         const result = await window.desktop.mcp.updateSettings(mcpAccess)
         setMcpConnection(result)
@@ -588,7 +668,7 @@ export function ProductAccountSettingsDialog({
       } catch (submitError) {
         setMcpError(operationErrorMessage(submitError))
       } finally {
-        setMcpSaving(false)
+        endSubmission()
       }
       return
     }
@@ -623,6 +703,7 @@ export function ProductAccountSettingsDialog({
       setError('持有人名称不能重复')
       return
     }
+    if (!beginSubmission()) return
     try {
       await onSubmit({
         name,
@@ -634,12 +715,19 @@ export function ProductAccountSettingsDialog({
       onOpenChange(false)
     } catch (submitError) {
       setError(operationErrorMessage(submitError))
+    } finally {
+      endSubmission()
     }
   }
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!submitting) onOpenChange(nextOpen)
+        }}
+      >
       <DialogContent className="h-[640px] max-h-[calc(100vh-2rem)] max-w-[760px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>账户设置</DialogTitle>
@@ -761,11 +849,13 @@ export function ProductAccountSettingsDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ANCHOR_CURRENCIES.map((currency) => (
-                          <SelectItem key={currency} value={currency}>
-                            {currency}
-                          </SelectItem>
-                        ))}
+                        <SelectGroup>
+                          {ANCHOR_CURRENCIES.map((currency) => (
+                            <SelectItem key={currency} value={currency}>
+                              {currency}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                     <p className="text-xs leading-5 text-muted-foreground">
@@ -789,11 +879,13 @@ export function ProductAccountSettingsDialog({
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {EXCHANGE_RATE_PROVIDERS.map((provider) => (
-                          <SelectItem key={provider} value={provider}>
-                            {exchangeRateProviderLabels[provider]}
-                          </SelectItem>
-                        ))}
+                        <SelectGroup>
+                          {EXCHANGE_RATE_PROVIDERS.map((provider) => (
+                            <SelectItem key={provider} value={provider}>
+                              {exchangeRateProviderLabels[provider]}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       </SelectContent>
                     </Select>
                     <p className="text-xs leading-5 text-muted-foreground">
@@ -839,7 +931,7 @@ export function ProductAccountSettingsDialog({
                   </div>
                   {holders.length ? (
                     <div className="overflow-hidden rounded-lg border">
-                      <Table>
+                      <Table className="table-fixed">
                         <TableHeader className="bg-muted/20">
                           <TableRow className="hover:bg-transparent">
                             <TableHead className="h-9 px-3">持有人</TableHead>
@@ -856,7 +948,7 @@ export function ProductAccountSettingsDialog({
                             ).length
                             return (
                               <TableRow key={holder.id}>
-                                <TableCell className="px-3 py-2 font-medium">
+                                <TableCell className="truncate px-3 py-2 font-medium">
                                   {holder.name}
                                 </TableCell>
                                 <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
@@ -877,33 +969,35 @@ export function ProductAccountSettingsDialog({
                                         </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" className="min-w-24">
-                                        <DropdownMenuItem
-                                          onSelect={() =>
-                                            setHolderDialog({
-                                              open: true,
-                                              holderId: holder.id
-                                            })
-                                          }
-                                        >
-                                          编辑
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                          variant="destructive"
-                                          onSelect={() => {
-                                            if (assetAccountCount > 0) {
-                                              setError(
-                                                '请先为该持有人名下的资产账户重新指定持有人'
-                                              )
-                                              return
+                                        <DropdownMenuGroup>
+                                          <DropdownMenuItem
+                                            onSelect={() =>
+                                              setHolderDialog({
+                                                open: true,
+                                                holderId: holder.id
+                                              })
                                             }
-                                            setHolders((current) =>
-                                              current.filter((item) => item.id !== holder.id)
-                                            )
-                                            setError('')
-                                          }}
-                                        >
-                                          删除
-                                        </DropdownMenuItem>
+                                          >
+                                            编辑
+                                          </DropdownMenuItem>
+                                          <DropdownMenuItem
+                                            variant="destructive"
+                                            onSelect={() => {
+                                              if (assetAccountCount > 0) {
+                                                setError(
+                                                  '请先为该持有人名下的资产账户重新指定持有人'
+                                                )
+                                                return
+                                              }
+                                              setHolders((current) =>
+                                                current.filter((item) => item.id !== holder.id)
+                                              )
+                                              setError('')
+                                            }}
+                                          >
+                                            删除
+                                          </DropdownMenuItem>
+                                        </DropdownMenuGroup>
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </div>
@@ -915,32 +1009,66 @@ export function ProductAccountSettingsDialog({
                       </Table>
                     </div>
                   ) : (
-                    <div className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                      暂无持有人
-                    </div>
+                    <Empty className="border py-8 md:p-8">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <UsersRound data-icon="inline-start" />
+                        </EmptyMedia>
+                        <EmptyTitle>暂无持有人</EmptyTitle>
+                        <EmptyDescription>
+                          新增持有人后，才能为资产账户指定归属
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
                   )}
                 </section>
               )}
 
               {section === 'mcp' && (
-                <McpSettingsSection
-                  connection={mcpConnection}
-                  access={mcpAccess}
-                  setAccess={setMcpAccess}
-                />
+                <div className="grid gap-4">
+                  {mcpLoading ? (
+                    <div className="grid gap-5" aria-label="正在加载 MCP 设置">
+                      <div className="grid gap-2">
+                        <Skeleton className="h-5 w-16" />
+                        <Skeleton className="h-3 w-72 max-w-full" />
+                      </div>
+                      <div className="grid gap-4 rounded-xl border p-4">
+                        {Array.from({ length: 4 }, (_, index) => (
+                          <div key={index} className="flex items-center justify-between gap-6">
+                            <div className="grid flex-1 gap-2">
+                              <Skeleton className="h-4 w-24" />
+                              <Skeleton className="h-3 w-3/4" />
+                            </div>
+                            <Skeleton className="h-5 w-9" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <McpSettingsSection
+                      connection={mcpConnection}
+                      access={mcpAccess}
+                      setAccess={setMcpAccess}
+                    />
+                  )}
+                  {mcpError && (
+                    <Alert variant="destructive">
+                      <ShieldAlert data-icon="inline-start" />
+                      <AlertTitle>MCP 操作失败</AlertTitle>
+                      <AlertDescription>{mcpError}</AlertDescription>
+                    </Alert>
+                  )}
+                </div>
               )}
 
               {section === 'other' && (
                 <section className="grid gap-4">
                   <h3 className="text-base font-semibold">其他设置</h3>
-                  <div className="rounded-xl border bg-card">
-                    <div className="flex items-center justify-between gap-5 p-4">
-                      <div>
-                        <p className="text-sm font-medium">注销账户</p>
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                          将删除账户内的全部数据，且无法撤销
-                        </p>
-                      </div>
+                  <Alert variant="destructive">
+                    <ShieldAlert data-icon="inline-start" />
+                    <AlertTitle>注销账户</AlertTitle>
+                    <AlertDescription className="flex items-center justify-between gap-5">
+                      <p>将删除账户内的全部数据，且无法撤销</p>
                       <Button
                         type="button"
                         variant="destructive"
@@ -952,8 +1080,8 @@ export function ProductAccountSettingsDialog({
                       >
                         注销账户
                       </Button>
-                    </div>
-                  </div>
+                    </AlertDescription>
+                  </Alert>
                 </section>
               )}
             </div>
@@ -961,24 +1089,28 @@ export function ProductAccountSettingsDialog({
 
           <div className="flex items-center justify-between gap-4 border-t px-6 py-3">
             <div>
-              {(section === 'mcp' ? mcpError : error) && (
-                <FieldMessage>
-                  {section === 'mcp' ? mcpError : error}
-                </FieldMessage>
-              )}
+              {section !== 'mcp' && error && <FieldMessage>{error}</FieldMessage>}
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={submitting}
+                onClick={() => onOpenChange(false)}
+              >
                 取消
               </Button>
               <Button
                 type="submit"
                 disabled={
-                  section === 'mcp' &&
-                  (mcpLoading || mcpSaving || Boolean(mcpError && !mcpConnection))
+                  submitting ||
+                  (section === 'mcp' &&
+                    (mcpLoading || Boolean(mcpError && !mcpConnection)))
                 }
+                aria-busy={submitting}
               >
-                {section === 'mcp' && mcpSaving ? '保存中…' : '保存设置'}
+                {submitting && <Spinner data-icon="inline-start" />}
+                {submitting ? '保存中…' : '保存设置'}
               </Button>
             </DialogFooter>
           </div>
@@ -1018,6 +1150,8 @@ export function PositionGroupDialog({
 }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
+  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
+    useSubmissionGuard()
 
   useEffect(() => {
     if (!open) return
@@ -1027,20 +1161,29 @@ export function PositionGroupDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    if (submissionInFlight.current) return
     if (!name.trim()) {
       setError('请输入持仓分组名称')
       return
     }
+    if (!beginSubmission()) return
     try {
       await onSubmit({ name })
       onOpenChange(false)
     } catch (submitError) {
       setError(operationErrorMessage(submitError))
+    } finally {
+      endSubmission()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{group ? '编辑持仓分组' : '新建持仓分组'}</DialogTitle>
@@ -1063,10 +1206,24 @@ export function PositionGroupDialog({
             {error && <FieldMessage>{error}</FieldMessage>}
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
               取消
             </Button>
-            <Button type="submit">{group ? '保存修改' : '创建持仓分组'}</Button>
+            <Button type="submit" disabled={submitting} aria-busy={submitting}>
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting
+                ? group
+                  ? '保存中…'
+                  : '创建中…'
+                : group
+                  ? '保存修改'
+                  : '创建持仓分组'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -1090,6 +1247,8 @@ export function GroupPositionsDialog({
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [query, setQuery] = useState('')
   const [error, setError] = useState('')
+  const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
+  const checkboxIdPrefix = useId()
 
   useEffect(() => {
     if (!open) return
@@ -1130,17 +1289,20 @@ export function GroupPositionsDialog({
     )
   )
 
-  function toggle(positionId: string): void {
+  function setPositionSelected(positionId: string, selected: boolean): void {
     if (assignedGroupByPositionId.has(positionId)) return
     setSelectedKeys((current) =>
-      current.includes(positionId)
-        ? current.filter((item) => item !== positionId)
-        : [...current, positionId]
+      selected
+        ? current.includes(positionId)
+          ? current
+          : [...current, positionId]
+        : current.filter((item) => item !== positionId)
     )
     setError('')
   }
 
   async function handleSubmit(): Promise<void> {
+    if (!beginSubmission()) return
     try {
       const submitError = await onSubmit(selectedKeys)
       if (submitError) {
@@ -1150,11 +1312,18 @@ export function GroupPositionsDialog({
       onOpenChange(false)
     } catch (submitError) {
       setError(operationErrorMessage(submitError))
+    } finally {
+      endSubmission()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="max-h-[88vh] max-w-2xl">
         <DialogHeader>
           <DialogTitle>管理“{group.name}”的持仓</DialogTitle>
@@ -1175,17 +1344,22 @@ export function GroupPositionsDialog({
             <div className="divide-y">
               {visibleAccounts.map(({ account, positions }) => (
                 <section key={account.id} className="p-3">
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <p className="text-sm font-medium">{account.name}</p>
-                    <p className="text-xs text-muted-foreground">{positions.length} 项</p>
+                  <div className="mb-2 flex min-w-0 items-center justify-between gap-3 px-1">
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {account.name}
+                    </p>
+                    <p className="shrink-0 text-xs text-muted-foreground">
+                      {positions.length} 项
+                    </p>
                   </div>
                   <div className="grid gap-1">
                     {positions.map((position) => {
                       const selected = selectedKeys.includes(position.id)
                       const assignedGroupName = assignedGroupByPositionId.get(position.id)
                       return (
-                        <label
+                        <Label
                           key={position.id}
+                          htmlFor={`${checkboxIdPrefix}-${position.id}`}
                           className={cn(
                             'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
                             assignedGroupName
@@ -1193,12 +1367,15 @@ export function GroupPositionsDialog({
                               : 'cursor-pointer hover:bg-muted/70'
                           )}
                         >
-                          <input
-                            type="checkbox"
-                            className="size-4 accent-emerald-900"
+                          <Checkbox
+                            id={`${checkboxIdPrefix}-${position.id}`}
                             checked={selected}
                             disabled={Boolean(assignedGroupName)}
-                            onChange={() => toggle(position.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked !== 'indeterminate') {
+                                setPositionSelected(position.id, checked)
+                              }
+                            }}
                           />
                           <span className="w-10 shrink-0 font-mono text-xs text-muted-foreground">
                             {marketMeta[position.market].shortLabel}
@@ -1211,12 +1388,12 @@ export function GroupPositionsDialog({
                               {position.name}
                             </span>
                           </span>
-                          <span className="text-right text-xs tabular-nums text-muted-foreground">
+                          <span className="max-w-40 shrink-0 truncate text-right text-xs tabular-nums text-muted-foreground">
                             {assignedGroupName
                               ? `已在 ${assignedGroupName}`
                               : `${position.quantity} ${position.currency}`}
                           </span>
-                        </label>
+                        </Label>
                       )
                     })}
                   </div>
@@ -1224,95 +1401,48 @@ export function GroupPositionsDialog({
               ))}
             </div>
           ) : (
-            <div className="grid min-h-32 place-items-center px-6 text-center text-sm text-muted-foreground">
-              {positionCount ? '没有匹配的持仓' : '请先在资产账户中添加或同步持仓'}
-            </div>
+            <Empty className="min-h-32 px-6 py-8 md:p-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Coins data-icon="inline-start" />
+                </EmptyMedia>
+                <EmptyTitle>
+                  {positionCount ? '没有匹配的持仓' : '暂无可选持仓'}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {positionCount
+                    ? '请尝试调整搜索关键词'
+                    : '请先在资产账户中添加或同步持仓'}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
         </div>
         {error && <FieldMessage>{error}</FieldMessage>}
         <DialogFooter className="items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">已选择 {selectedKeys.length} 项持仓</p>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
               取消
             </Button>
-            <Button type="button" onClick={() => void handleSubmit()}>
-              保存
+            <Button
+              type="button"
+              disabled={submitting}
+              aria-busy={submitting}
+              onClick={() => void handleSubmit()}
+            >
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting ? '保存中…' : '保存'}
             </Button>
           </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
-}
-
-export function SyncErrorDialog({
-  open,
-  onOpenChange,
-  accountName,
-  message
-}: BaseDialogProps & {
-  accountName: string
-  message: string
-}) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>同步失败</AlertDialogTitle>
-          <AlertDialogDescription>
-            {accountName}：{message}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>知道了</AlertDialogCancel>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
-
-export function ExchangeRateErrorDialog({
-  open,
-  onOpenChange,
-  message
-}: BaseDialogProps & {
-  message: string
-}) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>汇率刷新失败</AlertDialogTitle>
-          <AlertDialogDescription>{message}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>知道了</AlertDialogCancel>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
-}
-
-export function BackupErrorDialog({
-  open,
-  onOpenChange,
-  message
-}: BaseDialogProps & {
-  message: string
-}) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>操作失败</AlertDialogTitle>
-          <AlertDialogDescription>{message}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>知道了</AlertDialogCancel>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   )
 }
 
@@ -1333,8 +1463,26 @@ export function ImportBackupDialog({
   snapshotCount: number
   onConfirm: () => void | Promise<void>
 }) {
+  const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
+
+  async function handleConfirm(): Promise<void> {
+    if (!beginSubmission()) return
+    try {
+      await onConfirm()
+    } catch {
+      // The caller owns user-facing error feedback; keep the dialog open for retry.
+    } finally {
+      endSubmission()
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>导入“{accountName}”？</DialogTitle>
@@ -1344,16 +1492,22 @@ export function ImportBackupDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting}
+            onClick={() => onOpenChange(false)}
+          >
             取消
           </Button>
           <Button
-            onClick={() => {
-              onOpenChange(false)
-              void onConfirm()
-            }}
+            type="button"
+            disabled={submitting}
+            aria-busy={submitting}
+            onClick={() => void handleConfirm()}
           >
-            导入
+            {submitting && <Spinner data-icon="inline-start" />}
+            {submitting ? '导入中…' : '导入'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1368,24 +1522,48 @@ export function ExportBackupDialog({
 }: BaseDialogProps & {
   onConfirm: () => void | Promise<void>
 }) {
+  const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
+
+  async function handleConfirm(): Promise<void> {
+    if (!beginSubmission()) return
+    try {
+      await onConfirm()
+    } catch {
+      // The caller owns user-facing error feedback; keep the dialog open for retry.
+    } finally {
+      endSubmission()
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>导出当前账户</DialogTitle>
           <DialogDescription>备份不包含同步凭据，导入后需重新配置</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting}
+            onClick={() => onOpenChange(false)}
+          >
             取消
           </Button>
           <Button
-            onClick={() => {
-              onOpenChange(false)
-              void onConfirm()
-            }}
+            type="button"
+            disabled={submitting}
+            aria-busy={submitting}
+            onClick={() => void handleConfirm()}
           >
-            导出
+            {submitting && <Spinner data-icon="inline-start" />}
+            {submitting ? '导出中…' : '导出'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1403,7 +1581,7 @@ export function AssetAccountDialog({
   onSubmit
 }: BaseDialogProps & {
   account?: AssetAccount
-  integration?: AssetAccountIntegration
+  integration?: AssetAccountIntegrationView
   holders: Holder[]
   onManageHolders: () => void
   onSubmit: (input: AssetAccountInput) => Promise<void>
@@ -1426,6 +1604,8 @@ export function AssetAccountDialog({
   const [binanceApiKey, setBinanceApiKey] = useState('')
   const [binanceSecretKey, setBinanceSecretKey] = useState('')
   const [error, setError] = useState('')
+  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
+    useSubmissionGuard()
   const supportsAutoSync =
     type === 'Futu' || type === 'Okx' || type === 'Ibkr' || type === 'Binance'
 
@@ -1448,16 +1628,10 @@ export function AssetAccountDialog({
       )
     )
     setSyncInterval(String(account?.sync?.interval ?? DEFAULT_SYNC_INTERVAL))
-    setSyncKey(
-      integration?.provider === 'Futu' ? (integration.websocket.key ?? '') : ''
-    )
-    setOkxApiKey(integration?.provider === 'Okx' ? integration.api.apiKey : '')
-    setOkxSecretKey(
-      integration?.provider === 'Okx' ? integration.api.secretKey : ''
-    )
-    setOkxPassphrase(
-      integration?.provider === 'Okx' ? integration.api.passphrase : ''
-    )
+    setSyncKey('')
+    setOkxApiKey('')
+    setOkxSecretKey('')
+    setOkxPassphrase('')
     setIbkrGatewayHost(
       integration?.provider === 'Ibkr'
         ? integration.gateway.host
@@ -1470,17 +1644,17 @@ export function AssetAccountDialog({
           : DEFAULT_IBKR_GATEWAY_PORT
       )
     )
-    setBinanceApiKey(
-      integration?.provider === 'Binance' ? integration.api.apiKey : ''
-    )
-    setBinanceSecretKey(
-      integration?.provider === 'Binance' ? integration.api.secretKey : ''
-    )
+    setBinanceApiKey('')
+    setBinanceSecretKey('')
     setError('')
-  }, [account, integration, open])
+    // Background syncs refresh account props while this dialog is open. Do not
+    // discard credential replacements or other edits that the user is typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.id, open])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    if (submissionInFlight.current) return
     if (!name.trim()) {
       setError('请输入资产账户名称')
       return
@@ -1493,6 +1667,16 @@ export function AssetAccountDialog({
     const parsedSyncPort = Number(syncPort)
     const parsedSyncInterval = Number(syncInterval)
     const syncEnabled = supportsAutoSync && autoSync
+    const canKeepOkxCredential =
+      account?.type === 'Okx' && integration?.provider === 'Okx'
+    const hasAnyOkxCredential = Boolean(
+      okxApiKey.trim() || okxSecretKey || okxPassphrase
+    )
+    const canKeepBinanceCredential =
+      account?.type === 'Binance' && integration?.provider === 'Binance'
+    const hasAnyBinanceCredential = Boolean(
+      binanceApiKey.trim() || binanceSecretKey
+    )
     if (type === 'Futu' && syncEnabled && !syncHost.trim()) {
       setError('请输入 Futu OpenD 地址')
       return
@@ -1515,7 +1699,9 @@ export function AssetAccountDialog({
     if (
       type === 'Okx' &&
       syncEnabled &&
-      (!okxApiKey.trim() || !okxSecretKey || !okxPassphrase)
+      ((!canKeepOkxCredential && !hasAnyOkxCredential) ||
+        (hasAnyOkxCredential &&
+          (!okxApiKey.trim() || !okxSecretKey || !okxPassphrase)))
     ) {
       setError('请填写完整的 OKX API 配置')
       return
@@ -1546,20 +1732,23 @@ export function AssetAccountDialog({
     if (
       type === 'Binance' &&
       syncEnabled &&
-      (!binanceApiKey.trim() || !binanceSecretKey)
+      ((!canKeepBinanceCredential && !hasAnyBinanceCredential) ||
+        (hasAnyBinanceCredential &&
+          (!binanceApiKey.trim() || !binanceSecretKey)))
     ) {
       setError('请填写完整的币安 API 配置')
       return
     }
     const lastSyncedAt =
       account?.type === type ? account.sync?.lastSyncedAt : undefined
+    if (!beginSubmission()) return
     try {
       await onSubmit({
-        name: name.trim(),
-        type,
-        holderId: holder.id,
-        ...(syncEnabled
-          ? {
+          name: name.trim(),
+          type,
+          holderId: holder.id,
+          ...(syncEnabled
+            ? {
               sync: {
                 interval:
                   Number.isInteger(parsedSyncInterval) &&
@@ -1581,7 +1770,16 @@ export function AssetAccountDialog({
                           parsedSyncPort <= 65535
                             ? parsedSyncPort
                             : DEFAULT_FUTU_OPEND_PORT,
-                        ...(syncKey.trim() ? { key: syncKey.trim() } : {})
+                        credential: syncKey.trim()
+                          ? {
+                              mode: 'replace' as const,
+                              value: { key: syncKey.trim() }
+                            }
+                          : account?.type === 'Futu' &&
+                              integration?.provider === 'Futu' &&
+                              integration.websocket.credentialConfigured
+                            ? { mode: 'keep' as const }
+                            : { mode: 'clear' as const }
                       }
                     }
                   : type === 'Ibkr'
@@ -1596,29 +1794,50 @@ export function AssetAccountDialog({
                       ? {
                           provider: 'Okx' as const,
                           api: {
-                            apiKey: okxApiKey.trim(),
-                            secretKey: okxSecretKey,
-                            passphrase: okxPassphrase
+                            credential: hasAnyOkxCredential
+                              ? {
+                                  mode: 'replace' as const,
+                                  value: {
+                                    apiKey: okxApiKey.trim(),
+                                    secretKey: okxSecretKey,
+                                    passphrase: okxPassphrase
+                                  }
+                                }
+                              : { mode: 'keep' as const }
                           }
                         }
                       : {
                           provider: 'Binance' as const,
                           api: {
-                            apiKey: binanceApiKey.trim(),
-                            secretKey: binanceSecretKey
+                            credential: hasAnyBinanceCredential
+                              ? {
+                                  mode: 'replace' as const,
+                                  value: {
+                                    apiKey: binanceApiKey.trim(),
+                                    secretKey: binanceSecretKey
+                                  }
+                                }
+                              : { mode: 'keep' as const }
                           }
                         }
-            }
-          : {})
+              }
+            : {})
       })
       onOpenChange(false)
     } catch (submitError) {
       setError(operationErrorMessage(submitError))
+    } finally {
+      endSubmission()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{account ? '编辑资产账户' : '添加资产账户'}</DialogTitle>
@@ -1654,15 +1873,17 @@ export function AssetAccountDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Futu">富途牛牛</SelectItem>
-                <SelectItem value="Ibkr">盈透证券</SelectItem>
-                <SelectItem value="Boci">中银国际</SelectItem>
-                <SelectItem value="Okx">欧易</SelectItem>
-                <SelectItem value="Binance">币安</SelectItem>
-                <SelectItem value="Alipay">支付宝</SelectItem>
-                <SelectItem value="Cmb">招商银行</SelectItem>
-                <SelectItem value="Boc">中国银行</SelectItem>
-                <SelectItem value="General">通用</SelectItem>
+                <SelectGroup>
+                  <SelectItem value="Futu">富途牛牛</SelectItem>
+                  <SelectItem value="Ibkr">盈透证券</SelectItem>
+                  <SelectItem value="Boci">中银国际</SelectItem>
+                  <SelectItem value="Okx">欧易</SelectItem>
+                  <SelectItem value="Binance">币安</SelectItem>
+                  <SelectItem value="Alipay">支付宝</SelectItem>
+                  <SelectItem value="Cmb">招商银行</SelectItem>
+                  <SelectItem value="Boc">中国银行</SelectItem>
+                  <SelectItem value="General">通用</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>
@@ -1693,14 +1914,16 @@ export function AssetAccountDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="unassigned" disabled>
-                  请选择持有人
-                </SelectItem>
-                {holders.map((holder) => (
-                  <SelectItem key={holder.id} value={holder.id}>
-                    {holder.name}
+                <SelectGroup>
+                  <SelectItem value="unassigned" disabled>
+                    请选择持有人
                   </SelectItem>
-                ))}
+                  {holders.map((holder) => (
+                    <SelectItem key={holder.id} value={holder.id}>
+                      {holder.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               </SelectContent>
             </Select>
             <div className="flex items-center justify-between gap-3">
@@ -1765,7 +1988,16 @@ export function AssetAccountDialog({
             <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">Futu OpenD 配置</p>
-                <p className="mt-1 text-xs text-muted-foreground">连接 WebSocket 服务</p>
+                <p
+                  id="asset-account-futu-credential-description"
+                  className="mt-1 text-xs text-muted-foreground"
+                >
+                  {account?.type === 'Futu' &&
+                  integration?.provider === 'Futu' &&
+                  integration.websocket.credentialConfigured
+                    ? '密钥已安全保存；留空保持不变，输入新密钥可替换'
+                    : '连接 WebSocket 服务；密钥可不填'}
+                </p>
               </div>
               <div className="grid grid-cols-[1fr_8rem] gap-3">
                 <div className="grid gap-2">
@@ -1808,7 +2040,14 @@ export function AssetAccountDialog({
                       setSyncKey(event.target.value)
                       setError('')
                     }}
-                    placeholder="WebSocket Authentication Key"
+                    placeholder={
+                      account?.type === 'Futu' &&
+                      integration?.provider === 'Futu' &&
+                      integration.websocket.credentialConfigured
+                        ? '已安全保存；留空保持不变'
+                        : 'WebSocket Authentication Key'
+                    }
+                    aria-describedby="asset-account-futu-credential-description"
                     autoComplete="off"
                     maxLength={256}
                   />
@@ -1835,7 +2074,14 @@ export function AssetAccountDialog({
             <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">OKX API 配置</p>
-                <p className="mt-1 text-xs text-muted-foreground">仅需读取权限</p>
+                <p
+                  id="asset-account-okx-credential-description"
+                  className="mt-1 text-xs text-muted-foreground"
+                >
+                  {account?.type === 'Okx' && integration?.provider === 'Okx'
+                    ? '凭据已安全保存；全部留空保持不变，填写全部字段可替换'
+                    : '仅需读取权限'}
+                </p>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="asset-account-okx-api-key">API Key</Label>
@@ -1846,6 +2092,12 @@ export function AssetAccountDialog({
                     setOkxApiKey(event.target.value)
                     setError('')
                   }}
+                  placeholder={
+                    account?.type === 'Okx' && integration?.provider === 'Okx'
+                      ? '已安全保存；留空保持不变'
+                      : undefined
+                  }
+                  aria-describedby="asset-account-okx-credential-description"
                   autoComplete="off"
                   maxLength={256}
                 />
@@ -1861,6 +2113,12 @@ export function AssetAccountDialog({
                       setOkxSecretKey(event.target.value)
                       setError('')
                     }}
+                    placeholder={
+                      account?.type === 'Okx' && integration?.provider === 'Okx'
+                        ? '已安全保存；留空保持不变'
+                        : undefined
+                    }
+                    aria-describedby="asset-account-okx-credential-description"
                     autoComplete="new-password"
                     maxLength={512}
                   />
@@ -1875,6 +2133,12 @@ export function AssetAccountDialog({
                       setOkxPassphrase(event.target.value)
                       setError('')
                     }}
+                    placeholder={
+                      account?.type === 'Okx' && integration?.provider === 'Okx'
+                        ? '已安全保存；留空保持不变'
+                        : undefined
+                    }
+                    aria-describedby="asset-account-okx-credential-description"
                     autoComplete="new-password"
                     maxLength={256}
                   />
@@ -1956,8 +2220,13 @@ export function AssetAccountDialog({
             <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">币安 API 配置</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  使用 HMAC API Key，仅需读取权限
+                <p
+                  id="asset-account-binance-credential-description"
+                  className="mt-1 text-xs text-muted-foreground"
+                >
+                  {account?.type === 'Binance' && integration?.provider === 'Binance'
+                    ? '凭据已安全保存；全部留空保持不变，填写全部字段可替换'
+                    : '使用 HMAC API Key，仅需读取权限'}
                 </p>
               </div>
               <div className="grid gap-2">
@@ -1969,6 +2238,12 @@ export function AssetAccountDialog({
                     setBinanceApiKey(event.target.value)
                     setError('')
                   }}
+                  placeholder={
+                    account?.type === 'Binance' && integration?.provider === 'Binance'
+                      ? '已安全保存；留空保持不变'
+                      : undefined
+                  }
+                  aria-describedby="asset-account-binance-credential-description"
                   autoComplete="off"
                   maxLength={256}
                 />
@@ -1983,6 +2258,12 @@ export function AssetAccountDialog({
                     setBinanceSecretKey(event.target.value)
                     setError('')
                   }}
+                  placeholder={
+                    account?.type === 'Binance' && integration?.provider === 'Binance'
+                      ? '已安全保存；留空保持不变'
+                      : undefined
+                  }
+                  aria-describedby="asset-account-binance-credential-description"
                   autoComplete="new-password"
                   maxLength={512}
                 />
@@ -2006,10 +2287,24 @@ export function AssetAccountDialog({
           )}
           {error && <FieldMessage>{error}</FieldMessage>}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
               取消
             </Button>
-            <Button type="submit">{account ? '保存修改' : '添加账户'}</Button>
+            <Button type="submit" disabled={submitting} aria-busy={submitting}>
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting
+                ? account
+                  ? '保存中…'
+                  : '添加中…'
+                : account
+                  ? '保存修改'
+                  : '添加账户'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -2033,6 +2328,8 @@ export function PositionDialog({
   const [quantity, setQuantity] = useState('')
   const [price, setPrice] = useState('')
   const [error, setError] = useState('')
+  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
+    useSubmissionGuard()
 
   useEffect(() => {
     if (!open) return
@@ -2043,7 +2340,9 @@ export function PositionDialog({
     setQuantity(position ? String(position.quantity) : '')
     setPrice(position?.price === undefined ? '' : String(position.price))
     setError('')
-  }, [open, position])
+    // Preserve edits across background sync refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, position?.id])
 
   function handleMarketChange(value: string): void {
     const nextMarket = value as Market
@@ -2054,6 +2353,7 @@ export function PositionDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    if (submissionInFlight.current) return
     const parsedQuantity = Number(quantity)
     const parsedPrice = price.trim() ? Number(price) : undefined
     if (!symbol.trim() || !name.trim() || !currency.trim()) {
@@ -2069,6 +2369,7 @@ export function PositionDialog({
       return
     }
 
+    if (!beginSubmission()) return
     try {
       const submitError = await onSubmit({
         market,
@@ -2085,11 +2386,18 @@ export function PositionDialog({
       onOpenChange(false)
     } catch (submitError) {
       setError(operationErrorMessage(submitError))
+    } finally {
+      endSubmission()
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{position ? '编辑持仓' : '添加持仓'}</DialogTitle>
@@ -2104,11 +2412,13 @@ export function PositionDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {marketOrder.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {marketMeta[value].label}
-                    </SelectItem>
-                  ))}
+                  <SelectGroup>
+                    {marketOrder.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {marketMeta[value].label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -2186,10 +2496,24 @@ export function PositionDialog({
           </div>
           {error && <FieldMessage>{error}</FieldMessage>}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
               取消
             </Button>
-            <Button type="submit">{position ? '保存修改' : '添加持仓'}</Button>
+            <Button type="submit" disabled={submitting} aria-busy={submitting}>
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting
+                ? position
+                  ? '保存中…'
+                  : '添加中…'
+                : position
+                  ? '保存修改'
+                  : '添加持仓'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -2210,17 +2534,47 @@ export function DeleteConfirmDialog({
   actionLabel?: string
   onConfirm: () => void | Promise<void>
 }) {
+  const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
+
+  async function handleConfirm(): Promise<void> {
+    if (!beginSubmission()) return
+    try {
+      await onConfirm()
+    } catch {
+      // The caller owns user-facing error feedback; keep the dialog open for retry.
+    } finally {
+      endSubmission()
+    }
+  }
+
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>取消</AlertDialogCancel>
-          <AlertDialogAction onClick={() => void onConfirm()}>
-            {actionLabel}
+          <AlertDialogCancel disabled={submitting}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={submitting}
+            aria-busy={submitting}
+            onClick={(event) => {
+              event.preventDefault()
+              void handleConfirm()
+            }}
+          >
+            {submitting && <Spinner data-icon="inline-start" />}
+            {submitting
+              ? actionLabel.includes('注销')
+                ? '注销中…'
+                : '删除中…'
+              : actionLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

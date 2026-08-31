@@ -264,6 +264,58 @@ function normalizeIntegration(
   return null
 }
 
+function resolveIntegrationInput(
+  input: AssetAccountInput['integration'],
+  assetAccountId: string,
+  existing?: AssetAccountIntegration
+): AssetAccountIntegration | null {
+  if (!input) return null
+
+  if (input.provider === 'Ibkr') {
+    return normalizeIntegration(input, assetAccountId)
+  }
+
+  if (input.provider === 'Futu') {
+    const credential = input.websocket.credential
+    if (credential.mode === 'keep' && existing?.provider !== 'Futu') {
+      throw new Error('没有可保留的 Futu OpenD 密钥，请重新填写')
+    }
+    const key = credential.mode === 'keep'
+      ? existing?.provider === 'Futu'
+        ? existing.websocket.key
+        : undefined
+      : credential.mode === 'replace'
+        ? credential.value.key
+        : undefined
+    return normalizeIntegration(
+      {
+        provider: 'Futu',
+        websocket: {
+          host: input.websocket.host,
+          port: input.websocket.port,
+          ...(key ? { key } : {})
+        }
+      },
+      assetAccountId
+    )
+  }
+
+  if (input.api.credential.mode === 'keep') {
+    if (existing?.provider !== input.provider) {
+      throw new Error(`没有可保留的 ${input.provider} API 凭据，请重新填写`)
+    }
+    return structuredClone(existing)
+  }
+
+  return normalizeIntegration(
+    {
+      provider: input.provider,
+      api: input.api.credential.value
+    },
+    assetAccountId
+  )
+}
+
 function normalizeStoredIntegrationData(input: unknown): IntegrationData | null {
   if (!input || typeof input !== 'object') return null
   const value = input as { version?: unknown; integrations?: unknown }
@@ -893,6 +945,7 @@ type IntegrationDataUpdater = (
 function createPortfolioOperations(
   data: AppData,
   setData: PortfolioDataUpdater,
+  integrationData: IntegrationData,
   setIntegrationData: IntegrationDataUpdater
 ) {
   const activeProductAccount =
@@ -1187,9 +1240,10 @@ function createPortfolioOperations(
       throw new Error('请选择有效的持有人')
     }
     const assetAccountId = createId()
-    const integration = input.integration
-      ? normalizeIntegration(input.integration, assetAccountId)
-      : null
+    const integration = resolveIntegrationInput(
+      input.integration,
+      assetAccountId
+    )
     if (input.integration && (!integration || integration.provider !== type)) {
       throw new Error('同步配置与资产账户类型不匹配')
     }
@@ -1234,9 +1288,14 @@ function createPortfolioOperations(
     if (!productAccount.holders.some((holder) => holder.id === input.holderId)) {
       throw new Error('请选择有效的持有人')
     }
-    const integration = input.integration
-      ? normalizeIntegration(input.integration, assetAccountId)
-      : null
+    const existingIntegration = integrationData.integrations.find(
+      (item) => item.assetAccountId === assetAccountId
+    )
+    const integration = resolveIntegrationInput(
+      input.integration,
+      assetAccountId,
+      existingIntegration
+    )
     if (input.integration && (!integration || integration.provider !== type)) {
       throw new Error('同步配置与资产账户类型不匹配')
     }
@@ -1536,38 +1595,19 @@ function createPortfolioOperations(
 
 export interface PortfolioOperations {
   load(): Promise<PortfolioLoadResponse>
-  execute(
-    command: PortfolioCommand,
-    options?: PortfolioExecuteOptions
-  ): Promise<PortfolioCommandResponse>
+  execute(command: PortfolioCommand): Promise<PortfolioCommandResponse>
   inspectBackup(content: unknown): AccountBackup | null
   exportActiveAccount(): Promise<string>
   subscribe(listener: PortfolioChangeListener): () => void
 }
 
-export type PortfolioExecuteOptions = {
-  expectedRevision?: string
-}
-
-export type PortfolioChangeListener = (revision: string) => void
-
-export class PortfolioRevisionConflictError extends Error {
-  constructor(
-    readonly expectedRevision: string,
-    readonly actualRevision: string
-  ) {
-    super('资产数据已发生变化，请重新读取后再试')
-    this.name = 'PortfolioRevisionConflictError'
-  }
-}
+export type PortfolioChangeListener = () => void
 
 export class PortfolioService implements PortfolioOperations {
   private data: AppData = structuredClone(EMPTY_PORTFOLIO_DATA)
   private integrationData: IntegrationData = structuredClone(EMPTY_INTEGRATION_DATA)
   private initialized = false
   private pending: Promise<void> = Promise.resolve()
-  private readonly revisionEpoch = crypto.randomUUID()
-  private revisionCounter = 0
   private readonly listeners = new Set<PortfolioChangeListener>()
 
   constructor(
@@ -1579,7 +1619,6 @@ export class PortfolioService implements PortfolioOperations {
     return this.runExclusive(async () => {
       if (this.initialized) {
         return {
-          revision: this.currentRevision(),
           data: structuredClone(this.data),
           integrations: structuredClone(this.integrationData.integrations)
         }
@@ -1602,29 +1641,15 @@ export class PortfolioService implements PortfolioOperations {
       this.initialized = true
 
       return {
-        revision: this.currentRevision(),
         data: structuredClone(this.data),
         integrations: structuredClone(this.integrationData.integrations)
       }
     })
   }
 
-  execute(
-    command: PortfolioCommand,
-    options: PortfolioExecuteOptions = {}
-  ): Promise<PortfolioCommandResponse> {
+  execute(command: PortfolioCommand): Promise<PortfolioCommandResponse> {
     return this.runExclusive(async () => {
       await this.initialize()
-      const currentRevision = this.currentRevision()
-      if (
-        options.expectedRevision !== undefined &&
-        options.expectedRevision !== currentRevision
-      ) {
-        throw new PortfolioRevisionConflictError(
-          options.expectedRevision,
-          currentRevision
-        )
-      }
       let nextData = this.data
       let nextIntegrationData = this.integrationData
       const operations = createPortfolioOperations(
@@ -1632,6 +1657,7 @@ export class PortfolioService implements PortfolioOperations {
         (update) => {
           nextData = typeof update === 'function' ? update(nextData) : update
         },
+        this.integrationData,
         (update) => {
           nextIntegrationData =
             typeof update === 'function' ? update(nextIntegrationData) : update
@@ -1746,7 +1772,6 @@ export class PortfolioService implements PortfolioOperations {
           command.type === 'set-position-group-positions')
       ) {
         return {
-          revision: currentRevision,
           data: structuredClone(this.data),
           integrations: structuredClone(this.integrationData.integrations),
           result
@@ -1756,17 +1781,14 @@ export class PortfolioService implements PortfolioOperations {
       await this.persist(nextData, nextIntegrationData)
       this.data = nextData
       this.integrationData = nextIntegrationData
-      this.revisionCounter += 1
-      const revision = this.currentRevision()
       this.listeners.forEach((listener) => {
         try {
-          listener(revision)
+          listener()
         } catch {
           // A transport listener must not break a committed portfolio update.
         }
       })
       return {
-        revision,
         data: structuredClone(this.data),
         integrations: structuredClone(this.integrationData.integrations),
         ...(result === undefined ? {} : { result })
@@ -1829,10 +1851,6 @@ export class PortfolioService implements PortfolioOperations {
   ): Promise<void> {
     await this.repository.save(JSON.stringify(data))
     await this.integrationRepository.save(JSON.stringify(integrationData))
-  }
-
-  private currentRevision(): string {
-    return `${this.revisionEpoch}:${this.revisionCounter}`
   }
 
   private runExclusive<T>(operation: () => Promise<T>): Promise<T> {

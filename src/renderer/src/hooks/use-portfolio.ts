@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type { ExchangeRateSnapshot } from '../../../shared/exchange-rates'
-import type { AssetAccountIntegration } from '../../../shared/integrations'
+import type { AssetAccountIntegrationView } from '../../../shared/integrations'
 import {
   EMPTY_PORTFOLIO_DATA,
   type AccountBackup,
@@ -23,10 +23,10 @@ function cleanIpcError(error: unknown): string {
 
 export function usePortfolio() {
   const [data, setData] = useState<AppData>(() => structuredClone(EMPTY_PORTFOLIO_DATA))
-  const [integrations, setIntegrations] = useState<AssetAccountIntegration[]>([])
-  const [revision, setRevision] = useState('')
+  const [integrations, setIntegrations] = useState<AssetAccountIntegrationView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [refreshError, setRefreshError] = useState('')
 
   useEffect(() => {
     let active = true
@@ -38,7 +38,6 @@ export function usePortfolio() {
         }
         const response = await window.desktop.portfolio.load()
         if (!active) return
-        setRevision(response.revision)
         setData(response.data)
         setIntegrations(response.integrations)
       } catch (loadError) {
@@ -61,12 +60,12 @@ export function usePortfolio() {
     const unsubscribe = portfolio.onChanged(() => {
       void portfolio.load().then((response) => {
         if (!active) return
-        setRevision(response.revision)
         setData(response.data)
         setIntegrations(response.integrations)
         setError('')
+        setRefreshError('')
       }).catch((loadError) => {
-        if (active) setError(cleanIpcError(loadError))
+        if (active) setRefreshError(cleanIpcError(loadError))
       })
     })
     return () => {
@@ -80,10 +79,10 @@ export function usePortfolio() {
       throw new Error('资产数据组件尚未加载，请重启 Chromie')
     }
     const response = await window.desktop.portfolio.execute(command)
-    setRevision(response.revision)
     setData(response.data)
     setIntegrations(response.integrations)
     setError('')
+    setRefreshError('')
     return response.result
   }
 
@@ -98,7 +97,7 @@ export function usePortfolio() {
   return {
     loading,
     error,
-    revision,
+    refreshError,
     productAccounts: data.productAccounts,
     activeProductAccount,
     activeSnapshots,

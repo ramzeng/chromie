@@ -48,7 +48,7 @@ const updateAnnotations: ToolAnnotations = {
 const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   chromie_list_accounts: {
     title: '列出 Chromie 账户',
-    description: '列出本机 Chromie 中的账户摘要并返回当前 revision。执行任何写操作前应先调用此方法。',
+    description: '列出本机 Chromie 中的账户摘要。',
     annotations: readOnlyAnnotations
   },
   chromie_get_account: {
@@ -73,22 +73,22 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_create_account: {
     title: '创建 Chromie 账户',
-    description: '创建一个新的总账户。需要来自最近一次读取的 expected_revision。',
+    description: '创建一个新的总账户。',
     annotations: additiveAnnotations
   },
   chromie_update_account: {
     title: '更新 Chromie 账户',
-    description: '局部修改账户名称、锚定币种或汇率设置，不会覆盖持有人。需要 expected_revision。',
+    description: '局部修改账户名称、锚定币种或汇率设置，不会覆盖持有人。',
     annotations: updateAnnotations
   },
   chromie_save_holder: {
     title: '保存持有人',
-    description: '创建持有人或修改已有持有人名称。mode 为 create 或 update。需要 expected_revision。',
+    description: '创建持有人或修改已有持有人名称。mode 为 create 或 update。',
     annotations: updateAnnotations
   },
   chromie_create_asset_account: {
     title: '创建资产账户',
-    description: '创建不含同步凭据的资产账户。自动同步凭据只能在 Chromie UI 中配置。需要 expected_revision。',
+    description: '创建不含同步凭据的资产账户。自动同步凭据只能在 Chromie UI 中配置。',
     annotations: additiveAnnotations
   },
   chromie_update_asset_account: {
@@ -103,22 +103,22 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_save_position_group: {
     title: '保存持仓分组',
-    description: '创建持仓分组或修改已有分组名称。需要 expected_revision。',
+    description: '创建持仓分组或修改已有分组名称。',
     annotations: updateAnnotations
   },
   chromie_set_group_members: {
     title: '设置分组持仓',
-    description: '完整替换一个持仓分组的成员；一项持仓最多属于一个分组。需要 expected_revision。',
+    description: '完整替换一个持仓分组的成员；一项持仓最多属于一个分组。',
     annotations: updateAnnotations
   },
   chromie_create_snapshot: {
     title: '创建资产快照',
-    description: '保存账户当前结构、持仓价格和当前缓存汇率。需要 expected_revision。',
+    description: '保存账户当前结构、持仓价格和当前缓存汇率。',
     annotations: additiveAnnotations
   },
   chromie_sync_asset_account: {
     title: '同步资产账户',
-    description: '使用 Chromie 安全存储中已有的连接配置同步持仓；工具不会读取或返回任何凭据。需要 expected_revision。',
+    description: '使用 Chromie 安全存储中已有的连接配置同步持仓；工具不会读取或返回任何凭据。',
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
@@ -205,7 +205,7 @@ function buildServer(client: McpSocketClient): McpServer {
     { name: 'chromie', version: '0.1.0' },
     {
       instructions:
-        'Chromie manages local financial portfolio data. Start with chromie_list_accounts and pass its revision as expected_revision to mutations. Snapshot views are read-only. Never ask for or expose brokerage/API credentials; configure them only in the Chromie UI.'
+        'Chromie manages local financial portfolio data. Snapshot views are read-only. Never ask for or expose brokerage/API credentials; configure them only in the Chromie UI.'
     }
   )
 
