@@ -8,12 +8,17 @@ import type {
 } from '../shared/exchange-rates'
 import type { FutuSyncOptions, FutuSyncResult } from '../shared/futu'
 import type { IbkrSyncOptions, IbkrSyncResult } from '../shared/ibkr'
+import type {
+  McpAccessSettings,
+  McpConnectionSettings
+} from '../shared/mcp'
 import type { OkxSyncOptions, OkxSyncResult } from '../shared/okx'
 import type {
   AccountBackup,
   PortfolioCommand,
   PortfolioCommandResponse,
-  PortfolioLoadResponse
+  PortfolioLoadResponse,
+  PortfolioSyncResponse
 } from '../shared/portfolio'
 import type { ShareImageSaveResult } from '../shared/share-image'
 
@@ -42,10 +47,25 @@ contextBridge.exposeInMainWorld('desktop', {
       ipcRenderer.invoke('exchange-rates:fetch', provider)
   },
   portfolio: {
-    load: (legacyContent?: string): Promise<PortfolioLoadResponse> =>
-      ipcRenderer.invoke('portfolio:load', legacyContent),
+    load: (): Promise<PortfolioLoadResponse> => ipcRenderer.invoke('portfolio:load'),
     execute: (command: PortfolioCommand): Promise<PortfolioCommandResponse> =>
       ipcRenderer.invoke('portfolio:execute', command),
+    syncAssetAccount: (
+      accountId: string,
+      assetAccountId: string
+    ): Promise<PortfolioSyncResponse> =>
+      ipcRenderer.invoke(
+        'portfolio:sync-asset-account',
+        accountId,
+        assetAccountId
+      ),
+    onChanged: (listener: (revision: string) => void): (() => void) => {
+      const handleChange = (_event: Electron.IpcRendererEvent, revision: string) => {
+        listener(revision)
+      }
+      ipcRenderer.on('portfolio:changed', handleChange)
+      return () => ipcRenderer.removeListener('portfolio:changed', handleChange)
+    },
     inspectBackup: (content: string): Promise<AccountBackup | null> =>
       ipcRenderer.invoke('portfolio:inspect-backup', content),
     exportActiveAccount: (): Promise<string> =>
@@ -59,5 +79,13 @@ contextBridge.exposeInMainWorld('desktop', {
   shareImage: {
     save: (dataUrl: string, accountName: string): Promise<ShareImageSaveResult> =>
       ipcRenderer.invoke('share-image:save', dataUrl, accountName)
+  },
+  mcp: {
+    loadSettings: (): Promise<McpConnectionSettings> =>
+      ipcRenderer.invoke('mcp:load-settings'),
+    updateSettings: (
+      settings: McpAccessSettings
+    ): Promise<McpConnectionSettings> =>
+      ipcRenderer.invoke('mcp:update-settings', settings)
   }
 })

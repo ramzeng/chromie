@@ -1,11 +1,18 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import {
+  useEffect,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction
+} from 'react'
 import {
   Coins,
   Ellipsis,
   Plus,
   ShieldAlert,
   SlidersHorizontal,
-  UsersRound
+  UsersRound,
+  Wrench
 } from 'lucide-react'
 
 import {
@@ -53,6 +60,7 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { ExchangeRateState } from '@/lib/exchange-rates'
+import type { McpAccessSettings, McpConnectionSettings } from '@/lib/mcp'
 import {
   ANCHOR_CURRENCIES,
   assetAccountTypeLabels,
@@ -72,6 +80,7 @@ import {
   marketOrder,
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   type AssetAccount,
+  type AssetAccountIntegration,
   type AssetAccountInput,
   type AssetAccountType,
   type AnchorCurrency,
@@ -102,6 +111,123 @@ function operationErrorMessage(error: unknown): string {
 }
 
 type ExchangeRateView = Pick<ExchangeRateState, 'snapshot' | 'status' | 'error'>
+
+const DISABLED_MCP_ACCESS: McpAccessSettings = {
+  enabled: false,
+  allowWrite: false,
+  allowSync: false,
+  allowDelete: false
+}
+
+function McpSettingsSection({
+  connection,
+  access,
+  setAccess
+}: {
+  connection: McpConnectionSettings | null
+  access: McpAccessSettings
+  setAccess: Dispatch<SetStateAction<McpAccessSettings>>
+}) {
+  const clientConfig = connection
+    ? JSON.stringify({
+        mcpServers: {
+          chromie: {
+            command: connection.command,
+            args: connection.args
+          }
+        }
+      }, null, 2)
+    : ''
+
+  return (
+    <section className="grid gap-5">
+      <div>
+        <h3 className="text-base font-semibold">MCP</h3>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          允许本机 AI 工具在你授权的范围内读取或维护 Chromie 数据
+        </p>
+      </div>
+      <div className="divide-y overflow-hidden rounded-xl border">
+        <div className="flex items-center justify-between gap-6 p-4">
+          <div>
+            <Label htmlFor="mcp-enabled">启用 MCP</Label>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              默认只读；关闭后本机 MCP 连接立即停止
+            </p>
+          </div>
+          <Switch
+            id="mcp-enabled"
+            checked={access.enabled}
+            onCheckedChange={(enabled) =>
+              setAccess(enabled ? { ...access, enabled: true } : DISABLED_MCP_ACCESS)
+            }
+          />
+        </div>
+        <div className="flex items-center justify-between gap-6 p-4">
+          <div>
+            <Label htmlFor="mcp-write">允许编辑</Label>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              允许创建和修改账户、持仓、分组及快照
+            </p>
+          </div>
+          <Switch
+            id="mcp-write"
+            checked={access.allowWrite}
+            disabled={!access.enabled}
+            onCheckedChange={(allowWrite) =>
+              setAccess((current) => ({
+                ...current,
+                allowWrite,
+                ...(allowWrite ? {} : { allowSync: false, allowDelete: false })
+              }))
+            }
+          />
+        </div>
+        <div className="flex items-center justify-between gap-6 p-4">
+          <div>
+            <Label htmlFor="mcp-sync">允许联网同步</Label>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              使用 Chromie 已保存的凭据同步持仓和刷新汇率
+            </p>
+          </div>
+          <Switch
+            id="mcp-sync"
+            checked={access.allowSync}
+            disabled={!access.enabled || !access.allowWrite}
+            onCheckedChange={(allowSync) =>
+              setAccess((current) => ({ ...current, allowSync }))
+            }
+          />
+        </div>
+        <div className="flex items-center justify-between gap-6 p-4">
+          <div>
+            <Label htmlFor="mcp-delete">允许删除</Label>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              每次删除仍会在 MCP 客户端展示影响并要求确认
+            </p>
+          </div>
+          <Switch
+            id="mcp-delete"
+            checked={access.allowDelete}
+            disabled={!access.enabled || !access.allowWrite}
+            onCheckedChange={(allowDelete) =>
+              setAccess((current) => ({ ...current, allowDelete }))
+            }
+          />
+        </div>
+      </div>
+
+      {clientConfig && (
+        <div className="grid gap-2">
+          <Label>MCP 客户端配置</Label>
+          <pre className="max-h-40 overflow-auto rounded-lg bg-muted p-3 text-xs leading-5">
+            {clientConfig}
+          </pre>
+        </div>
+      )}
+    </section>
+  )
+}
 
 function formatReferenceRate(value: number): string {
   return new Intl.NumberFormat('zh-CN', {
@@ -149,8 +275,7 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
     ? `${exchangeRates.status === 'error' ? '使用缓存' : exchangeRates.status === 'refreshing' ? '正在刷新' : '更新时间'} ${formatExchangeRateTime(exchangeRates.snapshot.fetchedAt)}`
     : exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing'
       ? '正在获取汇率'
-      : exchangeRates.error || '暂无汇率数据'
-
+      : '暂无汇率数据'
   return (
     <div className="grid gap-3 rounded-xl border bg-muted/20 p-4" role="status">
       <div className="flex items-center justify-between gap-3">
@@ -170,9 +295,6 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">暂时没有可用的参考汇率</p>
-      )}
-      {exchangeRates.error && (
-        <p className="text-xs leading-5 text-destructive">{exchangeRates.error}</p>
       )}
     </div>
   )
@@ -359,7 +481,7 @@ export function ProductAccountSettingsDialog({
 }: BaseDialogProps & {
   account: ProductAccount
   exchangeRates: ExchangeRateView
-  initialSection?: 'basic' | 'currency' | 'holders' | 'other'
+  initialSection?: 'basic' | 'currency' | 'holders' | 'mcp' | 'other'
   onSubmit: (input: ProductAccountSettingsInput) => Promise<void>
   onRequestDelete: () => void
 }) {
@@ -374,12 +496,19 @@ export function ProductAccountSettingsDialog({
   )
   const [holders, setHolders] = useState<Holder[]>([])
   const [section, setSection] = useState<
-    'basic' | 'currency' | 'holders' | 'other'
+    'basic' | 'currency' | 'holders' | 'mcp' | 'other'
   >('basic')
   const [holderDialog, setHolderDialog] = useState<{
     open: boolean
     holderId?: string
   }>({ open: false })
+  const [mcpConnection, setMcpConnection] =
+    useState<McpConnectionSettings | null>(null)
+  const [mcpAccess, setMcpAccess] =
+    useState<McpAccessSettings>(DISABLED_MCP_ACCESS)
+  const [mcpLoading, setMcpLoading] = useState(false)
+  const [mcpSaving, setMcpSaving] = useState(false)
+  const [mcpError, setMcpError] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -408,8 +537,61 @@ export function ProductAccountSettingsDialog({
     setError('')
   }, [account.id, initialSection, open])
 
+  useEffect(() => {
+    if (!open || section !== 'mcp') return
+    let mounted = true
+    const mcp = window.desktop.mcp
+
+    setMcpConnection(null)
+    setMcpAccess(DISABLED_MCP_ACCESS)
+    setMcpError('')
+    setMcpLoading(false)
+    if (!mcp) {
+      setMcpError('MCP 组件尚未加载，请重启 Chromie')
+      return
+    }
+
+    setMcpLoading(true)
+    void mcp
+      .loadSettings()
+      .then((result) => {
+        if (!mounted) return
+        setMcpConnection(result)
+        setMcpAccess(result.access)
+      })
+      .catch((loadError) => {
+        if (mounted) setMcpError(operationErrorMessage(loadError))
+      })
+      .finally(() => {
+        if (mounted) setMcpLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [open, section])
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    if (section === 'mcp') {
+      if (!window.desktop.mcp) {
+        setMcpError('MCP 组件尚未加载，请重启 Chromie')
+        return
+      }
+      try {
+        setMcpSaving(true)
+        setMcpError('')
+        const result = await window.desktop.mcp.updateSettings(mcpAccess)
+        setMcpConnection(result)
+        setMcpAccess(result.access)
+        onOpenChange(false)
+      } catch (submitError) {
+        setMcpError(operationErrorMessage(submitError))
+      } finally {
+        setMcpSaving(false)
+      }
+      return
+    }
     if (!name.trim()) {
       setSection('basic')
       setError('请输入账户名称')
@@ -462,7 +644,7 @@ export function ProductAccountSettingsDialog({
         <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>账户设置</DialogTitle>
           <DialogDescription className="sr-only">
-            管理账户基础信息、币种与汇率、持有人和账户状态
+            管理账户基础信息、币种与汇率、持有人、MCP 和账户状态
           </DialogDescription>
         </DialogHeader>
         <form
@@ -509,7 +691,20 @@ export function ProductAccountSettingsDialog({
                   onClick={() => setSection('holders')}
                 >
                   <UsersRound className="size-4" />
-                  持有人管理
+                  持有人
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    'h-9 justify-start gap-2.5 px-3 font-normal',
+                    section === 'mcp' &&
+                      'bg-background font-medium shadow-xs hover:bg-background'
+                  )}
+                  onClick={() => setSection('mcp')}
+                >
+                  <Wrench className="size-4" />
+                  MCP
                 </Button>
                 <Button
                   type="button"
@@ -631,7 +826,7 @@ export function ProductAccountSettingsDialog({
               {section === 'holders' && (
                 <section className="grid gap-4">
                   <div className="flex items-center justify-between gap-4">
-                    <h3 className="text-base font-semibold">持有人管理</h3>
+                    <h3 className="text-base font-semibold">持有人</h3>
                     <Button
                       type="button"
                       variant="outline"
@@ -727,6 +922,14 @@ export function ProductAccountSettingsDialog({
                 </section>
               )}
 
+              {section === 'mcp' && (
+                <McpSettingsSection
+                  connection={mcpConnection}
+                  access={mcpAccess}
+                  setAccess={setMcpAccess}
+                />
+              )}
+
               {section === 'other' && (
                 <section className="grid gap-4">
                   <h3 className="text-base font-semibold">其他设置</h3>
@@ -757,12 +960,26 @@ export function ProductAccountSettingsDialog({
           </div>
 
           <div className="flex items-center justify-between gap-4 border-t px-6 py-3">
-            <div>{error && <FieldMessage>{error}</FieldMessage>}</div>
+            <div>
+              {(section === 'mcp' ? mcpError : error) && (
+                <FieldMessage>
+                  {section === 'mcp' ? mcpError : error}
+                </FieldMessage>
+              )}
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 取消
               </Button>
-              <Button type="submit">保存设置</Button>
+              <Button
+                type="submit"
+                disabled={
+                  section === 'mcp' &&
+                  (mcpLoading || mcpSaving || Boolean(mcpError && !mcpConnection))
+                }
+              >
+                {section === 'mcp' && mcpSaving ? '保存中…' : '保存设置'}
+              </Button>
             </DialogFooter>
           </div>
         </form>
@@ -1055,6 +1272,28 @@ export function SyncErrorDialog({
   )
 }
 
+export function ExchangeRateErrorDialog({
+  open,
+  onOpenChange,
+  message
+}: BaseDialogProps & {
+  message: string
+}) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>汇率刷新失败</AlertDialogTitle>
+          <AlertDialogDescription>{message}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>知道了</AlertDialogCancel>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 export function BackupErrorDialog({
   open,
   onOpenChange,
@@ -1134,7 +1373,7 @@ export function ExportBackupDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>导出当前账户</DialogTitle>
-          <DialogDescription>备份包含同步凭据，请妥善保管</DialogDescription>
+          <DialogDescription>备份不包含同步凭据，导入后需重新配置</DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -1158,11 +1397,13 @@ export function AssetAccountDialog({
   open,
   onOpenChange,
   account,
+  integration,
   holders,
   onManageHolders,
   onSubmit
 }: BaseDialogProps & {
   account?: AssetAccount
+  integration?: AssetAccountIntegration
   holders: Holder[]
   onManageHolders: () => void
   onSubmit: (input: AssetAccountInput) => Promise<void>
@@ -1193,22 +1434,50 @@ export function AssetAccountDialog({
     setName(account?.name ?? assetAccountTypeLabels[account?.type ?? 'Futu'])
     setHolderId(account?.holderId ?? 'unassigned')
     setType(account?.type ?? 'Futu')
-    setAutoSync(Boolean(account?.sync))
-    setSyncHost(account?.sync?.websocket?.host ?? DEFAULT_FUTU_OPEND_HOST)
-    setSyncPort(String(account?.sync?.websocket?.port ?? DEFAULT_FUTU_OPEND_PORT))
-    setSyncInterval(String(account?.sync?.interval ?? DEFAULT_SYNC_INTERVAL))
-    setSyncKey(account?.sync?.websocket?.key ?? '')
-    setOkxApiKey(account?.sync?.api?.apiKey ?? '')
-    setOkxSecretKey(account?.sync?.api?.secretKey ?? '')
-    setOkxPassphrase(account?.sync?.api?.passphrase ?? '')
-    setIbkrGatewayHost(account?.sync?.gateway?.host ?? DEFAULT_IBKR_GATEWAY_HOST)
-    setIbkrGatewayPort(
-      String(account?.sync?.gateway?.port ?? DEFAULT_IBKR_GATEWAY_PORT)
+    setAutoSync(Boolean(account?.sync && integration))
+    setSyncHost(
+      integration?.provider === 'Futu'
+        ? integration.websocket.host
+        : DEFAULT_FUTU_OPEND_HOST
     )
-    setBinanceApiKey(account?.sync?.api?.apiKey ?? '')
-    setBinanceSecretKey(account?.sync?.api?.secretKey ?? '')
+    setSyncPort(
+      String(
+        integration?.provider === 'Futu'
+          ? integration.websocket.port
+          : DEFAULT_FUTU_OPEND_PORT
+      )
+    )
+    setSyncInterval(String(account?.sync?.interval ?? DEFAULT_SYNC_INTERVAL))
+    setSyncKey(
+      integration?.provider === 'Futu' ? (integration.websocket.key ?? '') : ''
+    )
+    setOkxApiKey(integration?.provider === 'Okx' ? integration.api.apiKey : '')
+    setOkxSecretKey(
+      integration?.provider === 'Okx' ? integration.api.secretKey : ''
+    )
+    setOkxPassphrase(
+      integration?.provider === 'Okx' ? integration.api.passphrase : ''
+    )
+    setIbkrGatewayHost(
+      integration?.provider === 'Ibkr'
+        ? integration.gateway.host
+        : DEFAULT_IBKR_GATEWAY_HOST
+    )
+    setIbkrGatewayPort(
+      String(
+        integration?.provider === 'Ibkr'
+          ? integration.gateway.port
+          : DEFAULT_IBKR_GATEWAY_PORT
+      )
+    )
+    setBinanceApiKey(
+      integration?.provider === 'Binance' ? integration.api.apiKey : ''
+    )
+    setBinanceSecretKey(
+      integration?.provider === 'Binance' ? integration.api.secretKey : ''
+    )
     setError('')
-  }, [account, open])
+  }, [account, integration, open])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
@@ -1292,48 +1561,53 @@ export function AssetAccountDialog({
         ...(syncEnabled
           ? {
               sync: {
-              interval:
-                Number.isInteger(parsedSyncInterval) &&
-                parsedSyncInterval >= 5 &&
-                parsedSyncInterval <= 3600
-                  ? parsedSyncInterval
-                  : DEFAULT_SYNC_INTERVAL,
-              ...(type === 'Futu'
-                ? {
-                    websocket: {
-                      host: syncHost.trim() || DEFAULT_FUTU_OPEND_HOST,
-                      port:
-                        Number.isInteger(parsedSyncPort) &&
-                        parsedSyncPort >= 1 &&
-                        parsedSyncPort <= 65535
-                          ? parsedSyncPort
-                          : DEFAULT_FUTU_OPEND_PORT,
-                      ...(syncKey.trim() ? { key: syncKey.trim() } : {})
-                    }
-                  }
-                : type === 'Ibkr'
+                interval:
+                  Number.isInteger(parsedSyncInterval) &&
+                  parsedSyncInterval >= 5 &&
+                  parsedSyncInterval <= 3600
+                    ? parsedSyncInterval
+                    : DEFAULT_SYNC_INTERVAL,
+                ...(lastSyncedAt ? { lastSyncedAt } : {})
+              },
+              integration:
+                type === 'Futu'
                   ? {
-                      gateway: {
-                        host: normalizedIbkrGatewayHost,
-                        port: parsedIbkrGatewayPort
+                      provider: 'Futu' as const,
+                      websocket: {
+                        host: syncHost.trim() || DEFAULT_FUTU_OPEND_HOST,
+                        port:
+                          Number.isInteger(parsedSyncPort) &&
+                          parsedSyncPort >= 1 &&
+                          parsedSyncPort <= 65535
+                            ? parsedSyncPort
+                            : DEFAULT_FUTU_OPEND_PORT,
+                        ...(syncKey.trim() ? { key: syncKey.trim() } : {})
                       }
                     }
-                  : type === 'Okx'
+                  : type === 'Ibkr'
                     ? {
-                        api: {
-                          apiKey: okxApiKey.trim(),
-                          secretKey: okxSecretKey,
-                          passphrase: okxPassphrase
+                        provider: 'Ibkr' as const,
+                        gateway: {
+                          host: normalizedIbkrGatewayHost,
+                          port: parsedIbkrGatewayPort
                         }
                       }
-                    : {
-                        api: {
-                          apiKey: binanceApiKey.trim(),
-                          secretKey: binanceSecretKey
+                    : type === 'Okx'
+                      ? {
+                          provider: 'Okx' as const,
+                          api: {
+                            apiKey: okxApiKey.trim(),
+                            secretKey: okxSecretKey,
+                            passphrase: okxPassphrase
+                          }
                         }
-                      }),
-              ...(lastSyncedAt ? { lastSyncedAt } : {})
-              }
+                      : {
+                          provider: 'Binance' as const,
+                          api: {
+                            apiKey: binanceApiKey.trim(),
+                            secretKey: binanceSecretKey
+                          }
+                        }
             }
           : {})
       })

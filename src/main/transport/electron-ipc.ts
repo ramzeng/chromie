@@ -5,8 +5,10 @@ import type { FutuSyncOptions } from '../../shared/futu'
 import type { IbkrSyncOptions } from '../../shared/ibkr'
 import type { OkxSyncOptions } from '../../shared/okx'
 import type { PortfolioCommand } from '../../shared/portfolio'
+import type { McpAccessSettings } from '../../shared/mcp'
 import type { DesktopOperations } from '../service/desktop-service'
-import type { PortfolioOperations } from '../service/portfolio-service'
+import type { PortfolioModuleOperations } from '../service/portfolio-module'
+import type { McpHostOperations } from './mcp-socket'
 
 export type IpcSenderValidator = (sender: WebContents) => boolean
 
@@ -25,9 +27,20 @@ function assertTrustedSender(
 
 export function registerDesktopIpc(
   service: DesktopOperations,
-  portfolio: PortfolioOperations,
+  portfolio: PortfolioModuleOperations,
+  mcp: McpHostOperations,
   validateSender: IpcSenderValidator
 ): void {
+  const portfolioSubscribers = new Set<WebContents>()
+  portfolio.subscribe((revision) => {
+    portfolioSubscribers.forEach((sender) => {
+      if (sender.isDestroyed()) {
+        portfolioSubscribers.delete(sender)
+        return
+      }
+      sender.send('portfolio:changed', revision)
+    })
+  })
   ipcMain.handle('futu:sync-positions', (event, options?: FutuSyncOptions) => {
     assertTrustedSender(event, validateSender)
     return service.syncPositions({ provider: 'futu', options })
@@ -52,9 +65,15 @@ export function registerDesktopIpc(
     assertTrustedSender(event, validateSender)
     return service.fetchExchangeRates(provider)
   })
-  ipcMain.handle('portfolio:load', (event, legacyContent?: unknown) => {
+  ipcMain.handle('portfolio:load', (event) => {
     assertTrustedSender(event, validateSender)
-    return portfolio.load(legacyContent)
+    if (!portfolioSubscribers.has(event.sender)) {
+      portfolioSubscribers.add(event.sender)
+      event.sender.once('destroyed', () => {
+        portfolioSubscribers.delete(event.sender)
+      })
+    }
+    return portfolio.load()
   })
   ipcMain.handle('portfolio:execute', (event, command: PortfolioCommand) => {
     assertTrustedSender(event, validateSender)
@@ -63,6 +82,16 @@ export function registerDesktopIpc(
     }
     return portfolio.execute(command)
   })
+  ipcMain.handle(
+    'portfolio:sync-asset-account',
+    (event, accountId: unknown, assetAccountId: unknown) => {
+      assertTrustedSender(event, validateSender)
+      if (typeof accountId !== 'string' || typeof assetAccountId !== 'string') {
+        throw new Error('资产账户同步请求无效')
+      }
+      return portfolio.syncAssetAccount(accountId, assetAccountId)
+    }
+  )
   ipcMain.handle('portfolio:inspect-backup', (event, content: unknown) => {
     assertTrustedSender(event, validateSender)
     return portfolio.inspectBackup(content)
@@ -86,4 +115,21 @@ export function registerDesktopIpc(
       return service.saveShareImage(event.sender.id, dataUrl, accountName)
     }
   )
+  ipcMain.handle('mcp:load-settings', (event) => {
+    assertTrustedSender(event, validateSender)
+    return mcp.loadConnectionSettings()
+  })
+  ipcMain.handle('mcp:update-settings', (event, settings: unknown) => {
+    assertTrustedSender(event, validateSender)
+    if (!settings || typeof settings !== 'object') {
+      throw new Error('MCP 设置无效')
+    }
+    const input = settings as Partial<McpAccessSettings>
+    return mcp.updateAccessSettings({
+      enabled: input.enabled === true,
+      allowWrite: input.allowWrite === true,
+      allowSync: input.allowSync === true,
+      allowDelete: input.allowDelete === true
+    })
+  })
 }

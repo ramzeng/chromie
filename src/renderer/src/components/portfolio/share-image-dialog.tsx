@@ -452,11 +452,9 @@ function renderShareImage(
       cardTop + 96,
       palette.foreground
     )
-    if (!hasCompleteValue) {
+    if (!hasCompleteValue && valuation.missingCurrencies.length) {
       setFont(context, 15, 400)
-      const hint = valuation.missingCurrencies.length
-        ? `缺少 ${valuation.missingCurrencies.join('、')} 汇率`
-        : '填写持仓价格后显示'
+      const hint = `缺少 ${valuation.missingCurrencies.join('、')} 汇率`
       drawText(context, hint, x + 28, cardTop + 137, palette.faint)
     }
   })

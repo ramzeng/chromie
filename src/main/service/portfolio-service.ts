@@ -21,6 +21,7 @@ import {
   type AppData,
   type AssetAccount,
   type AssetAccountInput,
+  type AssetAccountSync,
   type AssetAccountType,
   type Market,
   type PortfolioCommand,
@@ -33,9 +34,14 @@ import {
   type PositionInput,
   type ProductAccount,
   type ProductAccountInput,
-  type ProductAccountSettingsInput,
-  type SyncConfig
+  type ProductAccountSettingsInput
 } from '../../shared/portfolio'
+import {
+  EMPTY_INTEGRATION_DATA,
+  type AssetAccountIntegration,
+  type IntegrationData
+} from '../../shared/integrations'
+import type { IntegrationRepository } from '../repository/integration-repository'
 import type { PortfolioRepository } from '../repository/portfolio-repository'
 
 function normalizeAssetAccountName(value: string): string {
@@ -140,10 +146,10 @@ function normalizeAssetAccountType(value: unknown): AssetAccountType | null {
   return null
 }
 
-function normalizeSyncConfig(
+function normalizeAssetAccountSync(
   value: unknown,
   type: AssetAccountType
-): SyncConfig | undefined {
+): AssetAccountSync | undefined {
   if (
     type === 'Boci' ||
     type === 'Alipay' ||
@@ -154,21 +160,72 @@ function normalizeSyncConfig(
     return undefined
   }
   if (!value || typeof value !== 'object') return undefined
-  const sync = value as {
-    interval?: unknown
-    websocket?: unknown
-    gateway?: unknown
-    api?: unknown
-    lastSyncedAt?: unknown
-  }
+  const sync = value as { interval?: unknown; lastSyncedAt?: unknown }
   const lastSyncedAt =
     typeof sync.lastSyncedAt === 'string' && Number.isFinite(Date.parse(sync.lastSyncedAt))
       ? sync.lastSyncedAt
       : undefined
+  return {
+    interval: normalizeSyncInterval(sync.interval),
+    ...(lastSyncedAt ? { lastSyncedAt } : {})
+  }
+}
 
-  if (type === 'Okx' || type === 'Binance') {
-    if (!sync.api || typeof sync.api !== 'object') return undefined
-    const api = sync.api as {
+function normalizeIntegration(
+  value: unknown,
+  assetAccountId?: string
+): AssetAccountIntegration | null {
+  if (!value || typeof value !== 'object') return null
+  const integration = value as {
+    assetAccountId?: unknown
+    provider?: unknown
+    websocket?: unknown
+    gateway?: unknown
+    api?: unknown
+  }
+  const normalizedAssetAccountId =
+    assetAccountId ??
+    (typeof integration.assetAccountId === 'string'
+      ? integration.assetAccountId.trim()
+      : '')
+  if (!normalizedAssetAccountId) return null
+
+  if (integration.provider === 'Futu') {
+    if (!integration.websocket || typeof integration.websocket !== 'object') return null
+    const websocket = integration.websocket as {
+      host?: unknown
+      port?: unknown
+      key?: unknown
+    }
+    return {
+      assetAccountId: normalizedAssetAccountId,
+      provider: 'Futu',
+      websocket: {
+        host: normalizeSyncHost(websocket.host),
+        port: normalizeSyncPort(websocket.port),
+        ...(typeof websocket.key === 'string' && websocket.key.trim()
+          ? { key: websocket.key.trim().slice(0, 512) }
+          : {})
+      }
+    }
+  }
+
+  if (integration.provider === 'Ibkr') {
+    if (!integration.gateway || typeof integration.gateway !== 'object') return null
+    const gateway = integration.gateway as { host?: unknown; port?: unknown }
+    return {
+      assetAccountId: normalizedAssetAccountId,
+      provider: 'Ibkr',
+      gateway: {
+        host: normalizeIbkrGatewayHost(gateway.host),
+        port: normalizeIbkrGatewayPort(gateway.port)
+      }
+    }
+  }
+
+  if (integration.provider === 'Okx' || integration.provider === 'Binance') {
+    if (!integration.api || typeof integration.api !== 'object') return null
+    const api = integration.api as {
       apiKey?: unknown
       secretKey?: unknown
       passphrase?: unknown
@@ -178,49 +235,55 @@ function normalizeSyncConfig(
       !api.apiKey.trim() ||
       typeof api.secretKey !== 'string' ||
       !api.secretKey ||
-      (type === 'Okx' &&
+      (integration.provider === 'Okx' &&
         (typeof api.passphrase !== 'string' || !api.passphrase))
     ) {
-      return undefined
+      return null
+    }
+    if (integration.provider === 'Okx') {
+      return {
+        assetAccountId: normalizedAssetAccountId,
+        provider: 'Okx',
+        api: {
+          apiKey: api.apiKey.trim().slice(0, 256),
+          secretKey: api.secretKey.slice(0, 512),
+          passphrase: (api.passphrase as string).slice(0, 256)
+        }
+      }
     }
     return {
-      interval: normalizeSyncInterval(sync.interval),
+      assetAccountId: normalizedAssetAccountId,
+      provider: 'Binance',
       api: {
         apiKey: api.apiKey.trim().slice(0, 256),
-        secretKey: api.secretKey.slice(0, 512),
-        ...(type === 'Okx' && typeof api.passphrase === 'string'
-          ? { passphrase: api.passphrase.slice(0, 256) }
-          : {})
-      },
-      ...(lastSyncedAt ? { lastSyncedAt } : {})
+        secretKey: api.secretKey.slice(0, 512)
+      }
     }
   }
 
-  if (type === 'Ibkr') {
-    if (!sync.gateway || typeof sync.gateway !== 'object') return undefined
-    const gateway = sync.gateway as { host?: unknown; port?: unknown }
-    return {
-      interval: normalizeSyncInterval(sync.interval),
-      gateway: {
-        host: normalizeIbkrGatewayHost(gateway.host),
-        port: normalizeIbkrGatewayPort(gateway.port)
-      },
-      ...(lastSyncedAt ? { lastSyncedAt } : {})
-    }
-  }
+  return null
+}
 
-  if (!sync.websocket || typeof sync.websocket !== 'object') return undefined
-  const websocket = sync.websocket as { host?: unknown; port?: unknown; key?: unknown }
-  return {
-    interval: normalizeSyncInterval(sync.interval),
-    websocket: {
-      host: normalizeSyncHost(websocket.host),
-      port: normalizeSyncPort(websocket.port),
-      ...(typeof websocket.key === 'string' && websocket.key.trim()
-        ? { key: websocket.key.trim() }
-        : {})
-    },
-    ...(lastSyncedAt ? { lastSyncedAt } : {})
+function normalizeStoredIntegrationData(input: unknown): IntegrationData | null {
+  if (!input || typeof input !== 'object') return null
+  const value = input as { version?: unknown; integrations?: unknown }
+  if (value.version !== 1 || !Array.isArray(value.integrations)) return null
+
+  const usedAssetAccountIds = new Set<string>()
+  const integrations = value.integrations.flatMap((integration) => {
+    const normalized = normalizeIntegration(integration)
+    if (!normalized || usedAssetAccountIds.has(normalized.assetAccountId)) return []
+    usedAssetAccountIds.add(normalized.assetAccountId)
+    return [normalized]
+  })
+  return { version: 1, integrations }
+}
+
+function parseStoredIntegrationData(raw: string): IntegrationData | null {
+  try {
+    return normalizeStoredIntegrationData(JSON.parse(raw))
+  } catch {
+    return null
   }
 }
 
@@ -303,8 +366,9 @@ function normalizeStoredData(input: unknown): AppData | null {
     snapshots?: unknown
   }
   if (
-    (value.version !== 1 && value.version !== 2) ||
-    !Array.isArray(value.productAccounts)
+    value.version !== 1 ||
+    !Array.isArray(value.productAccounts) ||
+    !Array.isArray(value.snapshots)
   ) {
     return null
   }
@@ -362,20 +426,19 @@ function normalizeStoredData(input: unknown): AppData | null {
           typeof storedAssetAccount.id !== 'string' ||
           typeof storedAssetAccount.name !== 'string' ||
           !type ||
+          typeof storedAssetAccount.holderId !== 'string' ||
+          !usedHolderIds.has(storedAssetAccount.holderId) ||
           !Array.isArray(storedAssetAccount.positions)
         ) {
           return []
         }
-        const sync = normalizeSyncConfig(storedAssetAccount.sync, type)
+        const sync = normalizeAssetAccountSync(storedAssetAccount.sync, type)
         return [
           {
             id: storedAssetAccount.id,
             name: normalizeAssetAccountName(storedAssetAccount.name),
             type,
-            ...(typeof storedAssetAccount.holderId === 'string' &&
-            usedHolderIds.has(storedAssetAccount.holderId)
-              ? { holderId: storedAssetAccount.holderId }
-              : {}),
+            holderId: storedAssetAccount.holderId,
             ...(sync ? { sync } : {}),
             positions: storedAssetAccount.positions.flatMap((position) => {
               const normalized = normalizeStoredPosition(position)
@@ -458,8 +521,7 @@ function normalizeStoredData(input: unknown): AppData | null {
 
   const productAccountIds = new Set(productAccounts.map((account) => account.id))
   const usedSnapshotIds = new Set<string>()
-  const snapshots = value.version === 2 && Array.isArray(value.snapshots)
-    ? value.snapshots.flatMap((snapshot) => {
+  const snapshots = value.snapshots.flatMap((snapshot) => {
         if (!snapshot || typeof snapshot !== 'object') return []
         const storedSnapshot = snapshot as {
           id?: unknown
@@ -482,7 +544,8 @@ function normalizeStoredData(input: unknown): AppData | null {
         const normalizedAccountData = normalizeStoredData({
           version: 1,
           activeProductAccountId: storedSnapshot.productAccountId,
-          productAccounts: [storedSnapshot.account]
+          productAccounts: [storedSnapshot.account],
+          snapshots: []
         })
         const account = normalizedAccountData?.productAccounts[0]
         if (!account || account.id !== storedSnapshot.productAccountId) return []
@@ -496,10 +559,9 @@ function normalizeStoredData(input: unknown): AppData | null {
           ...(exchangeRates ? { exchangeRates } : {})
         }]
       })
-    : []
 
   snapshots.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-  return { version: 2, activeProductAccountId, productAccounts, snapshots }
+  return { version: 1, activeProductAccountId, productAccounts, snapshots }
 }
 
 function parseStoredData(raw: string): AppData | null {
@@ -544,59 +606,90 @@ function isValidBackupSync(value: unknown, type: AssetAccountType): boolean {
     return false
   }
   if (!value || typeof value !== 'object') return false
-  const sync = value as Partial<SyncConfig>
-  if (
-    !Number.isInteger(sync.interval) ||
-    sync.interval === undefined ||
-    sync.interval < 5 ||
-    sync.interval > 3600 ||
-    (sync.lastSyncedAt !== undefined &&
-      (typeof sync.lastSyncedAt !== 'string' ||
-        !Number.isFinite(Date.parse(sync.lastSyncedAt))))
-  ) {
-    return false
-  }
-  if (type === 'Futu') {
-    return Boolean(
-      sync.websocket &&
-        typeof sync.websocket.host === 'string' &&
-        sync.websocket.host.trim() &&
-        Number.isInteger(sync.websocket.port) &&
-        sync.websocket.port >= 1 &&
-        sync.websocket.port <= 65535 &&
-        (sync.websocket.key === undefined || typeof sync.websocket.key === 'string')
-    )
-  }
-  if (type === 'Ibkr') {
-    return Boolean(
-      sync.gateway &&
-        typeof sync.gateway.host === 'string' &&
-        ['127.0.0.1', 'localhost', '::1'].includes(
-          sync.gateway.host.trim().toLowerCase().replace(/^\[|\]$/g, '')
-        ) &&
-        Number.isInteger(sync.gateway.port) &&
-        sync.gateway.port >= 1 &&
-        sync.gateway.port <= 65535
-    )
-  }
-  if (type === 'Binance') {
-    return Boolean(
-      sync.api &&
-        typeof sync.api.apiKey === 'string' &&
-        sync.api.apiKey.trim() &&
-        typeof sync.api.secretKey === 'string' &&
-        sync.api.secretKey
-    )
-  }
-  return Boolean(
-    sync.api &&
-      typeof sync.api.apiKey === 'string' &&
-      sync.api.apiKey.trim() &&
-      typeof sync.api.secretKey === 'string' &&
-      sync.api.secretKey &&
-      typeof sync.api.passphrase === 'string' &&
-      sync.api.passphrase
+  const sync = value as Partial<AssetAccountSync>
+  const hasValidLastSyncedAt =
+    sync.lastSyncedAt === undefined ||
+    (typeof sync.lastSyncedAt === 'string' &&
+      Number.isFinite(Date.parse(sync.lastSyncedAt)))
+  return (
+    Number.isInteger(sync.interval) &&
+    sync.interval !== undefined &&
+    sync.interval >= 5 &&
+    sync.interval <= 3600 &&
+    hasValidLastSyncedAt
   )
+}
+
+function stripIntegrationFields(account: ProductAccount): ProductAccount {
+  return {
+    ...structuredClone(account),
+    assetAccounts: account.assetAccounts.map((assetAccount) => ({
+      id: assetAccount.id,
+      name: assetAccount.name,
+      type: assetAccount.type,
+      holderId: assetAccount.holderId,
+      ...(assetAccount.sync ? { sync: structuredClone(assetAccount.sync) } : {}),
+      positions: structuredClone(assetAccount.positions)
+    }))
+  }
+}
+
+function sanitizeSnapshot(snapshot: PortfolioSnapshot): PortfolioSnapshot {
+  return {
+    ...structuredClone(snapshot),
+    account: stripIntegrationFields(snapshot.account)
+  }
+}
+
+function sanitizeAccountBackup(
+  account: ProductAccount,
+  snapshots: PortfolioSnapshot[]
+): AccountBackup {
+  return {
+    account: stripIntegrationFields(account),
+    snapshots: snapshots.map(sanitizeSnapshot)
+  }
+}
+
+function reconcileIntegrations(
+  data: AppData,
+  integrationData: IntegrationData
+): { data: AppData; integrationData: IntegrationData } {
+  const accountTypes = new Map(
+    data.productAccounts.flatMap((productAccount) =>
+      productAccount.assetAccounts.map(
+        (assetAccount) => [assetAccount.id, assetAccount.type] as const
+      )
+    )
+  )
+  const integrations = integrationData.integrations.filter(
+    (integration) => accountTypes.get(integration.assetAccountId) === integration.provider
+  )
+  const integratedAccountIds = new Set(
+    integrations.map((integration) => integration.assetAccountId)
+  )
+  return {
+    data: {
+      ...data,
+      productAccounts: data.productAccounts.map((productAccount) => ({
+        ...productAccount,
+        assetAccounts: productAccount.assetAccounts.map((assetAccount) => {
+          if (integratedAccountIds.has(assetAccount.id)) {
+            return assetAccount.sync
+              ? assetAccount
+              : {
+                  ...assetAccount,
+                  sync: { interval: DEFAULT_SYNC_INTERVAL }
+                }
+          }
+          return assetAccount.sync
+            ? { ...assetAccount, sync: undefined }
+            : assetAccount
+        })
+      }))
+    },
+    integrationData: { version: 1, integrations }
+  }
 }
 
 function isValidBackupAccount(value: unknown): boolean {
@@ -653,9 +746,8 @@ function isValidBackupAccount(value: unknown): boolean {
       typeof assetAccount.name !== 'string' ||
       !assetAccount.name.trim() ||
       !type ||
-      (assetAccount.holderId !== undefined &&
-        (typeof assetAccount.holderId !== 'string' ||
-          !holderIds.has(assetAccount.holderId))) ||
+      typeof assetAccount.holderId !== 'string' ||
+      !holderIds.has(assetAccount.holderId) ||
       !Array.isArray(assetAccount.positions) ||
       !assetAccount.positions.every((position) => {
         if (!isValidBackupPosition(position) || positionIds.has(position.id)) return false
@@ -735,13 +827,13 @@ export function createAccountBackup(
   account: ProductAccount,
   snapshots: PortfolioSnapshot[] = []
 ): string {
+  const backup = sanitizeAccountBackup(account, snapshots)
   return JSON.stringify(
     {
       format: 'chromie-account',
-      version: 2,
+      version: 1,
       exportedAt: new Date().toISOString(),
-      account,
-      snapshots
+      ...backup
     },
     null,
     2
@@ -759,7 +851,7 @@ export function parseAccountBackup(raw: string): AccountBackup | null {
     }
     if (
       backup.format !== 'chromie-account' ||
-      (backup.version !== 1 && backup.version !== 2) ||
+      backup.version !== 1 ||
       typeof backup.exportedAt !== 'string' ||
       !Number.isFinite(Date.parse(backup.exportedAt)) ||
       !isValidBackupAccount(backup.account)
@@ -768,7 +860,7 @@ export function parseAccountBackup(raw: string): AccountBackup | null {
     }
     const account = backup.account as ProductAccount
     const usedSnapshotIds = new Set<string>()
-    const rawSnapshots = backup.version === 2 ? backup.snapshots : []
+    const rawSnapshots = backup.snapshots
     if (
       !Array.isArray(rawSnapshots) ||
       !rawSnapshots.every((snapshot) =>
@@ -778,7 +870,7 @@ export function parseAccountBackup(raw: string): AccountBackup | null {
       return null
     }
     const normalized = normalizeStoredData({
-      version: 2,
+      version: 1,
       activeProductAccountId: account.id,
       productAccounts: [account],
       snapshots: rawSnapshots
@@ -794,10 +886,14 @@ export function parseAccountBackup(raw: string): AccountBackup | null {
 type PortfolioDataUpdater = (
   update: AppData | ((current: AppData) => AppData)
 ) => void
+type IntegrationDataUpdater = (
+  update: IntegrationData | ((current: IntegrationData) => IntegrationData)
+) => void
 
 function createPortfolioOperations(
   data: AppData,
-  setData: PortfolioDataUpdater
+  setData: PortfolioDataUpdater,
+  setIntegrationData: IntegrationDataUpdater
 ) {
   const activeProductAccount =
     data.productAccounts.find((account) => account.id === data.activeProductAccountId) ?? null
@@ -806,6 +902,25 @@ function createPortfolioOperations(
         (snapshot) => snapshot.productAccountId === activeProductAccount.id
       )
     : []
+
+  function setAssetAccountIntegration(
+    assetAccountId: string,
+    integration: AssetAccountIntegration | null
+  ): void {
+    setIntegrationData((current) => ({
+      ...current,
+      integrations: integration
+        ? [
+            ...current.integrations.filter(
+              (item) => item.assetAccountId !== assetAccountId
+            ),
+            integration
+          ]
+        : current.integrations.filter(
+            (item) => item.assetAccountId !== assetAccountId
+          )
+    }))
+  }
 
   function createSnapshot(
     productAccountId: string,
@@ -868,6 +983,14 @@ function createPortfolioOperations(
       usedHolderIds.add(id)
       return [{ id, name }]
     })
+    const account = data.productAccounts.find((item) => item.id === id)
+    if (
+      account?.assetAccounts.some(
+        (assetAccount) => !usedHolderIds.has(assetAccount.holderId)
+      )
+    ) {
+      throw new Error('仍有资产账户属于被删除的持有人')
+    }
     setData((current) => ({
       ...current,
       productAccounts: current.productAccounts.map((account) =>
@@ -883,14 +1006,7 @@ function createPortfolioOperations(
                 normalizeExchangeRateRefreshInterval(
                   input.exchangeRateRefreshIntervalMinutes
                 ),
-              holders,
-              assetAccounts: account.assetAccounts.map((assetAccount) => ({
-                ...assetAccount,
-                holderId:
-                  assetAccount.holderId && usedHolderIds.has(assetAccount.holderId)
-                    ? assetAccount.holderId
-                    : undefined
-              }))
+              holders
             }
           : account
       )
@@ -898,6 +1014,11 @@ function createPortfolioOperations(
   }
 
   function deleteProductAccount(id: string): void {
+    const deletedAssetAccountIds = new Set(
+      data.productAccounts
+        .find((account) => account.id === id)
+        ?.assetAccounts.map((assetAccount) => assetAccount.id) ?? []
+    )
     setData((current) => {
       const productAccounts = current.productAccounts.filter((account) => account.id !== id)
       return {
@@ -912,6 +1033,12 @@ function createPortfolioOperations(
         )
       }
     })
+    setIntegrationData((current) => ({
+      ...current,
+      integrations: current.integrations.filter(
+        (integration) => !deletedAssetAccountIds.has(integration.assetAccountId)
+      )
+    }))
   }
 
   function createPositionGroup(
@@ -1052,17 +1179,30 @@ function createPortfolioOperations(
 
   function createAssetAccount(productAccountId: string, input: AssetAccountInput): string {
     const type = normalizeAssetAccountType(input.type) ?? 'Futu'
-    const sync = normalizeSyncConfig(input.sync, type)
-    const holderId = data.productAccounts
-      .find((account) => account.id === productAccountId)
-      ?.holders.some((holder) => holder.id === input.holderId)
-      ? input.holderId
+    const productAccount = data.productAccounts.find(
+      (account) => account.id === productAccountId
+    )
+    if (!productAccount) throw new Error('没有找到对应的账户')
+    if (!productAccount.holders.some((holder) => holder.id === input.holderId)) {
+      throw new Error('请选择有效的持有人')
+    }
+    const assetAccountId = createId()
+    const integration = input.integration
+      ? normalizeIntegration(input.integration, assetAccountId)
+      : null
+    if (input.integration && (!integration || integration.provider !== type)) {
+      throw new Error('同步配置与资产账户类型不匹配')
+    }
+    const sync = integration
+      ? (normalizeAssetAccountSync(input.sync, type) ?? {
+          interval: DEFAULT_SYNC_INTERVAL
+        })
       : undefined
     const assetAccount: AssetAccount = {
-      id: createId(),
+      id: assetAccountId,
       name: normalizeAssetAccountName(input.name),
       type,
-      ...(holderId ? { holderId } : {}),
+      holderId: input.holderId,
       ...(sync ? { sync } : {}),
       positions: []
     }
@@ -1074,6 +1214,7 @@ function createPortfolioOperations(
           : account
       )
     }))
+    setAssetAccountIntegration(assetAccount.id, integration)
     return assetAccount.id
   }
 
@@ -1083,11 +1224,26 @@ function createPortfolioOperations(
     input: AssetAccountInput
   ): void {
     const type = normalizeAssetAccountType(input.type) ?? 'Futu'
-    const sync = normalizeSyncConfig(input.sync, type)
-    const holderId = data.productAccounts
-      .find((account) => account.id === productAccountId)
-      ?.holders.some((holder) => holder.id === input.holderId)
-      ? input.holderId
+    const productAccount = data.productAccounts.find(
+      (account) => account.id === productAccountId
+    )
+    if (!productAccount) throw new Error('没有找到对应的账户')
+    if (!productAccount.assetAccounts.some((account) => account.id === assetAccountId)) {
+      throw new Error('没有找到对应的资产账户')
+    }
+    if (!productAccount.holders.some((holder) => holder.id === input.holderId)) {
+      throw new Error('请选择有效的持有人')
+    }
+    const integration = input.integration
+      ? normalizeIntegration(input.integration, assetAccountId)
+      : null
+    if (input.integration && (!integration || integration.provider !== type)) {
+      throw new Error('同步配置与资产账户类型不匹配')
+    }
+    const sync = integration
+      ? (normalizeAssetAccountSync(input.sync, type) ?? {
+          interval: DEFAULT_SYNC_INTERVAL
+        })
       : undefined
     setData((current) => ({
       ...current,
@@ -1101,7 +1257,7 @@ function createPortfolioOperations(
                       ...assetAccount,
                       name: normalizeAssetAccountName(input.name),
                       type,
-                      holderId,
+                      holderId: input.holderId,
                       sync
                     }
                   : assetAccount
@@ -1110,6 +1266,7 @@ function createPortfolioOperations(
           : account
       )
     }))
+    setAssetAccountIntegration(assetAccountId, integration)
   }
 
   function deleteAssetAccount(productAccountId: string, assetAccountId: string): void {
@@ -1136,6 +1293,7 @@ function createPortfolioOperations(
         }
       })
     }))
+    setAssetAccountIntegration(assetAccountId, null)
   }
 
   function savePosition(
@@ -1316,9 +1474,8 @@ function createPortfolioOperations(
       assetAccounts: input.assetAccounts.map((assetAccount) => ({
         ...assetAccount,
         id: createId(),
-        holderId: assetAccount.holderId
-          ? holderIdMap.get(assetAccount.holderId)
-          : undefined,
+        holderId: holderIdMap.get(assetAccount.holderId)!,
+        sync: undefined,
         positions: assetAccount.positions.map((position) => ({
           ...position,
           id: positionIdMap.get(position.id)!
@@ -1378,53 +1535,108 @@ function createPortfolioOperations(
 }
 
 export interface PortfolioOperations {
-  load(legacyContent?: unknown): Promise<PortfolioLoadResponse>
-  execute(command: PortfolioCommand): Promise<PortfolioCommandResponse>
+  load(): Promise<PortfolioLoadResponse>
+  execute(
+    command: PortfolioCommand,
+    options?: PortfolioExecuteOptions
+  ): Promise<PortfolioCommandResponse>
   inspectBackup(content: unknown): AccountBackup | null
   exportActiveAccount(): Promise<string>
+  subscribe(listener: PortfolioChangeListener): () => void
+}
+
+export type PortfolioExecuteOptions = {
+  expectedRevision?: string
+}
+
+export type PortfolioChangeListener = (revision: string) => void
+
+export class PortfolioRevisionConflictError extends Error {
+  constructor(
+    readonly expectedRevision: string,
+    readonly actualRevision: string
+  ) {
+    super('资产数据已发生变化，请重新读取后再试')
+    this.name = 'PortfolioRevisionConflictError'
+  }
 }
 
 export class PortfolioService implements PortfolioOperations {
   private data: AppData = structuredClone(EMPTY_PORTFOLIO_DATA)
+  private integrationData: IntegrationData = structuredClone(EMPTY_INTEGRATION_DATA)
   private initialized = false
   private pending: Promise<void> = Promise.resolve()
+  private readonly revisionEpoch = crypto.randomUUID()
+  private revisionCounter = 0
+  private readonly listeners = new Set<PortfolioChangeListener>()
 
-  constructor(private readonly repository: PortfolioRepository) {}
+  constructor(
+    private readonly repository: PortfolioRepository,
+    private readonly integrationRepository: IntegrationRepository
+  ) {}
 
-  load(legacyContent?: unknown): Promise<PortfolioLoadResponse> {
+  load(): Promise<PortfolioLoadResponse> {
     return this.runExclusive(async () => {
       if (this.initialized) {
-        return { data: structuredClone(this.data), migratedLegacyData: false }
+        return {
+          revision: this.currentRevision(),
+          data: structuredClone(this.data),
+          integrations: structuredClone(this.integrationData.integrations)
+        }
       }
 
-      const storedContent = await this.repository.load()
+      const [storedContent, storedIntegrationContent] = await Promise.all([
+        this.repository.load(),
+        this.integrationRepository.load()
+      ])
       const storedData = storedContent ? parseStoredData(storedContent) : null
-      const legacyData =
-        !storedContent && typeof legacyContent === 'string'
-          ? parseStoredData(legacyContent)
-          : null
-
-      const loadedData = structuredClone(
-        storedData ?? legacyData ?? EMPTY_PORTFOLIO_DATA
+      const storedIntegrationData = storedIntegrationContent
+        ? parseStoredIntegrationData(storedIntegrationContent)
+        : null
+      const reconciled = reconcileIntegrations(
+        structuredClone(storedData ?? EMPTY_PORTFOLIO_DATA),
+        structuredClone(storedIntegrationData ?? EMPTY_INTEGRATION_DATA)
       )
-      if (legacyData) await this.persist(loadedData)
-      this.data = loadedData
+      this.data = reconciled.data
+      this.integrationData = reconciled.integrationData
       this.initialized = true
 
       return {
+        revision: this.currentRevision(),
         data: structuredClone(this.data),
-        migratedLegacyData: Boolean(legacyData)
+        integrations: structuredClone(this.integrationData.integrations)
       }
     })
   }
 
-  execute(command: PortfolioCommand): Promise<PortfolioCommandResponse> {
+  execute(
+    command: PortfolioCommand,
+    options: PortfolioExecuteOptions = {}
+  ): Promise<PortfolioCommandResponse> {
     return this.runExclusive(async () => {
       await this.initialize()
+      const currentRevision = this.currentRevision()
+      if (
+        options.expectedRevision !== undefined &&
+        options.expectedRevision !== currentRevision
+      ) {
+        throw new PortfolioRevisionConflictError(
+          options.expectedRevision,
+          currentRevision
+        )
+      }
       let nextData = this.data
-      const operations = createPortfolioOperations(this.data, (update) => {
-        nextData = typeof update === 'function' ? update(nextData) : update
-      })
+      let nextIntegrationData = this.integrationData
+      const operations = createPortfolioOperations(
+        this.data,
+        (update) => {
+          nextData = typeof update === 'function' ? update(nextData) : update
+        },
+        (update) => {
+          nextIntegrationData =
+            typeof update === 'function' ? update(nextIntegrationData) : update
+        }
+      )
       let result: string | null | undefined
 
       switch (command.type) {
@@ -1528,10 +1740,35 @@ export class PortfolioService implements PortfolioOperations {
           throw new Error('不支持的资产命令')
       }
 
-      await this.persist(nextData)
+      if (
+        typeof result === 'string' &&
+        (command.type === 'save-position' ||
+          command.type === 'set-position-group-positions')
+      ) {
+        return {
+          revision: currentRevision,
+          data: structuredClone(this.data),
+          integrations: structuredClone(this.integrationData.integrations),
+          result
+        }
+      }
+
+      await this.persist(nextData, nextIntegrationData)
       this.data = nextData
+      this.integrationData = nextIntegrationData
+      this.revisionCounter += 1
+      const revision = this.currentRevision()
+      this.listeners.forEach((listener) => {
+        try {
+          listener(revision)
+        } catch {
+          // A transport listener must not break a committed portfolio update.
+        }
+      })
       return {
+        revision,
         data: structuredClone(this.data),
+        integrations: structuredClone(this.integrationData.integrations),
         ...(result === undefined ? {} : { result })
       }
     })
@@ -1557,17 +1794,45 @@ export class PortfolioService implements PortfolioOperations {
     })
   }
 
+  subscribe(listener: PortfolioChangeListener): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
+
   private async initialize(): Promise<void> {
     if (this.initialized) return
-    const storedContent = await this.repository.load()
-    this.data = structuredClone(
-      storedContent ? (parseStoredData(storedContent) ?? EMPTY_PORTFOLIO_DATA) : EMPTY_PORTFOLIO_DATA
+    const [storedContent, storedIntegrationContent] = await Promise.all([
+      this.repository.load(),
+      this.integrationRepository.load()
+    ])
+    const reconciled = reconcileIntegrations(
+      structuredClone(
+        storedContent
+          ? (parseStoredData(storedContent) ?? EMPTY_PORTFOLIO_DATA)
+          : EMPTY_PORTFOLIO_DATA
+      ),
+      structuredClone(
+        storedIntegrationContent
+          ? (parseStoredIntegrationData(storedIntegrationContent) ??
+              EMPTY_INTEGRATION_DATA)
+          : EMPTY_INTEGRATION_DATA
+      )
     )
+    this.data = reconciled.data
+    this.integrationData = reconciled.integrationData
     this.initialized = true
   }
 
-  private persist(data: AppData): Promise<void> {
-    return this.repository.save(JSON.stringify(data))
+  private async persist(
+    data: AppData,
+    integrationData: IntegrationData
+  ): Promise<void> {
+    await this.repository.save(JSON.stringify(data))
+    await this.integrationRepository.save(JSON.stringify(integrationData))
+  }
+
+  private currentRevision(): string {
+    return `${this.revisionEpoch}:${this.revisionCounter}`
   }
 
   private runExclusive<T>(operation: () => Promise<T>): Promise<T> {

@@ -34,6 +34,7 @@ import {
   AssetAccountDialog,
   BackupErrorDialog,
   DeleteConfirmDialog,
+  ExchangeRateErrorDialog,
   ExportBackupDialog,
   ImportBackupDialog,
   GroupPositionsDialog,
@@ -84,10 +85,6 @@ import {
 import { cn } from '@/lib/utils'
 import { convertToAnchorCurrency, valuePositions } from '@/lib/valuation'
 import {
-  DEFAULT_FUTU_OPEND_HOST,
-  DEFAULT_FUTU_OPEND_PORT,
-  DEFAULT_IBKR_GATEWAY_HOST,
-  DEFAULT_IBKR_GATEWAY_PORT,
   DEFAULT_SYNC_INTERVAL,
   formatMoney,
   formatNumber,
@@ -171,28 +168,6 @@ function accountSyncInterval(account: AssetAccount): number {
     : DEFAULT_SYNC_INTERVAL
 }
 
-function accountSyncHost(account: AssetAccount): string {
-  return account.sync?.websocket?.host.trim() || DEFAULT_FUTU_OPEND_HOST
-}
-
-function accountSyncPort(account: AssetAccount): number {
-  const port = account.sync?.websocket?.port
-  return Number.isInteger(port) && port !== undefined && port >= 1 && port <= 65535
-    ? port
-    : DEFAULT_FUTU_OPEND_PORT
-}
-
-function accountIbkrGatewayHost(account: AssetAccount): string {
-  return account.sync?.gateway?.host.trim() || DEFAULT_IBKR_GATEWAY_HOST
-}
-
-function accountIbkrGatewayPort(account: AssetAccount): number {
-  const port = account.sync?.gateway?.port
-  return Number.isInteger(port) && port !== undefined && port >= 1 && port <= 65535
-    ? port
-    : DEFAULT_IBKR_GATEWAY_PORT
-}
-
 function formatAmount(value: number): string {
   return new Intl.NumberFormat('zh-CN', {
     minimumFractionDigits: 2,
@@ -251,7 +226,8 @@ function shortSnapshotHash(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0').slice(0, 7)
 }
 
-type ExchangeRateView = Pick<ExchangeRateState, 'snapshot' | 'status' | 'error'>
+type ExchangeRateView = Pick<ExchangeRateState, 'snapshot' | 'status' | 'error'> &
+  Partial<Pick<ExchangeRateState, 'refresh'>>
 
 function AccountTypeIcon({ type, className }: { type: string; className?: string }) {
   if (type === 'Futu') {
@@ -441,11 +417,13 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
   ) {
     rateItems.push({ label: 'HKD/CNY', value: cnyRate / hkdRate })
   }
+  const refreshing =
+    exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing'
   const rateStatus = exchangeRates.snapshot
-    ? `${exchangeRates.status === 'error' ? '使用缓存' : '最近同步'} ${formatLastSyncedAt(exchangeRates.snapshot.fetchedAt)}`
-    : exchangeRates.status === 'loading'
+    ? `${exchangeRates.status === 'error' ? '使用缓存' : refreshing ? '正在刷新，上次同步' : '最近同步'} ${formatLastSyncedAt(exchangeRates.snapshot.fetchedAt)}`
+    : refreshing
       ? '正在获取汇率'
-      : exchangeRates.error || '暂无汇率'
+      : '暂无汇率'
 
   return (
     <div
@@ -460,6 +438,20 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
       ))}
       {rateItems.length > 0 && <span className="text-border">·</span>}
       <span className="text-muted-foreground">{rateStatus}</span>
+      {exchangeRates.refresh && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="ml-auto size-7 shrink-0 text-muted-foreground"
+          disabled={refreshing}
+          aria-label={refreshing ? '正在刷新汇率' : '刷新汇率'}
+          title={refreshing ? '正在刷新汇率' : '刷新汇率'}
+          onClick={() => void exchangeRates.refresh?.()}
+        >
+          <RefreshCw className={cn('size-3.5', refreshing && 'animate-spin')} />
+        </Button>
+      )}
     </div>
   )
 }
@@ -479,9 +471,7 @@ function ValueSummaryCard({
     )
     const hint = valuation.missingCurrencies.length
       ? `缺少 ${valuation.missingCurrencies.join('、')} 汇率`
-      : valuation.totalAnchoredMarketValue === undefined
-        ? '填写持仓价格后显示'
-        : ''
+      : ''
 
     return {
       currency,
@@ -1907,13 +1897,22 @@ export function App(): React.JSX.Element {
     latestProductAccount?.exchangeRateRefreshIntervalMinutes,
     Boolean(latestProductAccount) && !selectedSnapshot
   )
+  const shownExchangeRateError = useRef('')
+  async function refreshLiveExchangeRates(): Promise<void> {
+    shownExchangeRateError.current = ''
+    await liveExchangeRates.refresh()
+  }
+  const liveExchangeRateView: ExchangeRateState = {
+    ...liveExchangeRates,
+    refresh: refreshLiveExchangeRates
+  }
   const exchangeRates: ExchangeRateView = selectedSnapshot
     ? {
         snapshot: selectedSnapshot.exchangeRates ?? null,
         status: selectedSnapshot.exchangeRates ? 'ready' : 'error',
         error: selectedSnapshot.exchangeRates ? '' : '快照中没有汇率数据'
       }
-    : liveExchangeRates
+    : liveExchangeRateView
   const [selectedAssetAccountId, setSelectedAssetAccountId] = useState<string | null>(null)
   const [selectedPositionGroupId, setSelectedPositionGroupId] = useState<string | null>(null)
   const [overviewMode, setOverviewMode] = useState<OverviewMode>('accounts')
@@ -1932,6 +1931,7 @@ export function App(): React.JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [syncStates, setSyncStates] = useState<Record<string, AccountSyncState>>({})
   const [syncErrorDialog, setSyncErrorDialog] = useState<SyncErrorDialogState>(null)
+  const [exchangeRateErrorDialog, setExchangeRateErrorDialog] = useState('')
   const [pendingImport, setPendingImport] = useState<PendingImport>(null)
   const [backupError, setBackupError] = useState('')
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -1959,7 +1959,33 @@ export function App(): React.JSX.Element {
     setSelectedSnapshotId(null)
     setSelectedAssetAccountId(null)
     setSelectedPositionGroupId(null)
+    setExchangeRateErrorDialog('')
+    shownExchangeRateError.current = ''
   }, [latestProductAccount?.id])
+
+  useEffect(() => {
+    if (!latestProductAccount || selectedSnapshot) {
+      setExchangeRateErrorDialog('')
+      return
+    }
+    if (liveExchangeRates.status === 'ready') {
+      shownExchangeRateError.current = ''
+      return
+    }
+    if (
+      liveExchangeRates.status === 'error' &&
+      liveExchangeRates.error &&
+      shownExchangeRateError.current !== liveExchangeRates.error
+    ) {
+      shownExchangeRateError.current = liveExchangeRates.error
+      setExchangeRateErrorDialog(liveExchangeRates.error)
+    }
+  }, [
+    latestProductAccount,
+    liveExchangeRates.error,
+    liveExchangeRates.status,
+    selectedSnapshot
+  ])
 
   async function syncAssetAccount(
     assetAccountId: string,
@@ -1991,67 +2017,15 @@ export function App(): React.JSX.Element {
       }
     }))
     try {
-      let result: { positions: PositionInput[]; syncedAt: string }
-      if (assetAccount.type === 'Futu') {
-        if (!window.desktop.futu?.syncPositions) {
-          throw new Error('同步组件尚未加载，请重启 Chromie')
-        }
-        if (!assetAccount.sync.websocket) {
-          throw new Error('请补充 Futu OpenD 配置')
-        }
-        result = await window.desktop.futu.syncPositions({
-          host: accountSyncHost(assetAccount),
-          port: accountSyncPort(assetAccount),
-          key: assetAccount.sync.websocket.key
-        })
-      } else if (assetAccount.type === 'Ibkr') {
-        if (!window.desktop.ibkr?.syncPositions) {
-          throw new Error('同步组件尚未加载，请重启 Chromie')
-        }
-        if (!assetAccount.sync.gateway) {
-          throw new Error('请补充 IBKR Client Portal Gateway 配置')
-        }
-        result = await window.desktop.ibkr.syncPositions({
-          host: accountIbkrGatewayHost(assetAccount),
-          port: accountIbkrGatewayPort(assetAccount)
-        })
-      } else if (assetAccount.type === 'Okx') {
-        if (!window.desktop.okx?.syncPositions) {
-          throw new Error('同步组件尚未加载，请重启 Chromie')
-        }
-        if (!assetAccount.sync.api?.passphrase) {
-          throw new Error('请补充 OKX API 配置')
-        }
-        result = await window.desktop.okx.syncPositions({
-          apiKey: assetAccount.sync.api.apiKey,
-          secretKey: assetAccount.sync.api.secretKey,
-          passphrase: assetAccount.sync.api.passphrase
-        })
-      } else if (assetAccount.type === 'Binance') {
-        if (!window.desktop.binance?.syncPositions) {
-          throw new Error('同步组件尚未加载，请重启 Chromie')
-        }
-        if (!assetAccount.sync.api) {
-          throw new Error('请补充币安 API 配置')
-        }
-        result = await window.desktop.binance.syncPositions({
-          apiKey: assetAccount.sync.api.apiKey,
-          secretKey: assetAccount.sync.api.secretKey
-        })
-      } else {
-        throw new Error('此资产账户不支持自动同步')
-      }
-      await portfolio.replacePositions(
+      const result = await portfolio.syncAssetAccount(
         latestProductAccount.id,
-        assetAccountId,
-        result.positions,
-        result.syncedAt
+        assetAccountId
       )
       setSyncStates((current) => ({
         ...current,
         [assetAccountId]: {
           status: 'success',
-          message: `已同步 ${result.positions.length} 项持仓`
+          message: `已同步 ${result.positionCount} 项持仓`
         }
       }))
       shownSyncErrors.current.delete(assetAccountId)
@@ -2087,24 +2061,7 @@ export function App(): React.JSX.Element {
                 {
                   id: account.id,
                   type: account.type,
-                  interval: accountSyncInterval(account),
-                  connection:
-                    account.type === 'Futu'
-                      ? {
-                          host: accountSyncHost(account),
-                          port: accountSyncPort(account),
-                          key: account.sync.websocket?.key ?? ''
-                        }
-                      : account.type === 'Ibkr'
-                        ? {
-                            host: accountIbkrGatewayHost(account),
-                            port: accountIbkrGatewayPort(account)
-                          }
-                        : {
-                            apiKey: account.sync.api?.apiKey ?? '',
-                            secretKey: account.sync.api?.secretKey ?? '',
-                            passphrase: account.sync.api?.passphrase ?? ''
-                          }
+                  interval: accountSyncInterval(account)
                 }
               ]
             : []
@@ -2806,7 +2763,7 @@ export function App(): React.JSX.Element {
         open={accountSettingsOpen}
         onOpenChange={setAccountSettingsOpen}
         account={activeProductAccount}
-        exchangeRates={liveExchangeRates}
+        exchangeRates={liveExchangeRateView}
         initialSection={accountSettingsSection}
         onSubmit={submitProductAccountSettings}
         onRequestDelete={() =>
@@ -2817,6 +2774,11 @@ export function App(): React.JSX.Element {
         open={assetDialog.open}
         onOpenChange={(open) => setAssetDialog((current) => ({ ...current, open }))}
         account={assetDialog.account}
+        integration={
+          assetDialog.account
+            ? portfolio.getAssetAccountIntegration(assetDialog.account.id)
+            : undefined
+        }
         holders={activeProductAccount.holders}
         onManageHolders={() => {
           setAccountSettingsSection('holders')
@@ -2855,6 +2817,13 @@ export function App(): React.JSX.Element {
         }}
         accountName={syncErrorDialog?.accountName ?? ''}
         message={syncErrorDialog?.message ?? ''}
+      />
+      <ExchangeRateErrorDialog
+        open={Boolean(exchangeRateErrorDialog)}
+        onOpenChange={(open) => {
+          if (!open) setExchangeRateErrorDialog('')
+        }}
+        message={exchangeRateErrorDialog}
       />
       <DeleteConfirmDialog
         open={deleteTarget !== null}

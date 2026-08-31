@@ -11,12 +11,17 @@ import type {
 } from '../../../shared/exchange-rates'
 import type { FutuSyncOptions, FutuSyncResult } from '../../../shared/futu'
 import type { IbkrSyncOptions, IbkrSyncResult } from '../../../shared/ibkr'
+import type {
+  McpAccessSettings,
+  McpConnectionSettings
+} from '../../../shared/mcp'
 import type { OkxSyncOptions, OkxSyncResult } from '../../../shared/okx'
 import type {
   AccountBackup,
   PortfolioCommand,
   PortfolioCommandResponse,
-  PortfolioLoadResponse
+  PortfolioLoadResponse,
+  PortfolioSyncResponse
 } from '../../../shared/portfolio'
 import type { ShareImageSaveResult } from '../../../shared/share-image'
 
@@ -41,8 +46,13 @@ declare global {
         fetch: (provider: ExchangeRateProvider) => Promise<ExchangeRateSnapshot>
       }
       portfolio?: {
-        load: (legacyContent?: string) => Promise<PortfolioLoadResponse>
+        load: () => Promise<PortfolioLoadResponse>
         execute: (command: PortfolioCommand) => Promise<PortfolioCommandResponse>
+        syncAssetAccount: (
+          accountId: string,
+          assetAccountId: string
+        ) => Promise<PortfolioSyncResponse>
+        onChanged: (listener: (revision: string) => void) => () => void
         inspectBackup: (content: string) => Promise<AccountBackup | null>
         exportActiveAccount: () => Promise<string>
       }
@@ -52,6 +62,12 @@ declare global {
       }
       shareImage?: {
         save: (dataUrl: string, accountName: string) => Promise<ShareImageSaveResult>
+      }
+      mcp?: {
+        loadSettings: () => Promise<McpConnectionSettings>
+        updateSettings: (
+          settings: McpAccessSettings
+        ) => Promise<McpConnectionSettings>
       }
     }
   }

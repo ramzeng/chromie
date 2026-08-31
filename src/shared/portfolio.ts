@@ -9,6 +9,10 @@ import {
 } from './exchange-rates'
 import { DEFAULT_FUTU_OPEND_HOST, DEFAULT_FUTU_OPEND_PORT } from './futu'
 import { DEFAULT_IBKR_GATEWAY_HOST, DEFAULT_IBKR_GATEWAY_PORT } from './ibkr'
+import type {
+  AssetAccountIntegration,
+  AssetAccountIntegrationInput
+} from './integrations'
 
 export type Market = 'CN' | 'HK' | 'US' | 'CC'
 export type AnchorCurrency = 'CNY' | 'HKD' | 'USD'
@@ -33,28 +37,8 @@ export type Position = {
   price?: number
 }
 
-export type WebSocketConfig = {
-  host: string
-  port: number
-  key?: string
-}
-
-export type ApiConfig = {
-  apiKey: string
-  secretKey: string
-  passphrase?: string
-}
-
-export type GatewayConfig = {
-  host: string
-  port: number
-}
-
-export type SyncConfig = {
+export type AssetAccountSync = {
   interval: number
-  websocket?: WebSocketConfig
-  gateway?: GatewayConfig
-  api?: ApiConfig
   lastSyncedAt?: string
 }
 
@@ -67,8 +51,8 @@ export type AssetAccount = {
   id: string
   name: string
   type: AssetAccountType
-  holderId?: string
-  sync?: SyncConfig
+  holderId: string
+  sync?: AssetAccountSync
   positions: Position[]
 }
 
@@ -98,7 +82,7 @@ export type PortfolioSnapshot = {
 }
 
 export type AppData = {
-  version: 2
+  version: 1
   activeProductAccountId: string | null
   productAccounts: ProductAccount[]
   snapshots: PortfolioSnapshot[]
@@ -121,7 +105,9 @@ export type ProductAccountSettingsInput = Pick<
 export type AssetAccountInput = Pick<
   AssetAccount,
   'name' | 'type' | 'holderId' | 'sync'
->
+> & {
+  integration?: AssetAccountIntegrationInput
+}
 export type PositionInput = Omit<Position, 'id'>
 export type PositionGroupInput = Pick<PositionGroup, 'name'>
 
@@ -207,17 +193,26 @@ export type PortfolioCommand =
     }
 
 export type PortfolioCommandResponse = {
+  revision: string
   data: AppData
+  integrations: AssetAccountIntegration[]
   result?: string | null
 }
 
 export type PortfolioLoadResponse = {
+  revision: string
   data: AppData
-  migratedLegacyData: boolean
+  integrations: AssetAccountIntegration[]
+}
+
+export type PortfolioSyncResponse = {
+  revision: string
+  positionCount: number
+  syncedAt: string
 }
 
 export const EMPTY_PORTFOLIO_DATA: AppData = {
-  version: 2,
+  version: 1,
   activeProductAccountId: null,
   productAccounts: [],
   snapshots: []

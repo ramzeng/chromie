@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 dependencies:
+  '@modelcontextprotocol/server':
+    specifier: ^2.0.0
+    version: 2.0.0
   '@radix-ui/react-alert-dialog':
     specifier: ^1.1.23
     version: 1.1.23(@types/react-dom@19.2.5)(@types/react@19.2.18)(react-dom@19.2.8)(react@19.2.8)
@@ -50,6 +53,9 @@ dependencies:
   tailwind-merge:
     specifier: ^3.3.1
     version: 3.6.0
+  zod:
+    specifier: ^4.5.4
+    version: 4.5.4
 
 devDependencies:
   '@tailwindcss/vite':
@@ -79,12 +85,15 @@ devDependencies:
   tailwindcss:
     specifier: ^4.1.12
     version: 4.3.3
+  tsx:
+    specifier: ^4.23.13
+    version: 4.23.13
   typescript:
     specifier: ^5.9.2
     version: 5.9.3
   vite:
     specifier: ^7.0.0
-    version: 7.3.6(@types/node@24.13.3)
+    version: 7.3.6(@types/node@24.13.3)(tsx@4.23.13)
 
 packages:
 
@@ -954,6 +963,21 @@ packages:
     transitivePeerDependencies:
       - supports-color
     dev: true
+
+  /@modelcontextprotocol/core@2.0.0:
+    resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
+    engines: {node: '>=20'}
+    dependencies:
+      zod: 4.5.4
+    dev: false
+
+  /@modelcontextprotocol/server@2.0.0:
+    resolution: {integrity: sha512-YhHWdHfpFMQfd0prsEnxKeS3Qz3ytIGmsS0sth4KDjnacIT7hxk6hXHkJ9KysxlkvTM+WZAtQbbcUhdoP4Hvtw==}
+    engines: {node: '>=20'}
+    dependencies:
+      '@modelcontextprotocol/core': 2.0.0
+      zod: 4.5.4
+    dev: false
 
   /@napi-rs/lzma-linux-x64-gnu@1.5.1:
     resolution: {integrity: sha512-oTXEIha4SsuXdTA4Iyskj0kpdx2yVXdhd75c2v3xGrHFfVMsbhTPZU/nMPL4sWKo4pBHm3aucLaqGlF696dTyQ==}
@@ -2075,7 +2099,7 @@ packages:
       '@tailwindcss/node': 4.3.3
       '@tailwindcss/oxide': 4.3.3
       tailwindcss: 4.3.3
-      vite: 7.3.6(@types/node@24.13.3)
+      vite: 7.3.6(@types/node@24.13.3)(tsx@4.23.13)
     dev: true
 
   /@types/babel__core@7.20.5:
@@ -2185,7 +2209,7 @@ packages:
       '@rolldown/pluginutils': 1.0.0-rc.3
       '@types/babel__core': 7.20.5
       react-refresh: 0.18.0
-      vite: 7.3.6(@types/node@24.13.3)
+      vite: 7.3.6(@types/node@24.13.3)(tsx@4.23.13)
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -2773,7 +2797,7 @@ packages:
       esbuild: 0.25.12
       magic-string: 0.30.21
       picocolors: 1.1.1
-      vite: 7.3.6(@types/node@24.13.3)
+      vite: 7.3.6(@types/node@24.13.3)(tsx@4.23.13)
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -4249,6 +4273,16 @@ packages:
   /tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  /tsx@4.23.13:
+    resolution: {integrity: sha512-BL5MGkRln6aDYhb0xbQlEAGw743BaZYWdbWtdJOBriYJboKgUUYCadFp2/FpBBZquBC/ezNBn7wMMPx7FDZUDw==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
+    dependencies:
+      esbuild: 0.28.2
+    optionalDependencies:
+      fsevents: 2.3.3
+    dev: true
+
   /type-fest@0.13.1:
     resolution: {integrity: sha512-34R7HTnG0XIJcBSn5XhDd7nNFPRcXYRZrBB2O2jdKqYODldSzBAqzsWoZYYvduky73toYS/ESqxPvkDf/F0XMg==}
     engines: {node: '>=10'}
@@ -4347,7 +4381,7 @@ packages:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
     dev: true
 
-  /vite@7.3.6(@types/node@24.13.3):
+  /vite@7.3.6(@types/node@24.13.3)(tsx@4.23.13):
     resolution: {integrity: sha512-4XP60spRGjSZFf1qYH+dJIkK2znL3zQfl9KkOV9MkkRR/3Dls0dxaBsQPTloEc5BLXWPL9vsOxopxyKoMmDueg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
@@ -4394,6 +4428,7 @@ packages:
       postcss: 8.5.26
       rollup: 4.63.0
       tinyglobby: 0.2.17
+      tsx: 4.23.13
     optionalDependencies:
       fsevents: 2.3.3
     dev: true
@@ -4490,3 +4525,7 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
     dev: true
+
+  /zod@4.5.4:
+    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+    dev: false

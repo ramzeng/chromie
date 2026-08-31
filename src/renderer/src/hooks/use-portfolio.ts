@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import type { ExchangeRateSnapshot } from '../../../shared/exchange-rates'
+import type { AssetAccountIntegration } from '../../../shared/integrations'
 import {
   EMPTY_PORTFOLIO_DATA,
   type AccountBackup,
@@ -15,8 +16,6 @@ import {
   type ProductAccountSettingsInput
 } from '../../../shared/portfolio'
 
-const LEGACY_PORTFOLIO_STORAGE_KEY = 'chromie.data.v1'
-
 function cleanIpcError(error: unknown): string {
   const rawMessage = error instanceof Error ? error.message : String(error)
   return rawMessage.replace(/^Error invoking remote method '[^']+': Error: /, '')
@@ -24,6 +23,8 @@ function cleanIpcError(error: unknown): string {
 
 export function usePortfolio() {
   const [data, setData] = useState<AppData>(() => structuredClone(EMPTY_PORTFOLIO_DATA))
+  const [integrations, setIntegrations] = useState<AssetAccountIntegration[]>([])
+  const [revision, setRevision] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -35,13 +36,11 @@ export function usePortfolio() {
         if (!window.desktop.portfolio) {
           throw new Error('资产数据组件尚未加载，请重启 Chromie')
         }
-        const legacyContent = window.localStorage.getItem(LEGACY_PORTFOLIO_STORAGE_KEY)
-        const response = await window.desktop.portfolio.load(legacyContent ?? undefined)
+        const response = await window.desktop.portfolio.load()
         if (!active) return
+        setRevision(response.revision)
         setData(response.data)
-        if (legacyContent !== null) {
-          window.localStorage.removeItem(LEGACY_PORTFOLIO_STORAGE_KEY)
-        }
+        setIntegrations(response.integrations)
       } catch (loadError) {
         if (active) setError(cleanIpcError(loadError))
       } finally {
@@ -55,12 +54,35 @@ export function usePortfolio() {
     }
   }, [])
 
+  useEffect(() => {
+    const portfolio = window.desktop.portfolio
+    if (!portfolio?.onChanged) return
+    let active = true
+    const unsubscribe = portfolio.onChanged(() => {
+      void portfolio.load().then((response) => {
+        if (!active) return
+        setRevision(response.revision)
+        setData(response.data)
+        setIntegrations(response.integrations)
+        setError('')
+      }).catch((loadError) => {
+        if (active) setError(cleanIpcError(loadError))
+      })
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [])
+
   async function execute(command: PortfolioCommand): Promise<string | null | undefined> {
     if (!window.desktop.portfolio) {
       throw new Error('资产数据组件尚未加载，请重启 Chromie')
     }
     const response = await window.desktop.portfolio.execute(command)
+    setRevision(response.revision)
     setData(response.data)
+    setIntegrations(response.integrations)
     setError('')
     return response.result
   }
@@ -76,9 +98,14 @@ export function usePortfolio() {
   return {
     loading,
     error,
+    revision,
     productAccounts: data.productAccounts,
     activeProductAccount,
     activeSnapshots,
+    getAssetAccountIntegration: (assetAccountId: string) =>
+      integrations.find(
+        (integration) => integration.assetAccountId === assetAccountId
+      ),
     setActiveProductAccount: (id: string) =>
       execute({ type: 'set-active-product-account', id }).then(() => undefined),
     createSnapshot: (
@@ -199,6 +226,18 @@ export function usePortfolio() {
         positions,
         lastSyncedAt
       }).then(() => undefined),
+    syncAssetAccount: async (
+      productAccountId: string,
+      assetAccountId: string
+    ) => {
+      if (!window.desktop.portfolio?.syncAssetAccount) {
+        throw new Error('资产同步组件尚未加载，请重启 Chromie')
+      }
+      return window.desktop.portfolio.syncAssetAccount(
+        productAccountId,
+        assetAccountId
+      )
+    },
     importAccount: (account: ProductAccount, snapshots: PortfolioSnapshot[] = []) =>
       execute({ type: 'import-account', account, snapshots }).then((result) => {
         if (typeof result !== 'string') throw new Error('导入账户失败')
