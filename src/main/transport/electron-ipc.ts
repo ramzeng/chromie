@@ -132,7 +132,6 @@ export function registerDesktopIpc(
     return mcp.updateAccessSettings({
       enabled: input.enabled === true,
       allowWrite: input.allowWrite === true,
-      allowSync: input.allowSync === true,
       allowDelete: input.allowDelete === true
     })
   })

@@ -1,18 +1,15 @@
 import {
   McpServer,
-  acceptedContent,
-  inputRequired,
-  inputResponse,
   type CallToolResult,
   type ToolAnnotations
 } from '@modelcontextprotocol/server'
 import { serveStdio, type StdioServerHandle } from '@modelcontextprotocol/server/stdio'
-import { z } from 'zod'
 
 import {
   MCP_TOOL_NAMES,
   mcpToolInputSchemas,
-  mcpToolOutputSchema,
+  mcpToolOutputSchemas,
+  type McpToolError,
   type McpToolName,
   type McpToolSuccess
 } from '../shared/mcp'
@@ -48,22 +45,22 @@ const updateAnnotations: ToolAnnotations = {
 const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   chromie_list_accounts: {
     title: '列出 Chromie 账户',
-    description: '列出本机 Chromie 中的账户摘要。',
+    description: '列出本机 Chromie 中的账户摘要；汇率只返回 CNY、HKD 和 USD。',
     annotations: readOnlyAnnotations
   },
   chromie_get_account: {
     title: '读取 Chromie 账户',
-    description: '读取账户最新版或指定历史快照。返回持有人、资产账户、持仓分组、可选持仓和脱敏同步状态。',
+    description: '读取账户最新版或指定历史快照。返回持有人、资产账户、持仓分组、可选持仓和脱敏同步状态；默认不内嵌持仓，汇率只返回 CNY、HKD 和 USD。',
     annotations: readOnlyAnnotations
   },
   chromie_get_overview: {
     title: '读取资产透视',
-    description: '按照资产账户、持仓分组或币种汇总市值、锚定市值、占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率。',
+    description: '按照资产账户、持仓分组或币种汇总市值、锚定市值、占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率，响应只包含 CNY、HKD 和 USD 汇率。',
     annotations: readOnlyAnnotations
   },
-  chromie_find_positions: {
-    title: '查找持仓',
-    description: '按关键词、市场、币种、资产账户、持有人或分组检索持仓，支持分页。',
+  chromie_search_positions: {
+    title: '搜索持仓',
+    description: '按关键词、市场、币种、资产账户、持有人或分组检索持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
     annotations: readOnlyAnnotations
   },
   chromie_list_snapshots: {
@@ -81,9 +78,14 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     description: '局部修改账户名称、锚定币种或汇率设置，不会覆盖持有人。',
     annotations: updateAnnotations
   },
-  chromie_save_holder: {
-    title: '保存持有人',
-    description: '创建持有人或修改已有持有人名称。mode 为 create 或 update。',
+  chromie_create_holder: {
+    title: '创建持有人',
+    description: '在指定 Chromie 账户中创建持有人。',
+    annotations: additiveAnnotations
+  },
+  chromie_update_holder: {
+    title: '更新持有人',
+    description: '修改已有持有人的名称。',
     annotations: updateAnnotations
   },
   chromie_create_asset_account: {
@@ -96,18 +98,28 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     description: '局部修改资产账户名称、类型或持有人。不会返回或修改同步凭据；已同步账户不能通过 MCP 改类型。',
     annotations: updateAnnotations
   },
-  chromie_save_position: {
-    title: '保存持仓',
-    description: '在手工资产账户中创建或局部更新持仓。价格传 null 可清除价格。自动同步账户为只读。',
+  chromie_create_position: {
+    title: '创建持仓',
+    description: '在手工资产账户中创建持仓。自动同步账户为只读。',
+    annotations: additiveAnnotations
+  },
+  chromie_update_position: {
+    title: '更新持仓',
+    description: '局部更新手工资产账户中的持仓。价格传 null 可清除价格。自动同步账户为只读。',
     annotations: updateAnnotations
   },
-  chromie_save_position_group: {
-    title: '保存持仓分组',
-    description: '创建持仓分组或修改已有分组名称。',
+  chromie_create_position_group: {
+    title: '创建持仓分组',
+    description: '在指定 Chromie 账户中创建持仓分组。',
+    annotations: additiveAnnotations
+  },
+  chromie_update_position_group: {
+    title: '更新持仓分组',
+    description: '修改已有持仓分组的名称。',
     annotations: updateAnnotations
   },
-  chromie_set_group_members: {
-    title: '设置分组持仓',
+  chromie_replace_position_group_members: {
+    title: '替换持仓分组成员',
     description: '完整替换一个持仓分组的成员；一项持仓最多属于一个分组。',
     annotations: updateAnnotations
   },
@@ -128,7 +140,7 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_refresh_exchange_rates: {
     title: '刷新汇率',
-    description: '从账户配置的汇率数据源刷新 Chromie 本机汇率缓存。',
+    description: '从账户配置的汇率数据源刷新 Chromie 本机汇率缓存；响应只返回 CNY、HKD 和 USD。',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -136,9 +148,9 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
       openWorldHint: true
     }
   },
-  chromie_delete_item: {
+  chromie_delete_portfolio_item: {
     title: '删除 Chromie 数据',
-    description: '删除账户、持有人、资产账户、持仓、持仓分组或快照。执行前会展示精确影响并请求用户确认。',
+    description: '删除账户、持有人、资产账户、持仓、持仓分组或快照。此操作无法撤销，Agent 应在调用前向用户确认。',
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
@@ -147,8 +159,6 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     }
   }
 }
-
-const confirmationSchema = z.object({ confirm: z.boolean() }).strict()
 
 function toolSuccess(value: unknown): CallToolResult {
   const result = value as McpToolSuccess
@@ -159,28 +169,38 @@ function toolSuccess(value: unknown): CallToolResult {
 }
 
 function toolError(error: unknown): CallToolResult {
-  if (error instanceof McpRemoteError) {
-    return {
-      content: [{
-        type: 'text',
-        text: `${error.code}: ${error.message}${error.retryable ? '（可重试）' : ''}`
-      }],
-      isError: true
-    }
-  }
+  const structuredContent: McpToolError = error instanceof McpRemoteError
+    ? {
+        ok: false,
+        error: {
+          code: error.code,
+          message: error.message,
+          retryable: error.retryable,
+          ...(error.details === undefined ? {} : { details: error.details })
+        }
+      }
+    : {
+        ok: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: error instanceof Error ? error.message : String(error),
+          retryable: false
+        }
+      }
   return {
     content: [{
       type: 'text',
-      text: error instanceof Error ? error.message : String(error)
+      text: `${structuredContent.error.code}: ${structuredContent.error.message}${structuredContent.error.retryable ? '（可重试）' : ''}`
     }],
+    structuredContent,
     isError: true
   }
 }
 
-function registerSimpleTool(
+function registerTool(
   server: McpServer,
   client: McpSocketClient,
-  name: Exclude<McpToolName, 'chromie_delete_item'>
+  name: McpToolName
 ): void {
   const definition = TOOL_DEFINITIONS[name]
   server.registerTool(
@@ -188,11 +208,15 @@ function registerSimpleTool(
     {
       ...definition,
       inputSchema: mcpToolInputSchemas[name],
-      outputSchema: mcpToolOutputSchema
+      outputSchema: mcpToolOutputSchemas[name]
     },
     async (argumentsValue: unknown) => {
       try {
-        return toolSuccess(await client.callTool(name, argumentsValue))
+        const result = mcpToolOutputSchemas[name].parse(
+          await client.callTool(name, argumentsValue)
+        )
+        if (!result.ok) throw new Error('Chromie MCP 返回了无效的成功结果')
+        return toolSuccess(result as McpToolSuccess)
       } catch (error) {
         return toolError(error)
       }
@@ -209,67 +233,7 @@ function buildServer(client: McpSocketClient): McpServer {
     }
   )
 
-  MCP_TOOL_NAMES
-    .filter((name): name is Exclude<McpToolName, 'chromie_delete_item'> =>
-      name !== 'chromie_delete_item'
-    )
-    .forEach((name) => registerSimpleTool(server, client, name))
-
-  const definition = TOOL_DEFINITIONS.chromie_delete_item
-  server.registerTool(
-    'chromie_delete_item',
-    {
-      ...definition,
-      inputSchema: mcpToolInputSchemas.chromie_delete_item,
-      outputSchema: mcpToolOutputSchema
-    },
-    async (argumentsValue, context) => {
-      const response = inputResponse(context.mcpReq.inputResponses, 'confirm')
-      if (response.kind === 'elicit' && response.action !== 'accept') {
-        return {
-          content: [{ type: 'text', text: '用户已取消删除操作' }],
-          isError: true
-        }
-      }
-      const confirmation = acceptedContent(
-        context.mcpReq.inputResponses,
-        'confirm',
-        confirmationSchema
-      )
-      if (confirmation) {
-        if (!confirmation.confirm) {
-          return {
-            content: [{ type: 'text', text: '用户未确认删除操作' }],
-            isError: true
-          }
-        }
-        try {
-          return toolSuccess(
-            await client.callTool('chromie_delete_item', argumentsValue, true)
-          )
-        } catch (error) {
-          return toolError(error)
-        }
-      }
-
-      try {
-        const preview = await client.previewDelete(argumentsValue) as {
-          title: string
-          description: string
-        }
-        return inputRequired({
-          inputRequests: {
-            confirm: inputRequired.elicit({
-              message: `${preview.title}\n\n${preview.description}`,
-              requestedSchema: confirmationSchema
-            })
-          }
-        })
-      } catch (error) {
-        return toolError(error)
-      }
-    }
-  )
+  MCP_TOOL_NAMES.forEach((name) => registerTool(server, client, name))
 
   return server
 }

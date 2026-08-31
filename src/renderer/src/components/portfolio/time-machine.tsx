@@ -100,7 +100,7 @@ export function TimeMachine({
         </Button>
       </header>
 
-      <section className="mt-6 overflow-hidden rounded-xl border border-border/70 bg-card">
+      <section className="mt-6 overflow-hidden rounded-lg border border-border/70 bg-card">
         <Table className="min-w-[800px]">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
@@ -132,7 +132,7 @@ export function TimeMachine({
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span
                         className={cn(
-                          'grid size-8 shrink-0 place-items-center rounded-lg',
+                          'grid size-8 shrink-0 place-items-center rounded-md',
                           row.kind === 'latest'
                             ? 'bg-secondary text-secondary-foreground'
                             : 'bg-muted text-muted-foreground'

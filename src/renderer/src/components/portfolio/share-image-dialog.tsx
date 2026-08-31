@@ -67,9 +67,9 @@ const DARK_CANVAS_PALETTE_FALLBACK: CanvasPalette = {
 } as const
 
 const CANVAS_RADIUS = {
-  small: 6,
-  medium: 10,
-  large: 14
+  small: 4,
+  medium: 6,
+  large: 10
 } as const
 
 function resolveCanvasPalette(): CanvasPalette {

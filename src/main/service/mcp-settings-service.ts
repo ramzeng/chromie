@@ -19,7 +19,6 @@ function normalizeSettings(value: unknown): McpAccessSettings {
   return {
     enabled,
     allowWrite,
-    allowSync: allowWrite && input.allowSync === true,
     allowDelete: allowWrite && input.allowDelete === true
   }
 }

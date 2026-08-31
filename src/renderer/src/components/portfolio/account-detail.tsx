@@ -1,5 +1,4 @@
 import {
-  CircleAlert,
   Download,
   Ellipsis,
   Folder,
@@ -25,8 +24,6 @@ import {
   formatLastSyncedAt,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -65,8 +62,7 @@ import {
 import { valuePositions } from '@/lib/valuation'
 
 export type AccountSyncState = {
-  status: 'syncing' | 'success' | 'error'
-  message: string
+  status: 'syncing'
 }
 
 function PositionTable({
@@ -103,7 +99,7 @@ function PositionTable({
   return (
     <section>
       <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
         <Table className="min-w-[900px] table-fixed">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
@@ -285,23 +281,6 @@ export function AssetAccountDetail({
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {!readOnly && account.sync && (
             <>
-              {syncState && (
-                <Badge
-                  variant={
-                    syncState.status === 'error'
-                      ? 'destructive'
-                      : syncState.status === 'success'
-                        ? 'default'
-                        : 'secondary'
-                  }
-                >
-                  {syncState.status === 'syncing'
-                    ? '同步中'
-                    : syncState.status === 'error'
-                      ? '同步失败'
-                      : syncState.message}
-                </Badge>
-              )}
               <span className="mr-1 text-xs tabular-nums text-muted-foreground">
                 {account.sync.lastSyncedAt
                   ? `最近同步 ${formatLastSyncedAt(account.sync.lastSyncedAt)}`
@@ -318,7 +297,7 @@ export function AssetAccountDetail({
                 ) : (
                   <RefreshCw data-icon="inline-start" />
                 )}
-                {syncState?.status === 'syncing' ? '同步中…' : '同步'}
+                同步
               </Button>
             </>
           )}
@@ -343,14 +322,6 @@ export function AssetAccountDetail({
           </Button>
         </div>
       </header>
-
-      {syncState?.status === 'error' && (
-        <Alert variant="destructive" className="mt-4">
-          <CircleAlert data-icon="inline-start" />
-          <AlertTitle>资产账户同步失败</AlertTitle>
-          <AlertDescription>{syncState.message}</AlertDescription>
-        </Alert>
-      )}
 
       <div className="mt-6 grid gap-6">
         <ValueSummaryCard
@@ -404,11 +375,7 @@ export function AssetAccountDetail({
                   ) : (
                     <Plus data-icon="inline-start" />
                   )}
-                  {account.sync
-                    ? syncState?.status === 'syncing'
-                      ? '同步中…'
-                      : '同步'
-                    : '添加持仓'}
+                  {account.sync ? '同步' : '添加持仓'}
                 </Button>
               )}
             </EmptyContent>
@@ -462,7 +429,7 @@ function GroupPositionTable({
   return (
     <section>
       <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
         <Table className="min-w-[1080px] table-fixed">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
@@ -608,7 +575,7 @@ export function PositionGroupDetail({
     <div className="mx-auto w-[calc(50%+36rem)] max-w-full px-4 pb-8 pt-4">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 flex-[1_1_20rem] items-center gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+          <span className="grid size-12 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
             <Folder className="size-5" />
           </span>
           <div className="min-w-0">

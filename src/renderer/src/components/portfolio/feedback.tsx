@@ -3,8 +3,7 @@ import {
   Download,
   History,
   Layers3,
-  Plus,
-  ShieldCheck
+  Plus
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -32,17 +31,6 @@ export function reportPortfolioError(error: unknown, title = '操作失败'): vo
   toast.error(title, { description: cleanErrorMessage(error) })
 }
 
-export function LocalMark() {
-  return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <span className="grid size-6 place-items-center rounded-md bg-muted text-muted-foreground">
-        <ShieldCheck data-icon="inline-start" className="size-3.5" />
-      </span>
-      <span>数据仅保存在本地</span>
-    </div>
-  )
-}
-
 export function EmptyProductAccount({
   onCreate,
   onImport,
@@ -57,8 +45,15 @@ export function EmptyProductAccount({
       <div className="window-drag absolute inset-x-0 top-0 h-12" />
       <Empty className="w-full max-w-lg border bg-card">
         <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <Layers3 data-icon="inline-start" />
+          <EmptyMedia className="relative mb-4 size-28" aria-hidden="true">
+            <span className="absolute inset-1 rounded-full border border-border/70" />
+            <span className="absolute inset-1 animate-[spin_8s_linear_infinite] rounded-full border border-transparent border-t-primary/60 motion-reduce:animate-none">
+              <span className="absolute -top-1 left-1/2 size-2 -translate-x-1/2 rounded-full bg-primary" />
+            </span>
+            <span className="absolute inset-5 animate-[spin_5s_linear_infinite_reverse] rounded-full border border-dashed border-border motion-reduce:animate-none" />
+            <span className="relative grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-background/50">
+              <Layers3 className="size-5 animate-pulse motion-reduce:animate-none" />
+            </span>
           </EmptyMedia>
           <EmptyTitle className="text-2xl">开始使用 Chromie</EmptyTitle>
           <EmptyDescription>创建你的第一个账户，或从已有备份继续管理本地资产。</EmptyDescription>
@@ -83,7 +78,6 @@ export function EmptyProductAccount({
               {importing ? '读取中…' : '导入账户'}
             </Button>
           </div>
-          <LocalMark />
         </EmptyContent>
       </Empty>
     </main>
@@ -126,7 +120,7 @@ export function AppLoadingSkeleton() {
           </div>
           <Skeleton className="mt-3 h-11 w-full" />
           <Skeleton className="mt-8 h-5 w-24" />
-          <div className="mt-3 overflow-hidden rounded-lg border p-4">
+          <div className="mt-3 overflow-hidden rounded-md border p-4">
             <Skeleton className="h-8 w-full" />
             {[0, 1, 2, 3].map((item) => (
               <Skeleton key={item} className="mt-3 h-10 w-full" />
@@ -178,18 +172,6 @@ export function SnapshotViewingAlert({
             返回最新版
           </Button>
         </AlertDescription>
-      </Alert>
-    </div>
-  )
-}
-
-export function PortfolioRefreshErrorAlert({ message }: { message: string }) {
-  return (
-    <div className="mx-auto w-[calc(50%+36rem)] max-w-full px-4 pt-4">
-      <Alert variant="destructive">
-        <CircleAlert data-icon="inline-start" />
-        <AlertTitle>资产数据刷新失败</AlertTitle>
-        <AlertDescription>已保留当前页面数据。{message}</AlertDescription>
       </Alert>
     </div>
   )

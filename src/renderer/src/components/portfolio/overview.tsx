@@ -1,5 +1,4 @@
 import {
-  CircleAlert,
   Download,
   Folder,
   RefreshCw,
@@ -15,8 +14,6 @@ import {
   formatLastSyncedAt,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -36,6 +33,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   formatMoney,
   type AssetAccount,
@@ -43,7 +41,6 @@ import {
   type PositionGroup,
   type ProductAccount
 } from '@/lib/portfolio'
-import { cn } from '@/lib/utils'
 import { convertToAnchorCurrency, valuePositions } from '@/lib/valuation'
 
 export type OverviewMode = 'accounts' | 'groups'
@@ -73,59 +70,17 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
   const refreshing =
     exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing'
   const rateStatus = exchangeRates.snapshot
-    ? `${exchangeRates.status === 'error' ? '使用缓存' : refreshing ? '正在刷新，上次同步' : '最近同步'} ${formatLastSyncedAt(exchangeRates.snapshot.fetchedAt)}`
+    ? `${refreshing ? '正在刷新，上次同步' : '最近同步'} ${formatLastSyncedAt(exchangeRates.snapshot.fetchedAt)}`
     : refreshing
       ? '正在获取汇率'
       : '暂无汇率'
 
-  if (exchangeRates.status === 'error') {
-    return (
-      <Alert variant={exchangeRates.snapshot ? 'default' : 'destructive'} className="mt-3">
-        <CircleAlert data-icon="inline-start" />
-        <AlertTitle className="flex items-center gap-2">
-          参考汇率
-          <Badge variant={exchangeRates.snapshot ? 'secondary' : 'destructive'}>
-            {exchangeRates.snapshot ? '使用缓存' : '获取失败'}
-          </Badge>
-        </AlertTitle>
-        <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          {rateItems.map((item) => (
-            <span key={item.label} className="tabular-nums text-foreground/80">
-              {item.label} {formatExchangeRate(item.value)}
-            </span>
-          ))}
-          <span className={cn(exchangeRates.snapshot && 'text-muted-foreground')}>
-            {exchangeRates.error || rateStatus}
-          </span>
-          {exchangeRates.refresh && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              disabled={refreshing}
-              aria-busy={refreshing}
-              onClick={() => void exchangeRates.refresh?.()}
-            >
-              {refreshing ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <RefreshCw data-icon="inline-start" />
-              )}
-              {refreshing ? '重试中…' : '重试'}
-            </Button>
-          )}
-        </AlertDescription>
-      </Alert>
-    )
-  }
-
   return (
     <div
-      className="mt-3 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border/70 bg-muted/25 px-4 py-2 text-xs"
+      className="mt-3 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border/70 bg-muted/25 px-4 py-2 text-xs"
       role="status"
     >
-      <Badge variant="secondary">参考汇率</Badge>
+      <span className="font-medium text-foreground">参考汇率</span>
       {refreshing && rateItems.length === 0 ? (
         <div className="flex flex-1 items-center gap-3">
           <Skeleton className="h-3 w-24" />
@@ -139,26 +94,28 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
           </span>
         ))
       )}
-      <Badge variant="outline">{rateStatus}</Badge>
-      {exchangeRates.refresh && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="ml-auto size-7 shrink-0 text-muted-foreground"
-          disabled={refreshing}
-          aria-busy={refreshing}
-          aria-label={refreshing ? '正在刷新汇率' : '刷新汇率'}
-          title={refreshing ? '正在刷新汇率' : '刷新汇率'}
-          onClick={() => void exchangeRates.refresh?.()}
-        >
-          {refreshing ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
-            <RefreshCw data-icon="inline-start" />
-          )}
-        </Button>
-      )}
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        <span className="text-muted-foreground">{rateStatus}</span>
+        {exchangeRates.refresh && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0 text-muted-foreground"
+            disabled={refreshing}
+            aria-busy={refreshing}
+            aria-label={refreshing ? '正在刷新汇率' : '刷新汇率'}
+            title={refreshing ? '正在刷新汇率' : '刷新汇率'}
+            onClick={() => void exchangeRates.refresh?.()}
+          >
+            {refreshing ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <RefreshCw data-icon="inline-start" />
+            )}
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
@@ -268,7 +225,7 @@ function AssetAccountTable({
   const canCalculatePercentage = !hasMissingRate && totalAnchoredMarketValue !== 0
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+    <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
       <Table className="min-w-[900px] table-fixed">
         <TableHeader className="bg-muted/15">
           <TableRow className="hover:bg-transparent">
@@ -406,7 +363,7 @@ function PositionGroupOverviewTable({
   const canCalculatePercentage = !hasMissingRate && totalAnchoredMarketValue !== 0
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+    <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
       <Table className="min-w-[900px] table-fixed">
         <TableHeader className="bg-muted/15">
           <TableRow className="hover:bg-transparent">
@@ -479,6 +436,7 @@ function PositionGroupOverviewTable({
 export function Overview({
   account,
   mode,
+  onModeChange,
   exchangeRates,
   imageExporting,
   onExportImage,
@@ -487,6 +445,7 @@ export function Overview({
 }: {
   account: ProductAccount
   mode: OverviewMode
+  onModeChange: (mode: OverviewMode) => void
   exchangeRates: ExchangeRateView
   imageExporting: boolean
   onExportImage: () => Promise<void>
@@ -506,14 +465,16 @@ export function Overview({
         positions: groupPositions
       }
     })
-  const isAccountMode = mode === 'accounts'
-
   return (
-    <div className="mx-auto w-[calc(50%+36rem)] max-w-full px-4 pb-8 pt-4">
-      <header className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold tracking-[-0.04em]">
-          {isAccountMode ? '资产账户透视' : '持仓分组透视'}
-        </h1>
+    <Tabs
+      value={mode}
+      className="mx-auto w-[calc(50%+36rem)] max-w-full px-4 pb-8 pt-4"
+      onValueChange={(value) => {
+        if (value === 'accounts' || value === 'groups') onModeChange(value)
+      }}
+    >
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-semibold tracking-[-0.04em]">资产透视</h1>
         <Button
           variant="outline"
           onClick={() => void onExportImage()}
@@ -528,6 +489,16 @@ export function Overview({
           {imageExporting ? '导出中…' : '导出图片'}
         </Button>
       </header>
+      <TabsList className="mt-5" aria-label="透视维度">
+        <TabsTrigger value="accounts">
+          <WalletCards data-icon="inline-start" />
+          资产账户
+        </TabsTrigger>
+        <TabsTrigger value="groups">
+          <Folder data-icon="inline-start" />
+          持仓分组
+        </TabsTrigger>
+      </TabsList>
 
       <section className="mt-6">
         <ValueSummaryCard
@@ -547,55 +518,57 @@ export function Overview({
       )}
 
       <section className="mt-6">
-        {isAccountMode && account.assetAccounts.length > 0 && (
-          <div>
-            <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
-            <AssetAccountTable
-              accounts={account.assetAccounts}
-              holders={account.holders}
-              anchorCurrency={account.anchorCurrency}
-              exchangeRates={exchangeRates}
-              onOpen={onOpenAssetAccount}
-            />
-          </div>
-        )}
-        {!isAccountMode && groupItems.length > 0 && (
-          <div>
-            <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
-            <PositionGroupOverviewTable
-              items={groupItems}
-              assetAccounts={account.assetAccounts}
-              holders={account.holders}
-              anchorCurrency={account.anchorCurrency}
-              exchangeRates={exchangeRates}
-              onOpen={onOpenPositionGroup}
-            />
-          </div>
-        )}
-        {isAccountMode && !account.assetAccounts.length && (
-          <Empty className="min-h-64 border bg-card">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <WalletCards data-icon="inline-start" />
-              </EmptyMedia>
-              <EmptyTitle>暂无资产账户</EmptyTitle>
-              <EmptyDescription>支持富途牛牛、中银国际、欧易、支付宝、招商银行、中国银行和通用账户</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
-        {!isAccountMode && !groupItems.length && (
-          <Empty className="min-h-64 border bg-card">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <Folder data-icon="inline-start" />
-              </EmptyMedia>
-              <EmptyTitle>暂无持仓分组</EmptyTitle>
-              <EmptyDescription>将不同资产账户中的持仓归入持仓分组后，在这里查看币种和锚定市值</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
+        <TabsContent value="accounts" className="mt-0">
+          {account.assetAccounts.length > 0 ? (
+            <div>
+              <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
+              <AssetAccountTable
+                accounts={account.assetAccounts}
+                holders={account.holders}
+                anchorCurrency={account.anchorCurrency}
+                exchangeRates={exchangeRates}
+                onOpen={onOpenAssetAccount}
+              />
+            </div>
+          ) : (
+            <Empty className="min-h-64 border bg-card">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <WalletCards data-icon="inline-start" />
+                </EmptyMedia>
+                <EmptyTitle>暂无资产账户</EmptyTitle>
+                <EmptyDescription>支持富途牛牛、中银国际、欧易、支付宝、招商银行、中国银行和通用账户</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+        </TabsContent>
+        <TabsContent value="groups" className="mt-0">
+          {groupItems.length > 0 ? (
+            <div>
+              <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
+              <PositionGroupOverviewTable
+                items={groupItems}
+                assetAccounts={account.assetAccounts}
+                holders={account.holders}
+                anchorCurrency={account.anchorCurrency}
+                exchangeRates={exchangeRates}
+                onOpen={onOpenPositionGroup}
+              />
+            </div>
+          ) : (
+            <Empty className="min-h-64 border bg-card">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Folder data-icon="inline-start" />
+                </EmptyMedia>
+                <EmptyTitle>暂无持仓分组</EmptyTitle>
+                <EmptyDescription>将不同资产账户中的持仓归入持仓分组后，在这里查看币种和锚定市值</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+        </TabsContent>
       </section>
-    </div>
+    </Tabs>
   )
 }
 
@@ -658,7 +631,7 @@ export function CurrencySummaryTable({
   return (
     <section>
       <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">币种分布</h2>
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
         <Table>
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">

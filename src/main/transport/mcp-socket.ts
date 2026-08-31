@@ -51,7 +51,6 @@ export class McpSocketHost implements McpHostOperations {
   private access: McpAccessSettings = {
     enabled: false,
     allowWrite: false,
-    allowSync: false,
     allowDelete: false
   }
 
@@ -193,12 +192,6 @@ export class McpSocketHost implements McpHostOperations {
     }
 
     try {
-      if (request.method === 'preview-delete') {
-        return {
-          id,
-          result: await this.module.previewMcpDelete(request.arguments, this.access)
-        }
-      }
       if (request.method !== 'call-tool' || !isToolName(request.tool)) {
         return this.error(id, 'VALIDATION_ERROR', '不支持的 MCP 方法')
       }
@@ -207,8 +200,7 @@ export class McpSocketHost implements McpHostOperations {
         result: await this.module.callMcpTool(
           request.tool,
           request.arguments,
-          this.access,
-          request.confirmed
+          this.access
         )
       }
     } catch (error) {

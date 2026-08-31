@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  ChartPie,
   ChartSpline,
   Check,
   ChevronDown,
+  ChevronUp,
   Download,
   Ellipsis,
   Eye,
@@ -37,9 +37,7 @@ import {
 import {
   AppLoadingSkeleton,
   EmptyProductAccount,
-  LocalMark,
   PortfolioLoadError,
-  PortfolioRefreshErrorAlert,
   SnapshotViewingAlert,
   reportPortfolioError
 } from '@/components/portfolio/feedback'
@@ -57,7 +55,6 @@ import {
   AccountTypeIcon,
   AssetValueMaskContext,
   accountSyncInterval,
-  cleanErrorMessage,
   loadAssetValueMask,
   shortSnapshotHash,
   type ExchangeRateView
@@ -201,7 +198,7 @@ function AssetAccountNavigation({
                     <div
                       key={account.id}
                       className={cn(
-                        'group flex min-w-0 items-center rounded-lg pr-1 transition-colors hover:bg-muted/70',
+                        'group flex min-w-0 items-center rounded-md pr-1 transition-colors hover:bg-muted/70',
                         selected && SELECTED_NAVIGATION_CLASS_NAME
                       )}
                     >
@@ -300,7 +297,7 @@ export function App(): React.JSX.Element {
   const [productDialog, setProductDialog] = useState<ProductDialogState>({ open: false })
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false)
   const [accountSettingsSection, setAccountSettingsSection] = useState<
-    'basic' | 'currency' | 'holders' | 'other'
+    'basic' | 'currency' | 'holders'
   >('basic')
   const [assetDialog, setAssetDialog] = useState<AssetDialogState>({ open: false })
   const [positionDialog, setPositionDialog] = useState<PositionDialogState>({ open: false })
@@ -325,6 +322,22 @@ export function App(): React.JSX.Element {
   const creatingSnapshotRef = useRef(false)
   const removingGroupPositionIdsRef = useRef(new Set<string>())
 
+  useEffect(() => {
+    if (!portfolio.refreshError) return
+    toast.error('资产数据刷新失败', {
+      description: `已保留当前页面数据。${portfolio.refreshError}`,
+      id: 'portfolio-refresh-error'
+    })
+  }, [portfolio.refreshError])
+
+  useEffect(() => {
+    if (exchangeRates.status !== 'error' || !exchangeRates.error) return
+    toast.error(exchangeRates.snapshot ? '汇率刷新失败' : '汇率加载失败', {
+      description: exchangeRates.error,
+      id: 'exchange-rate-error'
+    })
+  }, [exchangeRates.error, exchangeRates.snapshot, exchangeRates.status])
+
   const activeProductAccount = selectedSnapshot?.account ?? latestProductAccount
   const selectedAssetAccount =
     activeProductAccount?.assetAccounts.find(
@@ -341,10 +354,7 @@ export function App(): React.JSX.Element {
     setSelectedPositionGroupId(null)
   }, [latestProductAccount?.id])
 
-  async function syncAssetAccount(
-    assetAccountId: string,
-    notifyRepeatedError = false
-  ): Promise<void> {
+  async function syncAssetAccount(assetAccountId: string): Promise<void> {
     if (
       !latestProductAccount ||
       selectedSnapshot ||
@@ -359,48 +369,23 @@ export function App(): React.JSX.Element {
     setSyncStates((current) => ({
       ...current,
       [assetAccountId]: {
-        status: 'syncing',
-        message:
-          assetAccount.type === 'Futu'
-            ? '正在连接 Futu OpenD…'
-            : assetAccount.type === 'Ibkr'
-              ? '正在连接 IBKR Gateway…'
-              : assetAccount.type === 'Binance'
-                ? '正在同步币安…'
-                : '正在同步 OKX…'
+        status: 'syncing'
       }
     }))
     try {
-      const result = await portfolio.syncAssetAccount(
+      await portfolio.syncAssetAccount(
         latestProductAccount.id,
         assetAccountId
       )
-      setSyncStates((current) => ({
-        ...current,
-        [assetAccountId]: {
-          status: 'success',
-          message: `已同步 ${result.positionCount} 项持仓`
-        }
-      }))
-      if (notifyRepeatedError) {
-        toast.success(`${assetAccount.name} 已同步`, {
-          description: `已同步 ${result.positionCount} 项持仓`
-        })
-      }
     } catch (error) {
-      const message = cleanErrorMessage(error)
-      setSyncStates((current) => ({
-        ...current,
-        [assetAccountId]: { status: 'error', message }
-      }))
-      if (notifyRepeatedError) {
-        toast.error(`${assetAccount.name} 同步失败`, {
-          description: message,
-          id: `sync:${assetAccountId}`
-        })
-      }
+      reportPortfolioError(error, `${assetAccount.name} 同步失败`)
     } finally {
       syncingAccountIds.current.delete(assetAccountId)
+      setSyncStates((current) => {
+        const next = { ...current }
+        delete next[assetAccountId]
+        return next
+      })
     }
   }
 
@@ -760,13 +745,87 @@ export function App(): React.JSX.Element {
     }
   })()
 
+  const productAccountSwitcher = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="h-auto w-full justify-start gap-3 px-2 py-2"
+        >
+          <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
+            {activeProductAccount.name.trim().slice(0, 1).toUpperCase()}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+            {activeProductAccount.name}
+          </span>
+          <ChevronUp data-icon="inline-end" className="text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56" side="top" align="start">
+        <DropdownMenuLabel>切换账户</DropdownMenuLabel>
+        <DropdownMenuGroup>
+          {portfolio.productAccounts.map((account) => (
+            <DropdownMenuItem
+              key={account.id}
+              onSelect={() => {
+                setSelectedSnapshotId(null)
+                void portfolio
+                  .setActiveProductAccount(account.id)
+                  .catch(reportPortfolioError)
+              }}
+            >
+              <span className="grid size-7 place-items-center rounded-sm bg-secondary text-xs font-semibold">
+                {account.name.trim().slice(0, 1).toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1 truncate">{account.name}</span>
+              {account.id === activeProductAccount.id && <Check />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          {!selectedSnapshot && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setAccountSettingsSection('basic')
+                setAccountSettingsOpen(true)
+              }}
+            >
+              <Pencil />
+              账户设置
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => setExportDialogOpen(true)}>
+            <Upload />
+            导出账户
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={choosingImport}
+            aria-busy={choosingImport}
+            onSelect={() => void chooseImportAccount()}
+          >
+            {choosingImport ? <Spinner /> : <Download />}
+            {choosingImport ? '读取中…' : '导入账户'}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onSelect={() => setProductDialog({ open: true })}>
+            <Plus />
+            新建账户
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   return (
     <div className="flex h-screen min-h-[600px] overflow-hidden bg-background">
       <div className="window-drag fixed inset-x-0 top-0 z-40 h-12" />
       <aside className="flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar pt-12 text-sidebar-foreground">
         <div className="px-4 pb-4 pt-2">
-          <div className="mb-5 flex items-center gap-2 px-2">
-            <span className="grid size-8 place-items-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+          <div className="flex items-center gap-2 px-2">
+            <span className="grid size-8 place-items-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
               <Layers3 data-icon="inline-start" className="size-4" />
             </span>
             <span className="text-[15px] font-semibold tracking-[-0.02em]">Chromie</span>
@@ -786,83 +845,6 @@ export function App(): React.JSX.Element {
               )}
             </Button>
           </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="h-auto w-full justify-start gap-3 border-sidebar-border bg-sidebar-accent/50 px-3 py-2.5 shadow-none"
-              >
-                <span className="grid size-8 shrink-0 place-items-center rounded-md bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
-                  {activeProductAccount.name.trim().slice(0, 1).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
-                  {activeProductAccount.name}
-                </span>
-                <ChevronDown className="size-3.5 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="start">
-              <DropdownMenuLabel>切换账户</DropdownMenuLabel>
-              <DropdownMenuGroup>
-                {portfolio.productAccounts.map((account) => (
-                  <DropdownMenuItem
-                    key={account.id}
-                    onSelect={() => {
-                      setSelectedSnapshotId(null)
-                      void portfolio
-                        .setActiveProductAccount(account.id)
-                        .catch(reportPortfolioError)
-                    }}
-                  >
-                    <span className="grid size-7 place-items-center rounded-md bg-secondary text-xs font-semibold">
-                      {account.name.trim().slice(0, 1).toUpperCase()}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">{account.name}</span>
-                    {account.id === activeProductAccount.id && <Check />}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                {!selectedSnapshot && (
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      setAccountSettingsSection('basic')
-                      setAccountSettingsOpen(true)
-                    }}
-                  >
-                    <Pencil />
-                    账户设置
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onSelect={() => setExportDialogOpen(true)}>
-                  <Upload />
-                  导出账户
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  disabled={choosingImport}
-                  aria-busy={choosingImport}
-                  onSelect={() => void chooseImportAccount()}
-                >
-                  {choosingImport ? (
-                    <Spinner />
-                  ) : (
-                    <Download />
-                  )}
-                  {choosingImport ? '读取中…' : '导入账户'}
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuItem onSelect={() => setProductDialog({ open: true })}>
-                  <Plus />
-                  新建账户
-                </DropdownMenuItem>
-              </DropdownMenuGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
         </div>
 
         <Separator />
@@ -876,38 +858,16 @@ export function App(): React.JSX.Element {
                 !selectedAssetAccountId &&
                   !selectedPositionGroupId &&
                   !showTimeMachine &&
-                  overviewMode === 'accounts' &&
                   cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
               )}
               onClick={() => {
-                setOverviewMode('accounts')
                 setShowTimeMachine(false)
                 setSelectedAssetAccountId(null)
                 setSelectedPositionGroupId(null)
               }}
             >
               <ChartSpline className="size-4" />
-              资产账户透视
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn(
-                'w-full justify-start px-3 font-normal',
-                !selectedAssetAccountId &&
-                  !selectedPositionGroupId &&
-                  !showTimeMachine &&
-                  overviewMode === 'groups' &&
-                  cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
-              )}
-              onClick={() => {
-                setOverviewMode('groups')
-                setShowTimeMachine(false)
-                setSelectedAssetAccountId(null)
-                setSelectedPositionGroupId(null)
-              }}
-            >
-              <ChartPie className="size-4" />
-              持仓分组透视
+              资产透视
             </Button>
             <Button
               variant="ghost"
@@ -990,7 +950,7 @@ export function App(): React.JSX.Element {
                 <div
                   key={group.id}
                   className={cn(
-                    'group flex min-w-0 items-center rounded-lg pr-1 transition-colors hover:bg-muted/70',
+                    'group flex min-w-0 items-center rounded-md pr-1 transition-colors hover:bg-muted/70',
                     selected && SELECTED_NAVIGATION_CLASS_NAME
                   )}
                 >
@@ -1053,8 +1013,8 @@ export function App(): React.JSX.Element {
           </div>
         </nav>
 
-        <div className="border-t px-5 py-4">
-          <LocalMark />
+        <div className="border-t px-3 py-3">
+          {productAccountSwitcher}
         </div>
       </aside>
 
@@ -1065,9 +1025,6 @@ export function App(): React.JSX.Element {
             snapshot={selectedSnapshot}
             onReturnLatest={() => setSelectedSnapshotId(null)}
           />
-        )}
-        {portfolio.refreshError && (
-          <PortfolioRefreshErrorAlert message={portfolio.refreshError} />
         )}
         {showTimeMachine ? (
           <TimeMachine
@@ -1123,7 +1080,7 @@ export function App(): React.JSX.Element {
             onAddPosition={() =>
               setPositionDialog({ open: true, accountId: selectedAssetAccount.id })
             }
-            onSync={() => syncAssetAccount(selectedAssetAccount.id, true)}
+            onSync={() => syncAssetAccount(selectedAssetAccount.id)}
             syncState={syncStates[selectedAssetAccount.id]}
             onEditPosition={(position) =>
               setPositionDialog({
@@ -1140,6 +1097,7 @@ export function App(): React.JSX.Element {
           <Overview
             account={activeProductAccount}
             mode={overviewMode}
+            onModeChange={setOverviewMode}
             exchangeRates={exchangeRates}
             imageExporting={imageExporting}
             onExportImage={() =>
@@ -1222,6 +1180,7 @@ export function App(): React.JSX.Element {
         title={deleteDialogCopy.title}
         description={deleteDialogCopy.description}
         actionLabel={deleteTarget?.kind === 'product' ? '确认注销' : '确认删除'}
+        confirmationPhrase={deleteTarget?.kind === 'product' ? 'DELETE' : undefined}
         onConfirm={confirmDelete}
       />
       <ImportBackupDialog

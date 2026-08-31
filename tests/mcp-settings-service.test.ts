@@ -26,13 +26,11 @@ test('MCP settings default to disabled and normalize dependent permissions', asy
     await service.save({
       enabled: true,
       allowWrite: false,
-      allowSync: true,
       allowDelete: true
     }),
     {
       enabled: true,
       allowWrite: false,
-      allowSync: false,
       allowDelete: false
     }
   )
@@ -40,7 +38,6 @@ test('MCP settings default to disabled and normalize dependent permissions', asy
     await service.save({
       enabled: false,
       allowWrite: true,
-      allowSync: true,
       allowDelete: true
     }),
     DEFAULT_MCP_ACCESS_SETTINGS

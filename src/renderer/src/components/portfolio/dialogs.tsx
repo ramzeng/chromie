@@ -9,13 +9,14 @@ import {
 } from 'react'
 import {
   Coins,
+  Copy,
   Ellipsis,
   Plus,
-  ShieldAlert,
   SlidersHorizontal,
   UsersRound,
   Wrench
 } from 'lucide-react'
+import { toast } from 'sonner'
 
 import {
   AlertDialog,
@@ -27,7 +28,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -63,6 +63,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Switch } from '@/components/ui/switch'
 import {
@@ -125,6 +126,10 @@ function operationErrorMessage(error: unknown): string {
   return message.replace(/^Error invoking remote method '[^']+': Error: /, '')
 }
 
+function reportOperationError(title: string, error: unknown): void {
+  toast.error(title, { description: operationErrorMessage(error) })
+}
+
 function useSubmissionGuard() {
   const [submitting, setSubmitting] = useState(false)
   const submissionInFlight = useRef(false)
@@ -149,7 +154,6 @@ type ExchangeRateView = Pick<ExchangeRateState, 'snapshot' | 'status' | 'error'>
 const DISABLED_MCP_ACCESS: McpAccessSettings = {
   enabled: false,
   allowWrite: false,
-  allowSync: false,
   allowDelete: false
 }
 
@@ -173,6 +177,17 @@ function McpSettingsSection({
       }, null, 2)
     : ''
 
+  async function copyClientConfig(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(clientConfig)
+      toast.success('MCP 配置已复制')
+    } catch (error) {
+      toast.error('复制 MCP 配置失败', {
+        description: operationErrorMessage(error)
+      })
+    }
+  }
+
   return (
     <section className="grid gap-5">
       <div>
@@ -181,7 +196,7 @@ function McpSettingsSection({
           允许本机 AI 工具在你授权的范围内读取或维护 Chromie 数据
         </p>
       </div>
-      <div className="divide-y overflow-hidden rounded-xl border">
+      <div className="divide-y overflow-hidden rounded-lg border">
         <div className="flex items-center justify-between gap-6 p-4">
           <div>
             <Label htmlFor="mcp-enabled">启用 MCP</Label>
@@ -212,24 +227,8 @@ function McpSettingsSection({
               setAccess((current) => ({
                 ...current,
                 allowWrite,
-                ...(allowWrite ? {} : { allowSync: false, allowDelete: false })
+                ...(allowWrite ? {} : { allowDelete: false })
               }))
-            }
-          />
-        </div>
-        <div className="flex items-center justify-between gap-6 p-4">
-          <div>
-            <Label htmlFor="mcp-sync">允许联网同步</Label>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              使用 Chromie 已保存的凭据同步持仓和刷新汇率
-            </p>
-          </div>
-          <Switch
-            id="mcp-sync"
-            checked={access.allowSync}
-            disabled={!access.enabled || !access.allowWrite}
-            onCheckedChange={(allowSync) =>
-              setAccess((current) => ({ ...current, allowSync }))
             }
           />
         </div>
@@ -253,8 +252,14 @@ function McpSettingsSection({
 
       {clientConfig && (
         <div className="grid gap-2">
-          <Label>MCP 客户端配置</Label>
-          <pre className="max-h-40 overflow-auto rounded-lg bg-muted p-3 text-xs leading-5">
+          <div className="flex items-center justify-between gap-3">
+            <Label>MCP 客户端配置</Label>
+            <Button type="button" variant="outline" size="sm" onClick={copyClientConfig}>
+              <Copy data-icon="inline-start" />
+              复制配置
+            </Button>
+          </div>
+          <pre className="max-h-40 overflow-auto rounded-md bg-muted p-3 text-xs leading-5">
             {clientConfig}
           </pre>
         </div>
@@ -313,10 +318,9 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
   const loadingWithoutSnapshot =
     !exchangeRates.snapshot &&
     (exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing')
-  const hasError = exchangeRates.status === 'error' && Boolean(exchangeRates.error)
 
   return (
-    <div className="grid gap-3 rounded-xl border bg-muted/20 p-4" role="status">
+    <div className="grid gap-3 rounded-lg border bg-muted/20 p-4" role="status">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium">参考汇率</p>
         <span className="text-xs text-muted-foreground">{status}</span>
@@ -324,7 +328,7 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
       {loadingWithoutSnapshot ? (
         <div className="grid grid-cols-3 gap-3" aria-label="正在加载参考汇率">
           {Array.from({ length: 3 }, (_, index) => (
-            <div key={index} className="rounded-lg bg-background px-3 py-2.5">
+            <div key={index} className="rounded-md bg-background px-3 py-2.5">
               <Skeleton className="h-3 w-16" />
               <Skeleton className="mt-2 h-5 w-20" />
             </div>
@@ -333,7 +337,7 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
       ) : rates.length ? (
         <div className="grid grid-cols-3 gap-3">
           {rates.map((rate) => (
-            <div key={rate.label} className="rounded-lg bg-background px-3 py-2.5">
+            <div key={rate.label} className="rounded-md bg-background px-3 py-2.5">
               <p className="text-[11px] text-muted-foreground">{rate.label}</p>
               <p className="mt-1 font-medium tabular-nums">
                 {formatReferenceRate(rate.value)}
@@ -343,15 +347,6 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">暂时没有可用的参考汇率</p>
-      )}
-      {hasError && (
-        <Alert variant={exchangeRates.snapshot ? 'default' : 'destructive'}>
-          <ShieldAlert data-icon="inline-start" />
-          <AlertTitle>
-            {exchangeRates.snapshot ? '汇率刷新失败，正在使用缓存' : '汇率加载失败'}
-          </AlertTitle>
-          <AlertDescription>{exchangeRates.error}</AlertDescription>
-        </Alert>
       )}
     </div>
   )
@@ -468,7 +463,7 @@ export function ProductAccountDialog({
       await onSubmit({ name, anchorCurrency })
       onOpenChange(false)
     } catch (submitError) {
-      setError(operationErrorMessage(submitError))
+      reportOperationError('创建账户失败', submitError)
     } finally {
       endSubmission()
     }
@@ -559,7 +554,7 @@ export function ProductAccountSettingsDialog({
 }: BaseDialogProps & {
   account: ProductAccount
   exchangeRates: ExchangeRateView
-  initialSection?: 'basic' | 'currency' | 'holders' | 'mcp' | 'other'
+  initialSection?: 'basic' | 'currency' | 'holders' | 'mcp'
   onSubmit: (input: ProductAccountSettingsInput) => Promise<void>
   onRequestDelete: () => void
 }) {
@@ -574,7 +569,7 @@ export function ProductAccountSettingsDialog({
   )
   const [holders, setHolders] = useState<Holder[]>([])
   const [section, setSection] = useState<
-    'basic' | 'currency' | 'holders' | 'mcp' | 'other'
+    'basic' | 'currency' | 'holders' | 'mcp'
   >('basic')
   const [holderDialog, setHolderDialog] = useState<{
     open: boolean
@@ -626,7 +621,9 @@ export function ProductAccountSettingsDialog({
     setMcpError('')
     setMcpLoading(false)
     if (!mcp) {
-      setMcpError('MCP 组件尚未加载，请重启 Chromie')
+      const message = 'MCP 组件尚未加载，请重启 Chromie'
+      setMcpError(message)
+      reportOperationError('MCP 操作失败', message)
       return
     }
 
@@ -639,7 +636,10 @@ export function ProductAccountSettingsDialog({
         setMcpAccess(result.access)
       })
       .catch((loadError) => {
-        if (mounted) setMcpError(operationErrorMessage(loadError))
+        if (!mounted) return
+        const message = operationErrorMessage(loadError)
+        setMcpError(message)
+        reportOperationError('MCP 操作失败', message)
       })
       .finally(() => {
         if (mounted) setMcpLoading(false)
@@ -655,7 +655,9 @@ export function ProductAccountSettingsDialog({
     if (submissionInFlight.current) return
     if (section === 'mcp') {
       if (!window.desktop.mcp) {
-        setMcpError('MCP 组件尚未加载，请重启 Chromie')
+        const message = 'MCP 组件尚未加载，请重启 Chromie'
+        setMcpError(message)
+        reportOperationError('MCP 操作失败', message)
         return
       }
       if (!beginSubmission()) return
@@ -666,7 +668,9 @@ export function ProductAccountSettingsDialog({
         setMcpAccess(result.access)
         onOpenChange(false)
       } catch (submitError) {
-        setMcpError(operationErrorMessage(submitError))
+        const message = operationErrorMessage(submitError)
+        setMcpError(message)
+        reportOperationError('MCP 操作失败', message)
       } finally {
         endSubmission()
       }
@@ -714,7 +718,7 @@ export function ProductAccountSettingsDialog({
       })
       onOpenChange(false)
     } catch (submitError) {
-      setError(operationErrorMessage(submitError))
+      reportOperationError('保存账户设置失败', submitError)
     } finally {
       endSubmission()
     }
@@ -794,25 +798,12 @@ export function ProductAccountSettingsDialog({
                   <Wrench className="size-4" />
                   MCP
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={cn(
-                    'h-9 justify-start gap-2.5 px-3 font-normal',
-                    section === 'other' &&
-                      'bg-background font-medium shadow-xs hover:bg-background'
-                  )}
-                  onClick={() => setSection('other')}
-                >
-                  <ShieldAlert className="size-4" />
-                  其他设置
-                </Button>
               </nav>
             </aside>
 
             <div className="min-w-0 overflow-y-auto px-6 py-5">
               {section === 'basic' && (
-                <section className="grid gap-4">
+                <section className="grid gap-5">
                   <h3 className="text-base font-semibold">基础信息</h3>
                   <div className="grid gap-2">
                     <Label htmlFor="account-settings-name">账户名称</Label>
@@ -826,6 +817,26 @@ export function ProductAccountSettingsDialog({
                       placeholder="输入账户名称"
                       maxLength={40}
                     />
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between gap-5">
+                    <div className="grid gap-1">
+                      <p className="text-sm font-medium">注销账户</p>
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        将删除账户内的全部数据，且无法撤销
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => {
+                        onOpenChange(false)
+                        onRequestDelete()
+                      }}
+                    >
+                      注销账户
+                    </Button>
                   </div>
                 </section>
               )}
@@ -930,7 +941,7 @@ export function ProductAccountSettingsDialog({
                     </Button>
                   </div>
                   {holders.length ? (
-                    <div className="overflow-hidden rounded-lg border">
+                    <div className="overflow-hidden rounded-md border">
                       <Table className="table-fixed">
                         <TableHeader className="bg-muted/20">
                           <TableRow className="hover:bg-transparent">
@@ -1032,8 +1043,8 @@ export function ProductAccountSettingsDialog({
                         <Skeleton className="h-5 w-16" />
                         <Skeleton className="h-3 w-72 max-w-full" />
                       </div>
-                      <div className="grid gap-4 rounded-xl border p-4">
-                        {Array.from({ length: 4 }, (_, index) => (
+                      <div className="grid gap-4 rounded-lg border p-4">
+                        {Array.from({ length: 3 }, (_, index) => (
                           <div key={index} className="flex items-center justify-between gap-6">
                             <div className="grid flex-1 gap-2">
                               <Skeleton className="h-4 w-24" />
@@ -1051,39 +1062,9 @@ export function ProductAccountSettingsDialog({
                       setAccess={setMcpAccess}
                     />
                   )}
-                  {mcpError && (
-                    <Alert variant="destructive">
-                      <ShieldAlert data-icon="inline-start" />
-                      <AlertTitle>MCP 操作失败</AlertTitle>
-                      <AlertDescription>{mcpError}</AlertDescription>
-                    </Alert>
-                  )}
                 </div>
               )}
 
-              {section === 'other' && (
-                <section className="grid gap-4">
-                  <h3 className="text-base font-semibold">其他设置</h3>
-                  <Alert variant="destructive">
-                    <ShieldAlert data-icon="inline-start" />
-                    <AlertTitle>注销账户</AlertTitle>
-                    <AlertDescription className="flex items-center justify-between gap-5">
-                      <p>将删除账户内的全部数据，且无法撤销</p>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        className="shrink-0"
-                        onClick={() => {
-                          onOpenChange(false)
-                          onRequestDelete()
-                        }}
-                      >
-                        注销账户
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                </section>
-              )}
             </div>
           </div>
 
@@ -1171,7 +1152,7 @@ export function PositionGroupDialog({
       await onSubmit({ name })
       onOpenChange(false)
     } catch (submitError) {
-      setError(operationErrorMessage(submitError))
+      reportOperationError(group ? '更新持仓分组失败' : '创建持仓分组失败', submitError)
     } finally {
       endSubmission()
     }
@@ -1246,7 +1227,6 @@ export function GroupPositionsDialog({
 }) {
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [query, setQuery] = useState('')
-  const [error, setError] = useState('')
   const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
   const checkboxIdPrefix = useId()
 
@@ -1254,7 +1234,6 @@ export function GroupPositionsDialog({
     if (!open) return
     setSelectedKeys(group.positionIds)
     setQuery('')
-    setError('')
     // Only reset when the dialog opens or switches to another group. Background
     // account syncs should not discard selections that are still being edited.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1298,7 +1277,6 @@ export function GroupPositionsDialog({
           : [...current, positionId]
         : current.filter((item) => item !== positionId)
     )
-    setError('')
   }
 
   async function handleSubmit(): Promise<void> {
@@ -1306,12 +1284,12 @@ export function GroupPositionsDialog({
     try {
       const submitError = await onSubmit(selectedKeys)
       if (submitError) {
-        setError(submitError)
+        reportOperationError('保存分组持仓失败', submitError)
         return
       }
       onOpenChange(false)
     } catch (submitError) {
-      setError(operationErrorMessage(submitError))
+      reportOperationError('保存分组持仓失败', submitError)
     } finally {
       endSubmission()
     }
@@ -1339,7 +1317,7 @@ export function GroupPositionsDialog({
             autoFocus
           />
         )}
-        <div className="min-h-28 overflow-y-auto rounded-xl border bg-muted/10">
+        <div className="min-h-28 overflow-y-auto rounded-lg border bg-muted/10">
           {visibleAccounts.length ? (
             <div className="divide-y">
               {visibleAccounts.map(({ account, positions }) => (
@@ -1361,7 +1339,7 @@ export function GroupPositionsDialog({
                           key={position.id}
                           htmlFor={`${checkboxIdPrefix}-${position.id}`}
                           className={cn(
-                            'flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
+                            'flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors',
                             assignedGroupName
                               ? 'cursor-not-allowed opacity-55'
                               : 'cursor-pointer hover:bg-muted/70'
@@ -1418,7 +1396,6 @@ export function GroupPositionsDialog({
             </Empty>
           )}
         </div>
-        {error && <FieldMessage>{error}</FieldMessage>}
         <DialogFooter className="items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">已选择 {selectedKeys.length} 项持仓</p>
           <div className="flex gap-2">
@@ -1825,7 +1802,7 @@ export function AssetAccountDialog({
       })
       onOpenChange(false)
     } catch (submitError) {
-      setError(operationErrorMessage(submitError))
+      reportOperationError(account ? '更新资产账户失败' : '添加资产账户失败', submitError)
     } finally {
       endSubmission()
     }
@@ -1944,7 +1921,7 @@ export function AssetAccountDialog({
             </div>
           </div>
           {supportsAutoSync && (
-            <div className="flex items-center justify-between gap-4 rounded-xl border bg-muted/20 px-4 py-3.5">
+            <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/20 px-4 py-3.5">
               <div>
                 <Label htmlFor="asset-account-auto-sync">自动同步</Label>
                 <p className="mt-1 text-xs text-muted-foreground">
@@ -1968,7 +1945,7 @@ export function AssetAccountDialog({
             </div>
           )}
           {!supportsAutoSync && (
-            <div className="rounded-xl border bg-muted/20 px-4 py-3.5">
+            <div className="rounded-lg border bg-muted/20 px-4 py-3.5">
               <p className="text-sm font-medium">手动维护</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {type === 'Alipay'
@@ -1985,7 +1962,7 @@ export function AssetAccountDialog({
             </div>
           )}
           {type === 'Futu' && autoSync && (
-            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+            <div className="grid gap-3 rounded-lg border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">Futu OpenD 配置</p>
                 <p
@@ -2071,7 +2048,7 @@ export function AssetAccountDialog({
             </div>
           )}
           {type === 'Okx' && autoSync && (
-            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+            <div className="grid gap-3 rounded-lg border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">OKX API 配置</p>
                 <p
@@ -2162,7 +2139,7 @@ export function AssetAccountDialog({
             </div>
           )}
           {type === 'Ibkr' && autoSync && (
-            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+            <div className="grid gap-3 rounded-lg border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">IBKR Client Portal Gateway</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
@@ -2217,7 +2194,7 @@ export function AssetAccountDialog({
             </div>
           )}
           {type === 'Binance' && autoSync && (
-            <div className="grid gap-3 rounded-xl border bg-muted/20 p-4">
+            <div className="grid gap-3 rounded-lg border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">币安 API 配置</p>
                 <p
@@ -2380,12 +2357,12 @@ export function PositionDialog({
         ...(parsedPrice === undefined ? {} : { price: parsedPrice })
       })
       if (submitError) {
-        setError(submitError)
+        reportOperationError(position ? '更新持仓失败' : '添加持仓失败', submitError)
         return
       }
       onOpenChange(false)
     } catch (submitError) {
-      setError(operationErrorMessage(submitError))
+      reportOperationError(position ? '更新持仓失败' : '添加持仓失败', submitError)
     } finally {
       endSubmission()
     }
@@ -2527,17 +2504,27 @@ export function DeleteConfirmDialog({
   title,
   description,
   actionLabel = '确认删除',
+  confirmationPhrase,
   onConfirm
 }: BaseDialogProps & {
   title: string
   description: string
   actionLabel?: string
+  confirmationPhrase?: string
   onConfirm: () => void | Promise<void>
 }) {
   const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
+  const confirmationInputId = useId()
+  const [confirmationValue, setConfirmationValue] = useState('')
+  const confirmationMatches =
+    confirmationPhrase === undefined || confirmationValue === confirmationPhrase
+
+  useEffect(() => {
+    if (open) setConfirmationValue('')
+  }, [confirmationPhrase, open])
 
   async function handleConfirm(): Promise<void> {
-    if (!beginSubmission()) return
+    if (!confirmationMatches || !beginSubmission()) return
     try {
       await onConfirm()
     } catch {
@@ -2559,10 +2546,27 @@ export function DeleteConfirmDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {confirmationPhrase && (
+          <div className="grid gap-2">
+            <Label htmlFor={confirmationInputId}>
+              输入 {confirmationPhrase} 确认注销
+            </Label>
+            <Input
+              id={confirmationInputId}
+              value={confirmationValue}
+              placeholder={confirmationPhrase}
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              disabled={submitting}
+              onChange={(event) => setConfirmationValue(event.target.value)}
+            />
+          </div>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={submitting}>取消</AlertDialogCancel>
           <AlertDialogAction
-            disabled={submitting}
+            disabled={submitting || !confirmationMatches}
             aria-busy={submitting}
             onClick={(event) => {
               event.preventDefault()

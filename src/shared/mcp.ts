@@ -4,20 +4,23 @@ export const MCP_TOOL_NAMES = [
   'chromie_list_accounts',
   'chromie_get_account',
   'chromie_get_overview',
-  'chromie_find_positions',
+  'chromie_search_positions',
   'chromie_list_snapshots',
   'chromie_create_account',
   'chromie_update_account',
-  'chromie_save_holder',
+  'chromie_create_holder',
+  'chromie_update_holder',
   'chromie_create_asset_account',
   'chromie_update_asset_account',
-  'chromie_save_position',
-  'chromie_save_position_group',
-  'chromie_set_group_members',
+  'chromie_create_position',
+  'chromie_update_position',
+  'chromie_create_position_group',
+  'chromie_update_position_group',
+  'chromie_replace_position_group_members',
   'chromie_create_snapshot',
   'chromie_sync_asset_account',
   'chromie_refresh_exchange_rates',
-  'chromie_delete_item'
+  'chromie_delete_portfolio_item'
 ] as const
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number]
@@ -38,6 +41,7 @@ const assetAccountType = z.enum([
   'Cmb',
   'Boc'
 ])
+const integrationProvider = z.enum(['Futu', 'Okx', 'Ibkr', 'Binance'])
 
 export const mcpViewSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('latest') }).strict(),
@@ -49,7 +53,10 @@ export const listAccountsInputSchema = z.object({}).strict()
 export const getAccountInputSchema = z.object({
   account_id: id,
   view: mcpViewSchema.optional(),
-  include_positions: z.boolean().optional().default(true)
+  include_positions: z.boolean()
+    .describe('是否在账户详情中内嵌持仓；默认 false，持仓较多时请使用查找持仓工具')
+    .optional()
+    .default(false)
 }).strict()
 
 export const getOverviewInputSchema = z.object({
@@ -58,7 +65,7 @@ export const getOverviewInputSchema = z.object({
   group_by: z.enum(['asset_account', 'position_group', 'currency'])
 }).strict()
 
-export const findPositionsInputSchema = z.object({
+export const searchPositionsInputSchema = z.object({
   account_id: id,
   view: mcpViewSchema.optional(),
   query: z.string().trim().max(80).optional(),
@@ -67,7 +74,10 @@ export const findPositionsInputSchema = z.object({
   asset_account_id: id.optional(),
   holder_id: id.optional(),
   group_id: id.optional(),
-  cursor: z.string().regex(/^\d+$/).optional(),
+  cursor: z.string()
+    .regex(/^[A-Za-z0-9_-]{1,512}$/)
+    .describe('上一页返回的不透明游标，必须与相同查询条件一起使用')
+    .optional(),
   limit: z.number().int().min(1).max(100).optional().default(50)
 }).strict()
 
@@ -86,31 +96,28 @@ export const updateAccountInputSchema = z.object({
   exchange_rate_refresh_interval_minutes: z.number().int().min(1).max(1440).optional()
 }).strict().refine(
   ({
-    name,
+    name: accountName,
     anchor_currency,
     exchange_rate_provider,
     exchange_rate_refresh_interval_minutes
   }) =>
-    name !== undefined ||
+    accountName !== undefined ||
     anchor_currency !== undefined ||
     exchange_rate_provider !== undefined ||
     exchange_rate_refresh_interval_minutes !== undefined,
   { message: '至少提供一个要修改的字段' }
 )
 
-export const saveHolderInputSchema = z.discriminatedUnion('mode', [
-  z.object({
-    mode: z.literal('create'),
-    account_id: id,
-    name
-  }).strict(),
-  z.object({
-    mode: z.literal('update'),
-    account_id: id,
-    holder_id: id,
-    name
-  }).strict()
-])
+export const createHolderInputSchema = z.object({
+  account_id: id,
+  name
+}).strict()
+
+export const updateHolderInputSchema = z.object({
+  account_id: id,
+  holder_id: id,
+  name
+}).strict()
 
 export const createAssetAccountInputSchema = z.object({
   account_id: id,
@@ -126,8 +133,8 @@ export const updateAssetAccountInputSchema = z.object({
   type: assetAccountType.optional(),
   holder_id: id.optional()
 }).strict().refine(
-  ({ name, type, holder_id }) =>
-    name !== undefined || type !== undefined || holder_id !== undefined,
+  ({ name: accountName, type, holder_id }) =>
+    accountName !== undefined || type !== undefined || holder_id !== undefined,
   { message: '至少提供一个要修改的字段' }
 )
 
@@ -140,51 +147,45 @@ const positionCreateFields = {
   price: z.number().finite().nonnegative().nullable().optional()
 }
 
-export const savePositionInputSchema = z.discriminatedUnion('mode', [
-  z.object({
-    mode: z.literal('create'),
-    account_id: id,
-    asset_account_id: id,
-    ...positionCreateFields
-  }).strict(),
-  z.object({
-    mode: z.literal('update'),
-    account_id: id,
-    asset_account_id: id,
-    position_id: id,
-    market: market.optional(),
-    symbol: z.string().trim().min(1).max(24).optional(),
-    name: name.optional(),
-    currency: currency.optional(),
-    quantity: z.number().finite().positive().optional(),
-    price: z.number().finite().nonnegative().nullable().optional()
-  }).strict().refine(
-    ({ market, symbol, name, currency, quantity, price }) =>
-      market !== undefined ||
-      symbol !== undefined ||
-      name !== undefined ||
-      currency !== undefined ||
-      quantity !== undefined ||
-      price !== undefined,
-    { message: '至少提供一个要修改的字段' }
-  )
-])
+export const createPositionInputSchema = z.object({
+  account_id: id,
+  asset_account_id: id,
+  ...positionCreateFields
+}).strict()
 
-export const savePositionGroupInputSchema = z.discriminatedUnion('mode', [
-  z.object({
-    mode: z.literal('create'),
-    account_id: id,
-    name
-  }).strict(),
-  z.object({
-    mode: z.literal('update'),
-    account_id: id,
-    group_id: id,
-    name
-  }).strict()
-])
+export const updatePositionInputSchema = z.object({
+  account_id: id,
+  asset_account_id: id,
+  position_id: id,
+  market: market.optional(),
+  symbol: z.string().trim().min(1).max(24).optional(),
+  name: name.optional(),
+  currency: currency.optional(),
+  quantity: z.number().finite().positive().optional(),
+  price: z.number().finite().nonnegative().nullable().optional()
+}).strict().refine(
+  ({ market: nextMarket, symbol, name: positionName, currency: nextCurrency, quantity, price }) =>
+    nextMarket !== undefined ||
+    symbol !== undefined ||
+    positionName !== undefined ||
+    nextCurrency !== undefined ||
+    quantity !== undefined ||
+    price !== undefined,
+  { message: '至少提供一个要修改的字段' }
+)
 
-export const setGroupMembersInputSchema = z.object({
+export const createPositionGroupInputSchema = z.object({
+  account_id: id,
+  name
+}).strict()
+
+export const updatePositionGroupInputSchema = z.object({
+  account_id: id,
+  group_id: id,
+  name
+}).strict()
+
+export const replacePositionGroupMembersInputSchema = z.object({
   account_id: id,
   group_id: id,
   position_ids: z.array(id).max(10000)
@@ -221,7 +222,7 @@ export const deleteTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('snapshot'), account_id: id, snapshot_id: id }).strict()
 ])
 
-export const deleteItemInputSchema = z.object({
+export const deletePortfolioItemInputSchema = z.object({
   target: deleteTargetSchema
 }).strict()
 
@@ -229,46 +230,237 @@ export const mcpToolInputSchemas = {
   chromie_list_accounts: listAccountsInputSchema,
   chromie_get_account: getAccountInputSchema,
   chromie_get_overview: getOverviewInputSchema,
-  chromie_find_positions: findPositionsInputSchema,
+  chromie_search_positions: searchPositionsInputSchema,
   chromie_list_snapshots: listSnapshotsInputSchema,
   chromie_create_account: createAccountInputSchema,
   chromie_update_account: updateAccountInputSchema,
-  chromie_save_holder: saveHolderInputSchema,
+  chromie_create_holder: createHolderInputSchema,
+  chromie_update_holder: updateHolderInputSchema,
   chromie_create_asset_account: createAssetAccountInputSchema,
   chromie_update_asset_account: updateAssetAccountInputSchema,
-  chromie_save_position: savePositionInputSchema,
-  chromie_save_position_group: savePositionGroupInputSchema,
-  chromie_set_group_members: setGroupMembersInputSchema,
+  chromie_create_position: createPositionInputSchema,
+  chromie_update_position: updatePositionInputSchema,
+  chromie_create_position_group: createPositionGroupInputSchema,
+  chromie_update_position_group: updatePositionGroupInputSchema,
+  chromie_replace_position_group_members: replacePositionGroupMembersInputSchema,
   chromie_create_snapshot: createSnapshotInputSchema,
   chromie_sync_asset_account: syncAssetAccountInputSchema,
   chromie_refresh_exchange_rates: refreshExchangeRatesInputSchema,
-  chromie_delete_item: deleteItemInputSchema
+  chromie_delete_portfolio_item: deletePortfolioItemInputSchema
 } as const
 
 export type McpToolArguments = {
   [Name in McpToolName]: z.infer<(typeof mcpToolInputSchemas)[Name]>
 }
 
-export const mcpToolOutputSchema = z.object({
-  ok: z.literal(true),
-  summary: z.string(),
-  data: z.unknown().optional()
-})
+const count = z.number().int().nonnegative()
+const holderOutputSchema = z.object({ id, name }).strict()
+const positionOutputSchema = z.object({
+  id,
+  market,
+  symbol: z.string(),
+  name: z.string(),
+  currency: z.string(),
+  quantity: z.number(),
+  price: z.number().nonnegative().optional()
+}).strict()
+const viewOutputSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('latest') }).strict(),
+  z.object({
+    kind: z.literal('snapshot'),
+    snapshot_id: id,
+    created_at: z.string()
+  }).strict()
+])
+const exchangeRatesOutputSchema = z.object({
+  provider: z.literal('coinbase'),
+  base_currency: z.literal('USD'),
+  rates: z.object({
+    CNY: z.number().optional(),
+    HKD: z.number().optional(),
+    USD: z.number()
+  }).strict(),
+  fetched_at: z.string()
+}).strict()
+const syncStatusOutputSchema = z.object({
+  capable: z.boolean(),
+  configured: z.boolean(),
+  interval_seconds: z.number().int().optional(),
+  last_synced_at: z.string().optional(),
+  provider: integrationProvider.optional()
+}).strict()
+const accountOutputSchema = z.object({
+  id,
+  name: z.string(),
+  anchor_currency: anchorCurrency,
+  exchange_rate_provider: z.literal('coinbase'),
+  exchange_rate_refresh_interval_minutes: z.number().int(),
+  holders: z.array(holderOutputSchema),
+  asset_accounts: z.array(z.object({
+    id,
+    name: z.string(),
+    type: assetAccountType,
+    holder_id: id,
+    sync: syncStatusOutputSchema,
+    position_count: count,
+    positions: z.array(positionOutputSchema).optional()
+  }).strict()),
+  position_groups: z.array(z.object({
+    id,
+    name: z.string(),
+    position_ids: z.array(id)
+  }).strict())
+}).strict()
+const valuationOutputSchema = z.object({
+  market_value: z.number().optional(),
+  anchored_market_value: z.number().optional(),
+  missing_currencies: z.array(z.string())
+}).strict()
+const errorDataSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  retryable: z.boolean(),
+  details: z.unknown().optional()
+}).strict()
+const toolErrorOutputSchema = z.object({
+  ok: z.literal(false),
+  error: errorDataSchema
+}).strict()
 
-export type McpToolSuccess = z.infer<typeof mcpToolOutputSchema>
+function toolOutputSchema<Data extends z.ZodType>(data: Data) {
+  return z.discriminatedUnion('ok', [
+    z.object({
+      ok: z.literal(true),
+      summary: z.string(),
+      data
+    }).strict(),
+    toolErrorOutputSchema
+  ])
+}
+
+const accountIdOutputSchema = z.object({ account_id: id }).strict()
+const assetAccountIdOutputSchema = z.object({ asset_account_id: id }).strict()
+const groupIdOutputSchema = z.object({ group_id: id }).strict()
+
+export const mcpToolOutputSchemas = {
+  chromie_list_accounts: toolOutputSchema(z.object({
+    active_account_id: id.nullable(),
+    exchange_rates: exchangeRatesOutputSchema.nullable(),
+    accounts: z.array(z.object({
+      id,
+      name: z.string(),
+      anchor_currency: anchorCurrency,
+      holder_count: count,
+      asset_account_count: count,
+      position_group_count: count,
+      position_count: count,
+      snapshot_count: count,
+      total_anchored_market_value: z.number().optional(),
+      missing_currencies: z.array(z.string())
+    }).strict())
+  }).strict()),
+  chromie_get_account: toolOutputSchema(z.object({
+    view: viewOutputSchema,
+    exchange_rates: exchangeRatesOutputSchema.nullable(),
+    account: accountOutputSchema
+  }).strict()),
+  chromie_get_overview: toolOutputSchema(z.object({
+    view: viewOutputSchema,
+    group_by: z.enum(['asset_account', 'position_group', 'currency']),
+    anchor_currency: anchorCurrency,
+    exchange_rates: exchangeRatesOutputSchema.nullable(),
+    total: z.object({
+      position_count: count,
+      anchored_market_value: z.number().optional(),
+      missing_currencies: z.array(z.string()),
+      complete: z.boolean()
+    }).strict(),
+    rows: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      position_count: count,
+      currency: z.string().optional(),
+      market_value: z.number().optional(),
+      anchored_market_value: z.number().optional(),
+      allocation_percent: z.number().optional(),
+      missing_currencies: z.array(z.string())
+    }).strict())
+  }).strict()),
+  chromie_search_positions: toolOutputSchema(z.object({
+    view: viewOutputSchema,
+    total: count,
+    positions: z.array(positionOutputSchema.extend({
+      asset_account: z.object({ id, name: z.string() }).strict(),
+      holder: holderOutputSchema.nullable(),
+      group: z.object({ id, name: z.string() }).strict().nullable(),
+      valuation: valuationOutputSchema
+    }).strict()),
+    next_cursor: z.string().optional()
+  }).strict()),
+  chromie_list_snapshots: toolOutputSchema(z.object({
+    account: z.object({ id, name: z.string() }).strict(),
+    snapshots: z.array(z.object({
+      id,
+      created_at: z.string(),
+      asset_account_count: count,
+      position_group_count: count,
+      position_count: count,
+      exchange_rates_fetched_at: z.string().nullable()
+    }).strict())
+  }).strict()),
+  chromie_create_account: toolOutputSchema(accountIdOutputSchema),
+  chromie_update_account: toolOutputSchema(accountIdOutputSchema),
+  chromie_create_holder: toolOutputSchema(z.object({ holder: holderOutputSchema }).strict()),
+  chromie_update_holder: toolOutputSchema(z.object({ holder: holderOutputSchema }).strict()),
+  chromie_create_asset_account: toolOutputSchema(assetAccountIdOutputSchema),
+  chromie_update_asset_account: toolOutputSchema(assetAccountIdOutputSchema),
+  chromie_create_position: toolOutputSchema(z.object({
+    position: positionOutputSchema
+  }).strict()),
+  chromie_update_position: toolOutputSchema(z.object({
+    position: positionOutputSchema
+  }).strict()),
+  chromie_create_position_group: toolOutputSchema(groupIdOutputSchema),
+  chromie_update_position_group: toolOutputSchema(groupIdOutputSchema),
+  chromie_replace_position_group_members: toolOutputSchema(z.object({
+    group_id: id,
+    position_ids: z.array(id)
+  }).strict()),
+  chromie_create_snapshot: toolOutputSchema(z.object({
+    snapshot_id: id,
+    exchange_rates_fetched_at: z.string().nullable()
+  }).strict()),
+  chromie_sync_asset_account: toolOutputSchema(z.object({
+    asset_account_id: id,
+    position_count: count,
+    synced_at: z.string()
+  }).strict()),
+  chromie_refresh_exchange_rates: toolOutputSchema(z.object({
+    exchange_rates: exchangeRatesOutputSchema
+  }).strict()),
+  chromie_delete_portfolio_item: toolOutputSchema(z.object({
+    target: deleteTargetSchema
+  }).strict())
+} as const
+
+export type McpToolSuccess = {
+  ok: true
+  summary: string
+  data: unknown
+}
+
+export type McpToolError = z.infer<typeof toolErrorOutputSchema>
 export type McpDeleteTarget = z.infer<typeof deleteTargetSchema>
 
 export type McpAccessSettings = {
   enabled: boolean
   allowWrite: boolean
-  allowSync: boolean
   allowDelete: boolean
 }
 
 export const DEFAULT_MCP_ACCESS_SETTINGS: McpAccessSettings = {
   enabled: false,
   allowWrite: false,
-  allowSync: false,
   allowDelete: false
 }
 
@@ -278,24 +470,16 @@ export type McpConnectionSettings = {
   args: string[]
 }
 
-export type McpSocketRequest =
-  | {
-      id: string
-      token: string
-      method: 'call-tool'
-      tool: McpToolName
-      arguments: unknown
-      confirmed?: boolean
-    }
-  | {
-      id: string
-      token: string
-      method: 'preview-delete'
-      arguments: unknown
-    }
+export type McpSocketRequest = {
+  id: string
+  token: string
+  method: 'call-tool'
+  tool: McpToolName
+  arguments: unknown
+}
 
 export type McpSocketResponse =
-  | { id: string; result: unknown }
+  | { id: string; result: McpToolSuccess }
   | {
       id: string
       error: {

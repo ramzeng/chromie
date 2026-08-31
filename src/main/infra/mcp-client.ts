@@ -5,7 +5,8 @@ import { createConnection } from 'node:net'
 import type {
   McpSocketRequest,
   McpSocketResponse,
-  McpToolName
+  McpToolName,
+  McpToolSuccess
 } from '../../shared/mcp'
 
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024
@@ -29,27 +30,17 @@ export class McpSocketClient {
     private readonly tokenPath: string
   ) {}
 
-  callTool(tool: McpToolName, argumentsValue: unknown, confirmed = false) {
+  callTool(tool: McpToolName, argumentsValue: unknown): Promise<McpToolSuccess> {
     return this.request({
       id: randomUUID(),
       token: '',
       method: 'call-tool',
       tool,
-      arguments: argumentsValue,
-      ...(confirmed ? { confirmed: true } : {})
-    })
-  }
-
-  previewDelete(argumentsValue: unknown) {
-    return this.request({
-      id: randomUUID(),
-      token: '',
-      method: 'preview-delete',
       arguments: argumentsValue
     })
   }
 
-  private async request(request: McpSocketRequest): Promise<unknown> {
+  private async request(request: McpSocketRequest): Promise<McpToolSuccess> {
     try {
       request.token = (await readFile(this.tokenPath, 'utf8')).trim()
     } catch {

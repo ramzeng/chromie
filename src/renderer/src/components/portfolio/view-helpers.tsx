@@ -117,7 +117,7 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
         aria-hidden="true"
         className={cn('shrink-0', className)}
       >
-        <rect width="48" height="48" rx="7" fill="#1677ff" />
+        <rect width="48" height="48" rx="5" fill="#1677ff" />
         <text
           x="24"
           y="32"
@@ -138,7 +138,7 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
         aria-hidden="true"
         src={BOCI_ICON_DATA_URL}
         alt=""
-        className={cn('shrink-0 rounded-[14%]', className)}
+        className={cn('shrink-0 rounded-[10%]', className)}
       />
     )
   }
@@ -149,7 +149,7 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
         aria-hidden="true"
         src={BOC_ICON_DATA_URL}
         alt=""
-        className={cn('shrink-0 rounded-[14%]', className)}
+        className={cn('shrink-0 rounded-[10%]', className)}
       />
     )
   }
@@ -164,7 +164,7 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
         aria-hidden="true"
         src={CMB_ICON_DATA_URL}
         alt=""
-        className={cn('shrink-0 rounded-[14%]', className)}
+        className={cn('shrink-0 rounded-[10%]', className)}
       />
     )
   }
@@ -174,7 +174,7 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
       <span
         aria-hidden="true"
         className={cn(
-          'grid shrink-0 place-items-center rounded-[18%] bg-[#d81222] text-[0.42em] font-bold tracking-[-0.04em] text-white',
+          'grid shrink-0 place-items-center rounded-[14%] bg-[#d81222] text-[0.42em] font-bold tracking-[-0.04em] text-white',
           className
         )}
       >
@@ -190,7 +190,7 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
         aria-hidden="true"
         className={cn('shrink-0', className)}
       >
-        <rect width="48" height="48" rx="9" fill="#181a20" />
+        <rect width="48" height="48" rx="7" fill="#181a20" />
         <g fill="#f3ba2f">
           <path d="M24 10l5.1 5.1L24 20.2l-5.1-5.1L24 10Z" />
           <path d="m15.1 18.9 5.1 5.1-5.1 5.1L10 24l5.1-5.1Z" />
