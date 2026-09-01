@@ -1,3 +1,4 @@
+import { formatTotalMarketValueFormula } from '@/components/portfolio/view-helpers'
 import type { ExchangeRateState } from '@/lib/exchange-rates'
 import {
   formatMoney,
@@ -587,7 +588,7 @@ function renderShareImage(
   setFont(context, 15, 400)
   drawText(
     context,
-    `各币种市值按参考汇率折算为 ${workspace.baseCurrency} 后汇总`,
+    formatTotalMarketValueFormula(workspace.baseCurrency),
     PAGE_PADDING + 26,
     formulaTop + 30,
     palette.mutedForeground

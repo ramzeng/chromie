@@ -9,9 +9,114 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <title>Chromie</title>
+    <style>
+      html,
+      body,
+      #root {
+        min-height: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: #171717;
+        color: #fafafa;
+        font-family:
+          Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+          "Segoe UI", sans-serif;
+      }
+
+      .boot-loading {
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+      }
+
+      .boot-loading__content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .boot-loading__mark {
+        display: grid;
+        width: 48px;
+        height: 48px;
+        place-items: center;
+        border-radius: 10px;
+        background: #ededed;
+        color: #262626;
+      }
+
+      .boot-loading__mark svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .boot-loading__brand {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .boot-loading__status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #a3a3a3;
+        font-size: 13px;
+      }
+
+      .boot-loading__spinner {
+        width: 14px;
+        height: 14px;
+        box-sizing: border-box;
+        border: 2px solid rgb(255 255 255 / 16%);
+        border-top-color: #fafafa;
+        border-radius: 999px;
+        animation: boot-spin 800ms linear infinite;
+      }
+
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .boot-loading__spinner {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="boot-loading" role="status" aria-label="正在启动 Chromie">
+        <div class="boot-loading__content">
+          <div class="boot-loading__mark" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" />
+              <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" />
+              <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" />
+            </svg>
+          </div>
+          <p class="boot-loading__brand">Chromie</p>
+          <div class="boot-loading__status">
+            <span class="boot-loading__spinner" aria-hidden="true"></span>
+            <span>正在启动 Chromie…</span>
+          </div>
+        </div>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

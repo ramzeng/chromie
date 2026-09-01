@@ -13,7 +13,6 @@ import {
   shortSnapshotHash
 } from '@/components/portfolio/view-helpers'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -154,19 +153,18 @@ export function SnapshotViewingAlert({
   onReturnLatest: () => void
 }) {
   return (
-    <div className="pointer-events-none fixed left-64 right-0 top-0 z-50 flex h-12 items-center justify-center px-4">
-      <Alert className="pointer-events-auto w-fit max-w-full bg-background py-2 shadow-sm">
+    <div className="pointer-events-none fixed inset-x-0 top-8 z-50 flex justify-center px-4">
+      <Alert className="pointer-events-auto w-fit max-w-full bg-background py-2 shadow-sm [&>svg]:top-1/2 [&>svg]:-translate-y-1/2">
         <History data-icon="inline-start" />
         <AlertTitle className="sr-only">正在查看历史快照</AlertTitle>
         <AlertDescription className="flex min-w-0 items-center gap-2">
-          <Badge variant="secondary">历史快照</Badge>
           <span className="truncate">
             快照 #{shortSnapshotHash(snapshot.id)} · {formatLastSyncedAt(snapshot.createdAt)}
           </span>
           <Button
-            variant="ghost"
+            variant="link"
             size="sm"
-            className="h-7 shrink-0"
+            className="h-auto shrink-0 px-1"
             onClick={onReturnLatest}
           >
             返回当前数据

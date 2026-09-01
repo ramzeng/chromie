@@ -59,6 +59,10 @@ export function formatExchangeRate(value: number): string {
   }).format(value)
 }
 
+export function formatTotalMarketValueFormula(baseCurrency: string): string {
+  return `总市值（${baseCurrency}） = SUM(各币种市值 × 该币种兑 ${baseCurrency} 参考汇率)`
+}
+
 export function compareOptionalValuesDescending(
   left: number | undefined,
   right: number | undefined

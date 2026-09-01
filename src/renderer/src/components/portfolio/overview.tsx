@@ -12,6 +12,7 @@ import {
   formatAmount,
   formatExchangeRate,
   formatLastSyncedAt,
+  formatTotalMarketValueFormula,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
 import {
@@ -33,6 +34,7 @@ import {
   EmptyMedia,
   EmptyTitle
 } from '@/components/ui/empty'
+import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -159,11 +161,11 @@ export function ValueSummaryCard({
   })
 
   return (
-    <div>
+    <div className="flex flex-col gap-3">
       <ExchangeRateBanner exchangeRates={exchangeRates} />
-      <div className="mt-3 grid gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-4">
-        <Card className="min-h-[112px] border-border/70 shadow-none">
-          <CardHeader>
+      <div className="grid gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-4">
+        <Card className="flex min-h-[112px] border-border/70 shadow-none">
+          <CardHeader className="flex-1 justify-center p-4">
             <CardDescription>总市值 · {baseCurrency}</CardDescription>
             <CardTitle className="truncate text-2xl tracking-[-0.03em] tabular-nums">
               {hasCompleteConvertedTotal
@@ -180,9 +182,9 @@ export function ValueSummaryCard({
         {marketValueSummaries.map(({ currency, value, hasValue }) => (
           <Card
             key={currency}
-            className="min-h-[112px] border-border/70 shadow-none"
+            className="flex min-h-[112px] border-border/70 shadow-none"
           >
-            <CardHeader>
+            <CardHeader className="flex-1 justify-center p-4">
               <CardDescription>{currency} 市值</CardDescription>
               <CardTitle className="truncate text-2xl tracking-[-0.03em] tabular-nums">
                 {hasValue
@@ -193,9 +195,9 @@ export function ValueSummaryCard({
           </Card>
         ))}
       </div>
-      <Alert role="note" className="mt-3 bg-muted/25 py-2">
+      <Alert role="note" className="flex min-h-10 items-center bg-muted/25 py-2">
         <AlertDescription className="text-xs text-muted-foreground">
-          各币种市值按参考汇率折算为 {baseCurrency} 后汇总
+          {formatTotalMarketValueFormula(baseCurrency)}
         </AlertDescription>
       </Alert>
     </div>
@@ -554,6 +556,7 @@ export function Overview({
                 baseCurrency={workspace.baseCurrency}
                 rates={exchangeRates.snapshot?.rates}
               />
+              <Separator />
               <AssetAccountTable
                 accounts={workspace.assetAccounts}
                 accountGroups={workspace.accountGroups}
@@ -589,6 +592,7 @@ export function Overview({
                 baseCurrency={workspace.baseCurrency}
                 rates={exchangeRates.snapshot?.rates}
               />
+              <Separator />
               <PositionGroupOverviewTable
                 items={groupItems}
                 assetAccounts={workspace.assetAccounts}

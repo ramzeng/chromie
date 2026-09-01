@@ -196,6 +196,7 @@ export function AssetAllocationChart({
               data={chartData}
               dataKey="value"
               nameKey="label"
+              isAnimationActive={false}
               outerRadius="70%"
               stroke={hasSingleSlice ? 'none' : 'var(--card)'}
               strokeWidth={hasSingleSlice ? 0 : 2}

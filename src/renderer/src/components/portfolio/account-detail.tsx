@@ -8,7 +8,6 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  WalletCards,
   Wrench
 } from 'lucide-react'
 
@@ -43,6 +42,7 @@ import {
   EmptyMedia,
   EmptyTitle
 } from '@/components/ui/empty'
+import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
@@ -203,8 +203,9 @@ function PositionTable({
                 <TableCell colSpan={readOnly ? 7 : 8} className="p-0">
                   <Empty className="min-h-32 gap-2 border-0 p-3 md:p-3">
                     <EmptyHeader className="gap-1">
-                      <EmptyTitle className="text-sm">暂无持仓</EmptyTitle>
-                      <EmptyDescription>添加持仓后将在这里展示</EmptyDescription>
+                      <EmptyTitle className="text-xs font-normal text-muted-foreground">
+                        暂无持仓
+                      </EmptyTitle>
                     </EmptyHeader>
                   </Empty>
                 </TableCell>
@@ -317,68 +318,31 @@ export function AssetAccountDetail({
         </div>
       </header>
 
-      <div className="mt-6 grid gap-6">
+      <div className="mt-6 flex flex-col gap-6">
         <ValueSummaryCard
           positions={account.positions}
           baseCurrency={baseCurrency}
           exchangeRates={exchangeRates}
         />
-        {account.positions.length ? (
-          <>
-            <AssetDistributionCharts
-              positions={account.positions}
-              breakdownItems={createPositionAllocationItems(account.positions)}
-              breakdownTitle="持仓市值分布"
-              breakdownDimensionLabel="持仓"
-              baseCurrency={baseCurrency}
-              rates={exchangeRates.snapshot?.rates}
-            />
-            <PositionTable
-              positions={account.positions}
-              readOnly={readOnly || Boolean(account.sync)}
-              baseCurrency={baseCurrency}
-              exchangeRates={exchangeRates}
-              onEditPosition={onEditPosition}
-              onDeletePosition={onDeletePosition}
-            />
-          </>
-        ) : (
-          <Empty className="min-h-64 border bg-card">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <WalletCards data-icon="inline-start" />
-              </EmptyMedia>
-              <EmptyTitle>{account.sync ? '同步资产账户' : '为资产账户添加持仓'}</EmptyTitle>
-              <EmptyDescription>
-                {account.sync ? '同步后，可以查看币种、市值和持仓市值分布' : '添加持仓后，可以查看币种、市值和持仓市值分布'}
-              </EmptyDescription>
-            </EmptyHeader>
-            <EmptyContent>
-              {!readOnly && (
-                <Button
-                  variant={account.sync ? 'outline' : 'default'}
-                  onClick={() => {
-                    if (account.sync) void onSync()
-                    else onAddPosition()
-                  }}
-                  disabled={syncState?.status === 'syncing'}
-                  aria-busy={account.sync && syncState?.status === 'syncing'}
-                >
-                  {account.sync ? (
-                    syncState?.status === 'syncing' ? (
-                      <Spinner data-icon="inline-start" />
-                    ) : (
-                      <RefreshCw data-icon="inline-start" />
-                    )
-                  ) : (
-                    <Plus data-icon="inline-start" />
-                  )}
-                  {account.sync ? '同步' : '添加持仓'}
-                </Button>
-              )}
-            </EmptyContent>
-          </Empty>
+        {account.positions.length > 0 && (
+          <AssetDistributionCharts
+            positions={account.positions}
+            breakdownItems={createPositionAllocationItems(account.positions)}
+            breakdownTitle="持仓市值分布"
+            breakdownDimensionLabel="持仓"
+            baseCurrency={baseCurrency}
+            rates={exchangeRates.snapshot?.rates}
+          />
         )}
+        <Separator />
+        <PositionTable
+          positions={account.positions}
+          readOnly={readOnly || Boolean(account.sync)}
+          baseCurrency={baseCurrency}
+          exchangeRates={exchangeRates}
+          onEditPosition={onEditPosition}
+          onDeletePosition={onDeletePosition}
+        />
       </div>
     </div>
   )
@@ -534,54 +498,54 @@ export function AccountGroupDetail({
         )}
       </header>
 
-      <div className="mt-6">
+      <div className="mt-6 flex flex-col gap-6">
         <ValueSummaryCard
           positions={positions}
           baseCurrency={baseCurrency}
           exchangeRates={exchangeRates}
         />
-      </div>
-
-      {accounts.length ? (
-        <div className="mt-6 grid gap-6">
-          <AssetDistributionCharts
-            positions={positions}
-            breakdownItems={createAccountAllocationItems(accounts)}
-            breakdownTitle="资产账户市值分布"
-            breakdownDimensionLabel="资产账户"
-            baseCurrency={baseCurrency}
-            rates={exchangeRates.snapshot?.rates}
-          />
-          <AccountGroupAccountTable
-            accounts={accounts}
-            readOnly={readOnly}
-            baseCurrency={baseCurrency}
-            exchangeRates={exchangeRates}
-            onRemove={onRemoveAccount}
-            removingAccountIds={removingAccountIds}
-          />
-        </div>
-      ) : (
-        <Empty className="mt-6 min-h-64 border bg-card">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Layers2 data-icon="inline-start" />
-            </EmptyMedia>
-            <EmptyTitle>为账户分组添加资产账户</EmptyTitle>
-            <EmptyDescription>
-              可选择多个资产账户统一查看，资产账户和持仓仍在原位置独立维护
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
+        {accounts.length ? (
+          <>
+            <AssetDistributionCharts
+              positions={positions}
+              breakdownItems={createAccountAllocationItems(accounts)}
+              breakdownTitle="资产账户市值分布"
+              breakdownDimensionLabel="资产账户"
+              baseCurrency={baseCurrency}
+              rates={exchangeRates.snapshot?.rates}
+            />
+            <Separator />
+            <AccountGroupAccountTable
+              accounts={accounts}
+              readOnly={readOnly}
+              baseCurrency={baseCurrency}
+              exchangeRates={exchangeRates}
+              onRemove={onRemoveAccount}
+              removingAccountIds={removingAccountIds}
+            />
+          </>
+        ) : (
+          <Empty className="min-h-64 border bg-card">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Layers2 data-icon="inline-start" />
+              </EmptyMedia>
+              <EmptyTitle>为账户分组添加资产账户</EmptyTitle>
+              <EmptyDescription>
+                可选择多个资产账户统一查看，资产账户和持仓仍在原位置独立维护
+              </EmptyDescription>
+            </EmptyHeader>
             {!readOnly && (
-              <Button onClick={onManageAccounts}>
-                <ListPlus data-icon="inline-start" />
-                选择资产账户
-              </Button>
+              <EmptyContent>
+                <Button onClick={onManageAccounts}>
+                  <ListPlus data-icon="inline-start" />
+                  选择资产账户
+                </Button>
+              </EmptyContent>
             )}
-          </EmptyContent>
-        </Empty>
-      )}
+          </Empty>
+        )}
+      </div>
     </div>
   )
 }
@@ -728,8 +692,9 @@ function GroupPositionTable({
                 <TableCell colSpan={readOnly ? 9 : 10} className="p-0">
                   <Empty className="min-h-32 gap-2 border-0 p-3 md:p-3">
                     <EmptyHeader className="gap-1">
-                      <EmptyTitle className="text-sm">暂无持仓</EmptyTitle>
-                      <EmptyDescription>选择持仓后将在这里展示</EmptyDescription>
+                      <EmptyTitle className="text-xs font-normal text-muted-foreground">
+                        暂无持仓
+                      </EmptyTitle>
                     </EmptyHeader>
                   </Empty>
                 </TableCell>
@@ -810,16 +775,13 @@ export function PositionGroupDetail({
         </div>
       </header>
 
-      <div className="mt-6">
+      <div className="mt-6 flex flex-col gap-6">
         <ValueSummaryCard
           positions={positions}
           baseCurrency={baseCurrency}
           exchangeRates={exchangeRates}
         />
-      </div>
-
-      {items.length ? (
-        <div className="mt-6 grid gap-6">
+        {items.length > 0 && (
           <AssetDistributionCharts
             positions={positions}
             breakdownItems={createPositionAllocationItems(positions)}
@@ -828,35 +790,18 @@ export function PositionGroupDetail({
             baseCurrency={baseCurrency}
             rates={exchangeRates.snapshot?.rates}
           />
-          <GroupPositionTable
-            items={items}
-            accountGroups={accountGroups}
-            readOnly={readOnly}
-            baseCurrency={baseCurrency}
-            exchangeRates={exchangeRates}
-            onRemove={onRemovePosition}
-            removingPositionIds={removingPositionIds}
-          />
-        </div>
-      ) : (
-        <Empty className="mt-6 min-h-64 border bg-card">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Folder data-icon="inline-start" />
-            </EmptyMedia>
-            <EmptyTitle>为持仓分组添加持仓</EmptyTitle>
-            <EmptyDescription>可混合选择不同资产账户中的持仓，数据会跟随原资产账户更新</EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            {!readOnly && (
-              <Button onClick={onManagePositions}>
-                <ListPlus data-icon="inline-start" />
-                选择持仓
-              </Button>
-            )}
-          </EmptyContent>
-        </Empty>
-      )}
+        )}
+        <Separator />
+        <GroupPositionTable
+          items={items}
+          accountGroups={accountGroups}
+          readOnly={readOnly}
+          baseCurrency={baseCurrency}
+          exchangeRates={exchangeRates}
+          onRemove={onRemovePosition}
+          removingPositionIds={removingPositionIds}
+        />
+      </div>
     </div>
   )
 }
