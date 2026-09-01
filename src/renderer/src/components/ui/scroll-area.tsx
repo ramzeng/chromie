@@ -15,7 +15,7 @@ const ScrollArea = React.forwardRef<
   >
     <ScrollAreaPrimitive.Viewport
       data-slot="scroll-area-viewport"
-      className="size-full rounded-[inherit] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="size-full rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
     >
       {children}
     </ScrollAreaPrimitive.Viewport>
@@ -45,7 +45,7 @@ const ScrollBar = React.forwardRef<
   >
     <ScrollAreaPrimitive.ScrollAreaThumb
       data-slot="scroll-area-thumb"
-      className="relative flex-1 rounded-full bg-muted-foreground/30 transition-colors group-hover/scrollbar:bg-muted-foreground/55"
+      className="relative flex-1 rounded-sm bg-muted-foreground/30 transition-colors group-hover/scrollbar:bg-muted-foreground/55"
     />
   </ScrollAreaPrimitive.ScrollAreaScrollbar>
 ))

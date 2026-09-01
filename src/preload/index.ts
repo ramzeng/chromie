@@ -20,7 +20,6 @@ import type {
   PortfolioClientLoadResponse,
   PortfolioSyncResponse
 } from '../shared/portfolio'
-import type { ShareImageSaveResult } from '../shared/share-image'
 
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
@@ -75,10 +74,6 @@ contextBridge.exposeInMainWorld('desktop', {
     exportData: (content: string): Promise<BackupExportResult> =>
       ipcRenderer.invoke('backup:export', content),
     importData: (): Promise<BackupImportResult> => ipcRenderer.invoke('backup:import')
-  },
-  shareImage: {
-    save: (dataUrl: string, workspaceName: string): Promise<ShareImageSaveResult> =>
-      ipcRenderer.invoke('share-image:save', dataUrl, workspaceName)
   },
   mcp: {
     loadSettings: (): Promise<McpConnectionSettings> =>

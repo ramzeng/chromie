@@ -9,7 +9,6 @@ import { PlainTextFileStore, SecureFileStore } from './infra/file-store'
 import { syncFutuPositions } from './infra/futu'
 import { syncIbkrPositions } from './infra/ibkr'
 import { syncOkxPositions } from './infra/okx'
-import { saveShareImage } from './infra/share-image'
 import { FileExchangeRateRepository } from './repository/exchange-rate-repository'
 import { SecureIntegrationRepository } from './repository/integration-repository'
 import { FileMcpSettingsRepository } from './repository/mcp-settings-repository'
@@ -63,7 +62,10 @@ function createWindow(): void {
     trustedWebContentsIds.delete(webContentsId)
   })
 
-  window.on('ready-to-show', () => window.show())
+  window.on('ready-to-show', () => {
+    window.maximize()
+    window.show()
+  })
 
   window.webContents.on('will-navigate', (event) => event.preventDefault())
 
@@ -106,8 +108,7 @@ async function startApplication(): Promise<void> {
       exchangeRateService.refresh(provider, { fetch: fetchExchangeRates }),
     loadExchangeRates: (legacyContent) => exchangeRateService.load(legacyContent),
     exportBackup,
-    importBackup,
-    saveShareImage
+    importBackup
   })
   const portfolioModule = new PortfolioModule(portfolioService, desktopService)
   const mcpSettingsService = new McpSettingsService(mcpSettingsRepository)

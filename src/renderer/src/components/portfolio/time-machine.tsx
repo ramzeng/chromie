@@ -13,6 +13,13 @@ import {
   shortSnapshotHash,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
+import {
+  SortableTableHead,
+  compareOptionalNumbers,
+  compareText,
+  useTableSort
+} from '@/components/portfolio/sortable-table-head'
+import { PortfolioPage, PortfolioPageHeader } from '@/components/portfolio/page-shell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -61,6 +68,9 @@ export function TimeMachine({
   onViewSnapshot: (snapshotId: string) => void
   onDeleteSnapshot: (snapshot: WorkspaceSnapshot) => void
 }) {
+  const [sort, onSort] = useTableSort<
+    'workspace' | 'time' | 'accounts' | 'positions' | 'value'
+  >('time', 'desc')
   const rows = [
     {
       id: 'latest',
@@ -77,13 +87,53 @@ export function TimeMachine({
       rates: snapshot.exchangeRates?.rates,
       snapshot
     }))
-  ]
+  ].map((row) => {
+    const positions = row.workspace.assetAccounts.flatMap(
+      (assetAccount) => assetAccount.positions
+    )
+    return {
+      ...row,
+      positionCount: positions.length,
+      valuation: valuePositions(
+        positions,
+        row.workspace.baseCurrency,
+        row.rates
+      )
+    }
+  })
+  rows.sort((left, right) => {
+    if (sort.key === 'workspace') {
+      return compareText(left.workspace.name, right.workspace.name, sort.direction)
+    }
+    if (sort.key === 'time') {
+      return compareOptionalNumbers(
+        left.createdAt ? new Date(left.createdAt).getTime() : Number.MAX_SAFE_INTEGER,
+        right.createdAt ? new Date(right.createdAt).getTime() : Number.MAX_SAFE_INTEGER,
+        sort.direction
+      )
+    }
+    if (sort.key === 'accounts') {
+      return compareOptionalNumbers(
+        left.workspace.assetAccounts.length,
+        right.workspace.assetAccounts.length,
+        sort.direction
+      )
+    }
+    if (sort.key === 'positions') {
+      return compareOptionalNumbers(left.positionCount, right.positionCount, sort.direction)
+    }
+    return compareOptionalNumbers(
+      left.valuation.totalConvertedMarketValue,
+      right.valuation.totalConvertedMarketValue,
+      sort.direction
+    )
+  })
 
   return (
-    <div className="mx-auto w-[calc(50%+36rem)] max-w-full px-4 pb-8 pt-4">
-      <header className="flex items-start justify-between gap-6">
+    <PortfolioPage>
+      <PortfolioPageHeader className="items-start gap-6">
         <div>
-          <h1 className="text-3xl font-semibold tracking-[-0.04em]">时间机器</h1>
+          <h1 className="text-2xl font-semibold tracking-[-0.035em]">时间机器</h1>
         </div>
         <Button
           onClick={() => void onCreate()}
@@ -98,32 +148,66 @@ export function TimeMachine({
           )}
           {creating ? '创建中…' : '创建快照'}
         </Button>
-      </header>
+      </PortfolioPageHeader>
 
-      <section className="mt-6 overflow-hidden rounded-lg border border-border/70 bg-card">
-        <Table className="min-w-[900px] table-fixed">
+      <section className="mt-6 overflow-hidden rounded-sm border border-border/70 bg-card">
+        <Table className="min-w-[760px] [&_.tabular-nums]:whitespace-nowrap">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[14%]">数据</TableHead>
-              <TableHead className="w-[14%]">工作区名称</TableHead>
-              <TableHead className="w-[20%]">时间点</TableHead>
-              <TableHead className="w-[10%] text-right">资产账户数</TableHead>
-              <TableHead className="w-[8%] text-right">持仓数</TableHead>
-              <TableHead className="w-[19%] text-right">折算市值</TableHead>
-              <TableHead className="w-[9%]">状态</TableHead>
+              <TableHead className="min-w-36">数据</TableHead>
+              <SortableTableHead
+                sortKey="workspace"
+                sort={sort}
+                onSort={onSort}
+                className="min-w-36"
+              >
+                工作区名称
+              </SortableTableHead>
+              <SortableTableHead
+                sortKey="time"
+                sort={sort}
+                onSort={onSort}
+                defaultDirection="desc"
+                className="whitespace-nowrap"
+              >
+                时间点
+              </SortableTableHead>
+              <SortableTableHead
+                sortKey="accounts"
+                sort={sort}
+                onSort={onSort}
+                defaultDirection="desc"
+                align="right"
+                className="whitespace-nowrap"
+              >
+                资产账户数
+              </SortableTableHead>
+              <SortableTableHead
+                sortKey="positions"
+                sort={sort}
+                onSort={onSort}
+                defaultDirection="desc"
+                align="right"
+                className="whitespace-nowrap"
+              >
+                持仓数
+              </SortableTableHead>
+              <SortableTableHead
+                sortKey="value"
+                sort={sort}
+                onSort={onSort}
+                defaultDirection="desc"
+                align="right"
+                className="whitespace-nowrap"
+              >
+                折算市值
+              </SortableTableHead>
+              <TableHead className="whitespace-nowrap">状态</TableHead>
               <TableHead className="w-16" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => {
-              const positions = row.workspace.assetAccounts.flatMap(
-                (assetAccount) => assetAccount.positions
-              )
-              const valuation = valuePositions(
-                positions,
-                row.workspace.baseCurrency,
-                row.rates
-              )
               const isSelected = row.kind === 'latest'
                 ? selectedSnapshotId === null
                 : selectedSnapshotId === row.id
@@ -133,7 +217,7 @@ export function TimeMachine({
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span
                         className={cn(
-                          'grid size-8 shrink-0 place-items-center rounded-md',
+                          'grid size-8 shrink-0 place-items-center rounded-sm',
                           row.kind === 'latest'
                             ? 'bg-secondary text-secondary-foreground'
                             : 'bg-muted text-muted-foreground'
@@ -161,13 +245,15 @@ export function TimeMachine({
                   <TableCell className="text-right tabular-nums">
                     {row.workspace.assetAccounts.length}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{positions.length}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {row.positionCount}
+                  </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
-                    {valuation.isComplete &&
-                    valuation.totalConvertedMarketValue !== undefined ? (
+                    {row.valuation.isComplete &&
+                    row.valuation.totalConvertedMarketValue !== undefined ? (
                       <MaskedAssetValue>
                         {formatMoney(
-                          valuation.totalConvertedMarketValue,
+                          row.valuation.totalConvertedMarketValue,
                           row.workspace.baseCurrency
                         )}
                       </MaskedAssetValue>
@@ -176,7 +262,10 @@ export function TimeMachine({
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={isSelected ? 'default' : 'secondary'}>
+                    <Badge
+                      variant={isSelected ? 'default' : 'secondary'}
+                      className="rounded-sm"
+                    >
                       {isSelected ? '正在查看' : row.kind === 'latest' ? '当前' : '只读'}
                     </Badge>
                   </TableCell>
@@ -189,7 +278,7 @@ export function TimeMachine({
                           disabled={isSelected && row.kind === 'latest'}
                           aria-label={`${row.kind === 'latest' ? '当前数据' : `快照 #${shortSnapshotHash(row.id)}`}操作`}
                         >
-                          <Ellipsis className="size-4" />
+                          <Ellipsis data-icon="icon-only" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="min-w-20">
@@ -230,6 +319,6 @@ export function TimeMachine({
         </Table>
       </section>
 
-    </div>
+    </PortfolioPage>
   )
 }

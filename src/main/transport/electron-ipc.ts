@@ -112,13 +112,6 @@ export function registerDesktopIpc(
     assertTrustedSender(event, validateSender)
     return service.importBackup(event.sender.id)
   })
-  ipcMain.handle(
-    'share-image:save',
-    (event, dataUrl: unknown, workspaceName: unknown) => {
-      assertTrustedSender(event, validateSender)
-      return service.saveShareImage(event.sender.id, dataUrl, workspaceName)
-    }
-  )
   ipcMain.handle('mcp:load-settings', (event) => {
     assertTrustedSender(event, validateSender)
     return mcp.loadConnectionSettings()
@@ -131,8 +124,7 @@ export function registerDesktopIpc(
     const input = settings as Partial<McpAccessSettings>
     return mcp.updateAccessSettings({
       enabled: input.enabled === true,
-      allowWrite: input.allowWrite === true,
-      allowDelete: input.allowDelete === true
+      allowWrite: input.allowWrite === true
     })
   })
 }

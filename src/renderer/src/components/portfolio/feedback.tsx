@@ -1,17 +1,12 @@
 import {
   CircleAlert,
   Download,
-  History,
   Layers3,
   Plus
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import {
-  cleanErrorMessage,
-  formatLastSyncedAt,
-  shortSnapshotHash
-} from '@/components/portfolio/view-helpers'
+import { cleanErrorMessage } from '@/components/portfolio/view-helpers'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -24,7 +19,6 @@ import {
 } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
-import type { WorkspaceSnapshot } from '@/lib/portfolio'
 
 export function reportPortfolioError(error: unknown, title = '操作失败'): void {
   toast.error(title, { description: cleanErrorMessage(error) })
@@ -50,7 +44,7 @@ export function EmptyWorkspace({
               <span className="absolute -top-1 left-1/2 size-2 -translate-x-1/2 rounded-full bg-primary" />
             </span>
             <span className="absolute inset-5 animate-[spin_5s_linear_infinite_reverse] rounded-full border border-dashed border-border motion-reduce:animate-none" />
-            <span className="relative grid size-12 place-items-center rounded-lg bg-primary text-primary-foreground shadow-lg shadow-background/50">
+            <span className="relative grid size-12 place-items-center rounded-sm bg-primary text-primary-foreground shadow-lg shadow-background/50">
               <Layers3 className="size-5 animate-pulse motion-reduce:animate-none" />
             </span>
           </EmptyMedia>
@@ -106,20 +100,22 @@ export function AppLoadingSkeleton() {
           <Skeleton className="h-9 w-4/5" />
         </div>
       </aside>
-      <main className="min-w-0 flex-1 px-8 pt-16">
-        <div className="mx-auto max-w-6xl">
+      <main className="@container min-w-0 flex-1 pt-12">
+        <div className="mx-auto w-full max-w-[1440px] px-6 pb-8 pt-5">
           <div className="flex items-center justify-between">
             <Skeleton className="h-9 w-48" />
             <Skeleton className="h-9 w-28" />
           </div>
-          <div className="mt-6 grid gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-3">
-            {[0, 1, 2].map((item) => (
-              <Skeleton key={item} className="h-28 w-full" />
-            ))}
+          <Skeleton className="mt-5 h-9 w-56" />
+          <div className="mt-6 grid gap-3 @min-[36rem]:grid-cols-2 @min-[68rem]:grid-cols-5">
+            <Skeleton className="h-28 w-full @min-[36rem]:col-span-2" />
+            {[0, 1, 2].map((item) => <Skeleton key={item} className="h-28 w-full" />)}
           </div>
-          <Skeleton className="mt-3 h-11 w-full" />
-          <Skeleton className="mt-8 h-5 w-24" />
-          <div className="mt-3 overflow-hidden rounded-md border p-4">
+          <div className="mt-3 grid gap-3 @min-[68rem]:grid-cols-2">
+            <Skeleton className="h-[300px] w-full" />
+            <Skeleton className="h-[300px] w-full" />
+          </div>
+          <div className="mt-6 overflow-hidden rounded-sm border p-4">
             <Skeleton className="h-8 w-full" />
             {[0, 1, 2, 3].map((item) => (
               <Skeleton key={item} className="mt-3 h-10 w-full" />
@@ -142,35 +138,5 @@ export function PortfolioLoadError({ message }: { message: string }) {
         <AlertDescription>{message}</AlertDescription>
       </Alert>
     </main>
-  )
-}
-
-export function SnapshotViewingAlert({
-  snapshot,
-  onReturnLatest
-}: {
-  snapshot: WorkspaceSnapshot
-  onReturnLatest: () => void
-}) {
-  return (
-    <div className="pointer-events-none fixed inset-x-0 top-8 z-50 flex justify-center px-4">
-      <Alert className="pointer-events-auto w-fit max-w-full bg-background py-2 shadow-sm [&>svg]:top-1/2 [&>svg]:-translate-y-1/2">
-        <History data-icon="inline-start" />
-        <AlertTitle className="sr-only">正在查看历史快照</AlertTitle>
-        <AlertDescription className="flex min-w-0 items-center gap-2">
-          <span className="truncate">
-            快照 #{shortSnapshotHash(snapshot.id)} · {formatLastSyncedAt(snapshot.createdAt)}
-          </span>
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto shrink-0 px-1"
-            onClick={onReturnLatest}
-          >
-            返回当前数据
-          </Button>
-        </AlertDescription>
-      </Alert>
-    </div>
   )
 }

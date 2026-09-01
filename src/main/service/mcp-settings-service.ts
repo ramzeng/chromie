@@ -18,8 +18,7 @@ function normalizeSettings(value: unknown): McpAccessSettings {
   const allowWrite = enabled && input.allowWrite === true
   return {
     enabled,
-    allowWrite,
-    allowDelete: allowWrite && input.allowDelete === true
+    allowWrite
   }
 }
 

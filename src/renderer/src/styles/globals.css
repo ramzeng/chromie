@@ -64,11 +64,11 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.78 0.11 251);
-  --chart-2: oklch(0.67 0.18 254);
-  --chart-3: oklch(0.58 0.23 259);
-  --chart-4: oklch(0.5 0.23 262);
-  --chart-5: oklch(0.42 0.19 265);
+  --chart-1: oklch(0.72 0.14 250);
+  --chart-2: oklch(0.73 0.13 185);
+  --chart-3: oklch(0.7 0.15 305);
+  --chart-4: oklch(0.78 0.14 85);
+  --chart-5: oklch(0.7 0.16 25);
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.922 0 0);
@@ -97,7 +97,7 @@
   background-color: color-mix(in oklch, var(--muted-foreground) 32%, transparent);
   background-clip: padding-box;
   border: 3px solid transparent;
-  border-radius: 999px;
+  border-radius: 2px;
 }
 
 *::-webkit-scrollbar-thumb:hover {

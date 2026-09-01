@@ -2,6 +2,7 @@ import {
   DEFAULT_EXCHANGE_RATE_PROVIDER,
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   EXCHANGE_RATE_PROVIDERS,
+  isExchangeRateCurrency,
   MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   type ExchangeRateProvider,
@@ -393,7 +394,7 @@ function normalizeStoredExchangeRates(value: unknown): ExchangeRateSnapshot | nu
   Object.entries(snapshot.rates).forEach(([rawCurrency, rawRate]) => {
     const currency = rawCurrency.trim().toUpperCase()
     if (
-      isCurrencyCode(currency) &&
+      isExchangeRateCurrency(currency) &&
       typeof rawRate === 'number' &&
       Number.isFinite(rawRate) &&
       rawRate > 0

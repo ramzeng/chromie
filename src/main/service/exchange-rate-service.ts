@@ -1,7 +1,8 @@
 import type { ExchangeRateRepository } from '../repository/exchange-rate-repository'
-import type {
-  ExchangeRateProvider,
-  ExchangeRateSnapshot
+import {
+  isExchangeRateCurrency,
+  type ExchangeRateProvider,
+  type ExchangeRateSnapshot
 } from '../../shared/exchange-rates'
 
 export interface ExchangeRateSource {
@@ -27,7 +28,7 @@ function normalizeSnapshot(value: unknown): ExchangeRateSnapshot | null {
   Object.entries(snapshot.rates).forEach(([rawCurrency, rawRate]) => {
     const currency = rawCurrency.trim().toUpperCase()
     if (
-      /^[A-Z0-9]{2,12}$/.test(currency) &&
+      isExchangeRateCurrency(currency) &&
       typeof rawRate === 'number' &&
       Number.isFinite(rawRate) &&
       rawRate > 0

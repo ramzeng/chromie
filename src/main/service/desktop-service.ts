@@ -12,7 +12,6 @@ import {
 import type { FutuSyncOptions, FutuSyncResult } from '../../shared/futu'
 import type { IbkrSyncOptions, IbkrSyncResult } from '../../shared/ibkr'
 import type { OkxSyncOptions, OkxSyncResult } from '../../shared/okx'
-import type { ShareImageSaveResult } from '../../shared/share-image'
 
 export type AssetSyncRequest =
   | { provider: 'futu'; options?: FutuSyncOptions }
@@ -35,11 +34,6 @@ export type DesktopServiceDependencies = {
   loadExchangeRates: (legacyContent?: unknown) => Promise<ExchangeRateSnapshot | null>
   exportBackup: (ownerId: number, content: unknown) => Promise<BackupExportResult>
   importBackup: (ownerId: number) => Promise<BackupImportResult>
-  saveShareImage: (
-    ownerId: number,
-    dataUrl: unknown,
-    workspaceName: unknown
-  ) => Promise<ShareImageSaveResult>
 }
 
 export interface DesktopOperations {
@@ -48,11 +42,6 @@ export interface DesktopOperations {
   fetchExchangeRates(provider: unknown): Promise<ExchangeRateSnapshot>
   exportBackup(ownerId: number, content: unknown): Promise<BackupExportResult>
   importBackup(ownerId: number): Promise<BackupImportResult>
-  saveShareImage(
-    ownerId: number,
-    dataUrl: unknown,
-    workspaceName: unknown
-  ): Promise<ShareImageSaveResult>
 }
 
 export class DesktopService implements DesktopOperations {
@@ -91,11 +80,4 @@ export class DesktopService implements DesktopOperations {
     return this.dependencies.importBackup(ownerId)
   }
 
-  saveShareImage(
-    ownerId: number,
-    dataUrl: unknown,
-    workspaceName: unknown
-  ): Promise<ShareImageSaveResult> {
-    return this.dependencies.saveShareImage(ownerId, dataUrl, workspaceName)
-  }
 }

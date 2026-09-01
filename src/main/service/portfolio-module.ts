@@ -9,16 +9,15 @@ import {
   createPositionGroupInputSchema,
   createPositionInputSchema,
   createSnapshotInputSchema,
-  deletePortfolioItemInputSchema,
   getWorkspaceInputSchema,
-  getOverviewInputSchema,
+  getPortfolioOverviewInputSchema,
   listWorkspacesInputSchema,
   listSnapshotsInputSchema,
+  listPositionsInputSchema,
   mcpToolInputSchemas,
   refreshExchangeRatesInputSchema,
   replaceAccountGroupMembersInputSchema,
   replacePositionGroupMembersInputSchema,
-  searchPositionsInputSchema,
   syncAssetAccountInputSchema,
   updateWorkspaceInputSchema,
   updateAssetAccountInputSchema,
@@ -26,7 +25,6 @@ import {
   updatePositionGroupInputSchema,
   updatePositionInputSchema,
   type McpAccessSettings,
-  type McpDeleteTarget,
   type McpToolArguments,
   type McpToolName,
   type McpToolSuccess
@@ -150,7 +148,7 @@ type PositionCursor = {
 }
 
 function positionCursorScope(
-  input: McpToolArguments['chromie_search_positions']
+  input: McpToolArguments['chromie_list_positions']
 ): string {
   return createHash('sha256')
     .update(JSON.stringify({
@@ -161,7 +159,7 @@ function positionCursorScope(
       currency: input.currency ?? null,
       asset_account_id: input.asset_account_id ?? null,
       account_group_id: input.account_group_id ?? null,
-      group_id: input.group_id ?? null
+      position_group_id: input.position_group_id ?? null
     }))
     .digest('base64url')
     .slice(0, 22)
@@ -373,11 +371,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
           return await this.listWorkspaces(listWorkspacesInputSchema.parse(parsed.data))
         case 'chromie_get_workspace':
           return await this.getWorkspace(getWorkspaceInputSchema.parse(parsed.data))
-        case 'chromie_get_overview':
-          return await this.getOverview(getOverviewInputSchema.parse(parsed.data))
-        case 'chromie_search_positions':
-          return await this.searchPositions(
-            searchPositionsInputSchema.parse(parsed.data)
+        case 'chromie_get_portfolio_overview':
+          return await this.getPortfolioOverview(
+            getPortfolioOverviewInputSchema.parse(parsed.data)
+          )
+        case 'chromie_list_positions':
+          return await this.listPositions(
+            listPositionsInputSchema.parse(parsed.data)
           )
         case 'chromie_list_snapshots':
           return await this.listSnapshots(listSnapshotsInputSchema.parse(parsed.data))
@@ -428,10 +428,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
         case 'chromie_refresh_exchange_rates':
           return await this.refreshExchangeRates(
             refreshExchangeRatesInputSchema.parse(parsed.data)
-          )
-        case 'chromie_delete_portfolio_item':
-          return await this.deletePortfolioItem(
-            deletePortfolioItemInputSchema.parse(parsed.data)
           )
     }
   }
@@ -508,12 +504,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
   private assertAccess(name: McpToolName, access: McpAccessSettings): void {
     if (!access.enabled) {
       throw new McpOperationError('MCP_DISABLED', '请先在 Chromie 中启用 MCP')
-    }
-    if (name === 'chromie_delete_portfolio_item') {
-      if (!access.allowWrite || !access.allowDelete) {
-        throw new McpOperationError('PERMISSION_DENIED', 'Chromie 未授权 MCP 删除数据')
-      }
-      return
     }
     if (WRITE_TOOLS.has(name) && !access.allowWrite) {
       throw new McpOperationError('PERMISSION_DENIED', 'Chromie MCP 当前为只读模式')
@@ -602,8 +592,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     })
   }
 
-  private async getOverview(
-    input: McpToolArguments['chromie_get_overview']
+  private async getPortfolioOverview(
+    input: McpToolArguments['chromie_get_portfolio_overview']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const resolved = await this.resolveView(state, input.workspace_id, input.view)
@@ -724,8 +714,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     })
   }
 
-  private async searchPositions(
-    input: McpToolArguments['chromie_search_positions']
+  private async listPositions(
+    input: McpToolArguments['chromie_list_positions']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const resolved = await this.resolveView(state, input.workspace_id, input.view)
@@ -753,7 +743,12 @@ export class PortfolioModule implements PortfolioModuleOperations {
       }
       return assetAccount.positions.flatMap((position) => {
         const group = groupsByPositionId.get(position.id)
-        if (input.group_id && group?.id !== input.group_id) return []
+        if (
+          input.position_group_id &&
+          group?.id !== input.position_group_id
+        ) {
+          return []
+        }
         if (input.market && position.market !== input.market) return []
         if (input.currency && position.currency !== input.currency) return []
         if (
@@ -777,7 +772,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
                   }
                 : null
             })(),
-            group: group ? { id: group.id, name: group.name } : null,
+            position_group: group ? { id: group.id, name: group.name } : null,
             valuation: positionValue(
               position,
               workspace.baseCurrency,
@@ -1091,7 +1086,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
       throw new Error('创建持仓分组后无法读取结果')
     }
     return success(`已创建持仓分组“${input.name}”`, {
-      group_id: response.result
+      position_group_id: response.result
     })
   }
 
@@ -1100,17 +1095,21 @@ export class PortfolioModule implements PortfolioModuleOperations {
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, input.workspace_id)
-    if (!workspace.positionGroups.some((group) => group.id === input.group_id)) {
+    if (
+      !workspace.positionGroups.some(
+        (group) => group.id === input.position_group_id
+      )
+    ) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
     }
     await this.portfolio.execute({
       type: 'update-position-group',
       workspaceId: input.workspace_id,
-      groupId: input.group_id,
+      groupId: input.position_group_id,
       input: { name: input.name }
     })
     return success(`已更新持仓分组“${input.name}”`, {
-      group_id: input.group_id
+      position_group_id: input.position_group_id
     })
   }
 
@@ -1119,18 +1118,22 @@ export class PortfolioModule implements PortfolioModuleOperations {
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, input.workspace_id)
-    if (!workspace.positionGroups.some((group) => group.id === input.group_id)) {
+    if (
+      !workspace.positionGroups.some(
+        (group) => group.id === input.position_group_id
+      )
+    ) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
     }
     const response = await this.portfolio.execute({
       type: 'set-position-group-positions',
       workspaceId: input.workspace_id,
-      groupId: input.group_id,
+      groupId: input.position_group_id,
       positionIds: input.position_ids
     })
     assertCommandResult(response)
     return success(`持仓分组现包含 ${input.position_ids.length} 项持仓`, {
-      group_id: input.group_id,
+      position_group_id: input.position_group_id,
       position_ids: input.position_ids
     })
   }
@@ -1180,146 +1183,5 @@ export class PortfolioModule implements PortfolioModuleOperations {
     return success(`已刷新 ${snapshot.provider} 汇率`, {
       exchange_rates: mcpExchangeRates(snapshot)
     })
-  }
-
-  private async deletePortfolioItem(
-    input: McpToolArguments['chromie_delete_portfolio_item']
-  ): Promise<McpToolSuccess> {
-    const state = await this.portfolio.load()
-    const target = input.target
-    const workspace = requireWorkspace(state.data, target.workspace_id)
-    let command: PortfolioCommand
-
-    if (target.kind === 'workspace') {
-      command = { type: 'delete-workspace', id: workspace.id }
-    } else if (target.kind === 'account_group') {
-      const accountGroup = workspace.accountGroups.find(
-        (item) => item.id === target.account_group_id
-      )
-      if (!accountGroup) {
-        throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
-      }
-      command = {
-        type: 'delete-account-group',
-        workspaceId: workspace.id,
-        groupId: accountGroup.id
-      }
-    } else if (target.kind === 'asset_account') {
-      requireAssetAccount(workspace, target.asset_account_id)
-      command = {
-        type: 'delete-asset-account',
-        workspaceId: workspace.id,
-        assetAccountId: target.asset_account_id
-      }
-    } else if (target.kind === 'position') {
-      const assetAccount = requireAssetAccount(workspace, target.asset_account_id)
-      if (!assetAccount.positions.some((item) => item.id === target.position_id)) {
-        throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓')
-      }
-      if (assetAccount.sync) {
-        throw new McpOperationError('READ_ONLY', '自动同步的资产账户不能手动删除持仓')
-      }
-      command = {
-        type: 'delete-position',
-        workspaceId: workspace.id,
-        assetAccountId: assetAccount.id,
-        positionId: target.position_id
-      }
-    } else if (target.kind === 'position_group') {
-      if (!workspace.positionGroups.some((item) => item.id === target.group_id)) {
-        throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
-      }
-      command = {
-        type: 'delete-position-group',
-        workspaceId: workspace.id,
-        groupId: target.group_id
-      }
-    } else {
-      const snapshot = state.data.snapshots.find(
-        (item) => item.id === target.snapshot_id && item.workspaceId === workspace.id
-      )
-      if (!snapshot) throw new McpOperationError('NOT_FOUND', '没有找到对应的快照')
-      command = { type: 'delete-snapshot', snapshotId: snapshot.id }
-    }
-
-    const preview = this.describeDeletion(state, target)
-    await this.portfolio.execute(command)
-    return success(preview.title, { target })
-  }
-
-  private describeDeletion(
-    state: PortfolioLoadResponse,
-    target: McpDeleteTarget
-  ): { title: string; description: string } {
-    const workspace = requireWorkspace(state.data, target.workspace_id)
-    if (target.kind === 'workspace') {
-      const positionCount = workspace.assetAccounts.reduce(
-        (count, item) => count + item.positions.length,
-        0
-      )
-      const snapshotCount = state.data.snapshots.filter(
-        (item) => item.workspaceId === workspace.id
-      ).length
-      return {
-        title: `删除工作区“${workspace.name}”`,
-        description: `将同时删除 ${workspace.accountGroups.length} 个账户分组、${workspace.assetAccounts.length} 个资产账户、${workspace.positionGroups.length} 个持仓分组、${positionCount} 项持仓和 ${snapshotCount} 个历史快照。此操作无法撤销。`
-      }
-    }
-    if (target.kind === 'account_group') {
-      const accountGroup = workspace.accountGroups.find(
-        (item) => item.id === target.account_group_id
-      )
-      if (!accountGroup) {
-        throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
-      }
-      return {
-        title: `删除账户分组“${accountGroup.name}”`,
-        description: `只会删除分组及其 ${accountGroup.assetAccountIds.length} 个引用，不会删除原资产账户。此操作无法撤销。`
-      }
-    }
-    if (target.kind === 'asset_account') {
-      const assetAccount = requireAssetAccount(workspace, target.asset_account_id)
-      const membershipCount = workspace.positionGroups.reduce(
-        (count, group) =>
-          count + group.positionIds.filter((id) =>
-            assetAccount.positions.some((position) => position.id === id)
-          ).length,
-        0
-      )
-      return {
-        title: `删除资产账户“${assetAccount.name}”`,
-        description: `将同时删除 ${assetAccount.positions.length} 项持仓和 ${membershipCount} 个分组引用，并移除同步配置。此操作无法撤销。`
-      }
-    }
-    if (target.kind === 'position') {
-      const assetAccount = requireAssetAccount(workspace, target.asset_account_id)
-      const position = assetAccount.positions.find(
-        (item) => item.id === target.position_id
-      )
-      if (!position) throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓')
-      const group = workspace.positionGroups.find((item) =>
-        item.positionIds.includes(position.id)
-      )
-      return {
-        title: `删除持仓 ${position.symbol}`,
-        description: `将从“${assetAccount.name}”移除${group ? `，并退出分组“${group.name}”` : ''}。此操作无法撤销。`
-      }
-    }
-    if (target.kind === 'position_group') {
-      const group = workspace.positionGroups.find((item) => item.id === target.group_id)
-      if (!group) throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
-      return {
-        title: `删除持仓分组“${group.name}”`,
-        description: `只会删除分组及其 ${group.positionIds.length} 个引用，不会删除原持仓。此操作无法撤销。`
-      }
-    }
-    const snapshot = state.data.snapshots.find(
-      (item) => item.id === target.snapshot_id && item.workspaceId === workspace.id
-    )
-    if (!snapshot) throw new McpOperationError('NOT_FOUND', '没有找到对应的快照')
-    return {
-      title: `删除 ${snapshot.createdAt} 的历史快照`,
-      description: '只会删除这个历史快照，当前数据不会受到影响。此操作无法撤销。'
-    }
   }
 }

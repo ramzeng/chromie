@@ -25,23 +25,30 @@ test('MCP settings default to disabled and normalize dependent permissions', asy
   assert.deepEqual(
     await service.save({
       enabled: true,
-      allowWrite: false,
-      allowDelete: true
+      allowWrite: false
     }),
     {
       enabled: true,
-      allowWrite: false,
-      allowDelete: false
+      allowWrite: false
     }
   )
   assert.deepEqual(
     await service.save({
       enabled: false,
-      allowWrite: true,
-      allowDelete: true
+      allowWrite: true
     }),
     DEFAULT_MCP_ACCESS_SETTINGS
   )
+
+  repository.content = JSON.stringify({
+    enabled: true,
+    allowWrite: true,
+    allowDelete: true
+  })
+  assert.deepEqual(await service.load(), {
+    enabled: true,
+    allowWrite: true
+  })
 })
 
 test('malformed MCP settings fail closed', async () => {

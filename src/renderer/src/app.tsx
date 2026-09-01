@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftRight,
+  ChartPie,
   ChartSpline,
   ChevronDown,
   ChevronUp,
   Ellipsis,
-  Eye,
-  EyeOff,
-  Folder,
   History,
   Layers2,
   Layers3,
@@ -40,24 +38,14 @@ import {
   AppLoadingSkeleton,
   EmptyWorkspace,
   PortfolioLoadError,
-  SnapshotViewingAlert,
   reportPortfolioError
 } from '@/components/portfolio/feedback'
-import {
-  Overview,
-  type OverviewMode
-} from '@/components/portfolio/overview'
-import {
-  createShareImageDataUrl,
-  type ShareImageScope
-} from '@/components/portfolio/share-image-dialog'
+import { Overview } from '@/components/portfolio/overview'
 import { TimeMachine } from '@/components/portfolio/time-machine'
+import { HistoricalVersionBanner } from '@/components/portfolio/page-shell'
 import {
-  ASSET_VALUE_MASK_STORAGE_KEY,
   AccountTypeIcon,
-  AssetValueMaskContext,
   accountSyncInterval,
-  loadAssetValueMask,
   shortSnapshotHash,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
@@ -166,7 +154,7 @@ function AssetAccountNavigation({
     {
       group: null,
       id: 'unassigned',
-      label: '-',
+      label: '未分组',
       accounts: accounts.filter((account) => !groupedAssetAccountIds.has(account.id))
     }
   ].filter(({ group, accounts: groupAccounts }) => group || groupAccounts.length > 0)
@@ -190,15 +178,15 @@ function AssetAccountNavigation({
           <div key={id} className="min-w-0 pl-2">
             <div
               className={cn(
-                'group flex min-w-0 items-center rounded-md pr-1 transition-colors hover:bg-muted/70',
+                'group flex min-w-0 items-center rounded-sm pr-1 transition-colors hover:bg-muted/70',
                 groupSelected && SELECTED_NAVIGATION_CLASS_NAME
               )}
             >
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="size-7 shrink-0 hover:bg-transparent"
+                size="icon-xs"
+                className="shrink-0 hover:bg-transparent"
                 aria-expanded={!collapsed}
                 aria-label={`${collapsed ? '展开' : '收起'}${accessibilityLabel}`}
                 onClick={() => toggleGroup(id)}
@@ -227,14 +215,14 @@ function AssetAccountNavigation({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="icon-xs"
                       className={cn(
-                        'size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100',
+                        'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100',
                         groupSelected && 'opacity-100'
                       )}
                       aria-label={`${group.name}操作`}
                     >
-                      <Ellipsis className="size-3.5" />
+                      <Ellipsis data-icon="icon-only" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="min-w-20">
@@ -266,7 +254,7 @@ function AssetAccountNavigation({
                     <div
                       key={account.id}
                       className={cn(
-                        'group flex min-w-0 items-center rounded-md pr-1 transition-colors hover:bg-muted/70',
+                        'group flex min-w-0 items-center rounded-sm pr-1 transition-colors hover:bg-muted/70',
                         selected && SELECTED_NAVIGATION_CLASS_NAME
                       )}
                     >
@@ -288,14 +276,14 @@ function AssetAccountNavigation({
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="ghost"
-                              size="icon"
+                              size="icon-xs"
                               className={cn(
-                                'size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100',
+                                'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100',
                                 selected && 'opacity-100'
                               )}
                               aria-label={`${account.name}操作`}
                             >
-                              <Ellipsis className="size-3.5" />
+                              <Ellipsis data-icon="icon-only" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="min-w-20">
@@ -370,7 +358,6 @@ export function App(): React.JSX.Element {
   const [selectedAssetAccountId, setSelectedAssetAccountId] = useState<string | null>(null)
   const [selectedAccountGroupId, setSelectedAccountGroupId] = useState<string | null>(null)
   const [selectedPositionGroupId, setSelectedPositionGroupId] = useState<string | null>(null)
-  const [overviewMode, setOverviewMode] = useState<OverviewMode>('accounts')
   const [showTimeMachine, setShowTimeMachine] = useState(false)
   const [workspaceDialog, setWorkspaceDialog] = useState<WorkspaceDialogState>({ open: false })
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false)
@@ -392,22 +379,13 @@ export function App(): React.JSX.Element {
   const [syncStates, setSyncStates] = useState<Record<string, AccountSyncState>>({})
   const [pendingImport, setPendingImport] = useState<PendingImport>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
-  const [imageExporting, setImageExporting] = useState(false)
   const [choosingImport, setChoosingImport] = useState(false)
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
-  const [removingGroupPositionIds, setRemovingGroupPositionIds] = useState<Set<string>>(
-    () => new Set()
-  )
-  const [removingGroupAccountIds, setRemovingGroupAccountIds] = useState<Set<string>>(
-    () => new Set()
-  )
-  const [assetValuesMasked, setAssetValuesMasked] = useState(loadAssetValueMask)
+  const [accountNavigationCollapsed, setAccountNavigationCollapsed] = useState(false)
+  const [positionNavigationCollapsed, setPositionNavigationCollapsed] = useState(false)
   const syncingAccountIds = useRef(new Set<string>())
-  const imageExportingRef = useRef(false)
   const choosingImportRef = useRef(false)
   const creatingSnapshotRef = useRef(false)
-  const removingGroupPositionIdsRef = useRef(new Set<string>())
-  const removingGroupAccountIdsRef = useRef(new Set<string>())
 
   useEffect(() => {
     if (!portfolio.refreshError) return
@@ -525,37 +503,6 @@ export function App(): React.JSX.Element {
     }
   }
 
-  async function exportImage(scope: ShareImageScope): Promise<void> {
-    if (imageExportingRef.current) return
-    imageExportingRef.current = true
-    try {
-      setImageExporting(true)
-      if (!activeWorkspace) throw new Error('没有找到可导出的工作区')
-      if (!window.desktop.shareImage?.save) {
-        throw new Error('图片导出组件尚未加载，请重启 Chromie')
-      }
-      const dataUrl = await createShareImageDataUrl({
-        workspace: activeWorkspace,
-        scope,
-        exchangeRates,
-        masked: assetValuesMasked,
-        snapshotAt: selectedSnapshot?.createdAt
-      })
-      const exportName = scope.kind === 'asset-account'
-        ? scope.account.name
-        : scope.kind === 'position-group'
-          ? scope.group.name
-          : activeWorkspace.name
-      const result = await window.desktop.shareImage.save(dataUrl, exportName)
-      if (!result.canceled) toast.success('图片已导出')
-    } catch (error) {
-      reportPortfolioError(error, '导出图片失败')
-    } finally {
-      imageExportingRef.current = false
-      setImageExporting(false)
-    }
-  }
-
   async function chooseImportWorkspace(): Promise<void> {
     if (choosingImportRef.current) return
     choosingImportRef.current = true
@@ -664,46 +611,6 @@ export function App(): React.JSX.Element {
     } finally {
       creatingSnapshotRef.current = false
       setCreatingSnapshot(false)
-    }
-  }
-
-  async function removePositionFromGroup(
-    groupId: string,
-    positionId: string
-  ): Promise<void> {
-    if (!activeWorkspace || removingGroupPositionIdsRef.current.has(positionId)) return
-    removingGroupPositionIdsRef.current.add(positionId)
-    setRemovingGroupPositionIds(new Set(removingGroupPositionIdsRef.current))
-    try {
-      await portfolio.removePositionFromGroup(activeWorkspace.id, groupId, positionId)
-      toast.success('已移出持仓分组')
-    } catch (error) {
-      reportPortfolioError(error, '移出持仓失败')
-    } finally {
-      removingGroupPositionIdsRef.current.delete(positionId)
-      setRemovingGroupPositionIds(new Set(removingGroupPositionIdsRef.current))
-    }
-  }
-
-  async function removeAccountFromGroup(
-    groupId: string,
-    assetAccountId: string
-  ): Promise<void> {
-    if (!activeWorkspace || removingGroupAccountIdsRef.current.has(assetAccountId)) return
-    removingGroupAccountIdsRef.current.add(assetAccountId)
-    setRemovingGroupAccountIds(new Set(removingGroupAccountIdsRef.current))
-    try {
-      await portfolio.removeAccountFromGroup(
-        activeWorkspace.id,
-        groupId,
-        assetAccountId
-      )
-      toast.success('已移出账户分组')
-    } catch (error) {
-      reportPortfolioError(error, '移出账户分组失败')
-    } finally {
-      removingGroupAccountIdsRef.current.delete(assetAccountId)
-      setRemovingGroupAccountIds(new Set(removingGroupAccountIdsRef.current))
     }
   }
 
@@ -866,18 +773,6 @@ export function App(): React.JSX.Element {
     }
   }
 
-  function toggleAssetValueMask(): void {
-    setAssetValuesMasked((current) => {
-      const next = !current
-      try {
-        window.localStorage.setItem(ASSET_VALUE_MASK_STORAGE_KEY, String(next))
-      } catch {
-        // The privacy toggle still works for the current session if storage is unavailable.
-      }
-      return next
-    })
-  }
-
   const deleteDialogCopy = (() => {
     if (!deleteTarget) return { title: '', description: '' }
     if (deleteTarget.kind === 'snapshot') {
@@ -966,209 +861,244 @@ export function App(): React.JSX.Element {
     <div className="flex h-screen min-h-[600px] overflow-hidden bg-background">
       <div className="window-drag fixed inset-x-0 top-0 z-40 h-12" />
       <aside className="flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar pt-12 text-sidebar-foreground">
-        <div className="px-4 pb-4 pt-2">
-          <div className="flex items-center gap-2 px-2">
-            <span className="grid size-8 place-items-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-              <Layers3 data-icon="inline-start" className="size-4" />
+        <div className="px-3 pb-5 pt-1">
+          <div className="flex min-h-8 items-center gap-3 px-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-sidebar-primary text-sidebar-primary-foreground">
+              <Layers3 className="size-4" aria-hidden="true" />
             </span>
-            <span className="text-[15px] font-semibold tracking-[-0.02em]">Chromie</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="ml-auto size-8"
-              aria-label={assetValuesMasked ? '显示资产数据' : '遮蔽资产数据'}
-              aria-pressed={assetValuesMasked}
-              title={assetValuesMasked ? '显示资产数据' : '遮蔽资产数据'}
-              onClick={toggleAssetValueMask}
-            >
-              {assetValuesMasked ? (
-                <EyeOff className="size-4" />
-              ) : (
-                <Eye className="size-4" />
-              )}
-            </Button>
+            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.02em]">
+              Chromie
+            </span>
           </div>
         </div>
 
         <Separator />
 
-        <ScrollArea className="min-h-0 flex-1">
-          <nav className="px-3 py-4">
-          <div className="mb-5 grid gap-1">
-            <Button
-              variant="ghost"
-              className={cn(
-                'w-full justify-start px-3 font-normal',
-                !selectedAssetAccountId &&
-                  !selectedAccountGroupId &&
-                  !selectedPositionGroupId &&
-                  !showTimeMachine &&
-                  cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
-              )}
-              onClick={() => {
-                setShowTimeMachine(false)
-                setSelectedAssetAccountId(null)
-                setSelectedAccountGroupId(null)
-                setSelectedPositionGroupId(null)
-              }}
-            >
-              <ChartSpline className="size-4" />
-              资产概览
-            </Button>
-            <Button
-              variant="ghost"
-              className={cn(
-                'w-full justify-start px-3 font-normal',
-                showTimeMachine && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
-              )}
-              onClick={() => {
-                setShowTimeMachine(true)
-                setSelectedAssetAccountId(null)
-                setSelectedAccountGroupId(null)
-                setSelectedPositionGroupId(null)
-              }}
-            >
-              <History className="size-4" />
-              时间机器
-            </Button>
-          </div>
-
-          <div className="mb-2 flex items-center justify-between pl-3 pr-0">
-            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              账户分组
-            </p>
-            {!selectedSnapshot && (
+        <ScrollArea className="mt-4 min-h-0 flex-1">
+          <nav className="px-3 pb-4">
+            <div className="mb-4 grid gap-1">
               <Button
                 variant="ghost"
-                size="icon"
-                className="size-6"
-                aria-label="新建账户分组"
-                onClick={() => setAccountGroupDialog({ open: true })}
+                className={cn(
+                  'w-full justify-start px-3 font-normal',
+                  !selectedAssetAccountId &&
+                    !selectedAccountGroupId &&
+                    !selectedPositionGroupId &&
+                    !showTimeMachine &&
+                    cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
+                )}
+                onClick={() => {
+                  setShowTimeMachine(false)
+                  setSelectedAssetAccountId(null)
+                  setSelectedAccountGroupId(null)
+                  setSelectedPositionGroupId(null)
+                }}
               >
-                <Plus className="size-3.5" />
+                <ChartSpline />
+                资产概览
               </Button>
-            )}
-          </div>
-          <div className="grid min-w-0 gap-1">
-            <AssetAccountNavigation
-              key={activeWorkspace.id}
-              accounts={activeWorkspace.assetAccounts}
-              accountGroups={activeWorkspace.accountGroups}
-              readOnly={Boolean(selectedSnapshot)}
-              selectedAccountId={selectedAssetAccountId}
-              selectedAccountGroupId={selectedAccountGroupId}
-              onSelect={(account) => {
-                setShowTimeMachine(false)
-                setSelectedAccountGroupId(null)
-                setSelectedPositionGroupId(null)
-                setSelectedAssetAccountId(account.id)
-              }}
-              onSelectGroup={(group) => {
-                setShowTimeMachine(false)
-                setSelectedAssetAccountId(null)
-                setSelectedPositionGroupId(null)
-                setSelectedAccountGroupId(group.id)
-              }}
-              onEdit={(account) => setAssetDialog({ open: true, account })}
-              onDelete={(account) => setDeleteTarget({ kind: 'asset', account })}
-              onCreateAccount={(group) =>
-                setAssetDialog({ open: true, groupId: group.id })
-              }
-              onEditGroup={(group) => setAccountGroupDialog({ open: true, group })}
-              onDeleteGroup={(group) =>
-                setDeleteTarget({ kind: 'account-group', group })
-              }
-            />
-            {!activeWorkspace.assetAccounts.length && (
-              <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">还没有资产账户</p>
-            )}
-          </div>
-
-          <div className="mb-2 mt-6 flex items-center justify-between pl-3 pr-0">
-            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              持仓分组
-            </p>
-            {!selectedSnapshot && (
               <Button
                 variant="ghost"
-                size="icon"
-                className="size-6"
-                aria-label="新建持仓分组"
-                onClick={() => setPositionGroupDialog({ open: true })}
+                className={cn(
+                  'w-full justify-start px-3 font-normal',
+                  showTimeMachine && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
+                )}
+                onClick={() => {
+                  setShowTimeMachine(true)
+                  setSelectedAssetAccountId(null)
+                  setSelectedAccountGroupId(null)
+                  setSelectedPositionGroupId(null)
+                }}
               >
-                <Plus className="size-3.5" />
+                <History />
+                时间机器
               </Button>
-            )}
-          </div>
-          <div className="grid min-w-0 gap-1">
-            {activeWorkspace.positionGroups.map((group) => {
-              const selected = selectedPositionGroupId === group.id
-              return (
-                <div
-                  key={group.id}
-                  className={cn(
-                    'group flex min-w-0 items-center rounded-md pr-1 transition-colors hover:bg-muted/70',
-                    selected && SELECTED_NAVIGATION_CLASS_NAME
-                  )}
-                >
+            </div>
+
+            <>
+                <div className="mb-2 flex items-center gap-1">
                   <Button
+                    type="button"
                     variant="ghost"
-                    className={cn(
-                      'h-auto min-w-0 flex-1 justify-start gap-3 px-3 py-2.5 font-normal hover:bg-transparent',
-                      selected && 'font-medium'
-                    )}
-                    onClick={() => {
-                      setShowTimeMachine(false)
-                      setSelectedAssetAccountId(null)
-                      setSelectedAccountGroupId(null)
-                      setSelectedPositionGroupId(group.id)
-                    }}
+                    size="sm"
+                    className="h-7 min-w-0 flex-1 justify-start px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+                    aria-expanded={!accountNavigationCollapsed}
+                    onClick={() => setAccountNavigationCollapsed((current) => !current)}
                   >
-                    <Folder className="size-4 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-left">{group.name}</span>
+                    <ChevronDown
+                      data-icon="inline-start"
+                      className={cn(
+                        'transition-transform',
+                        accountNavigationCollapsed && '-rotate-90'
+                      )}
+                    />
+                    账户分组
                   </Button>
-                  {!selectedSnapshot && <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={cn(
-                          'size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100',
-                          selected && 'opacity-100'
-                        )}
-                        aria-label={`${group.name}操作`}
-                      >
-                        <Ellipsis className="size-3.5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="min-w-20">
-                      <DropdownMenuGroup>
-                        <DropdownMenuItem
-                          onSelect={() => setPositionGroupDialog({ open: true, group })}
-                        >
-                          <Pencil className="size-4" />
-                          编辑
-                        </DropdownMenuItem>
-                      </DropdownMenuGroup>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuGroup>
-                        <DropdownMenuItem
-                          variant="destructive"
-                          onSelect={() => setDeleteTarget({ kind: 'position-group', group })}
-                        >
-                          <Trash2 className="size-4" />
-                          删除
-                        </DropdownMenuItem>
-                      </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>}
+                  {!selectedSnapshot && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="新建账户分组"
+                      title="新建账户分组"
+                      onClick={() => setAccountGroupDialog({ open: true })}
+                    >
+                      <Plus />
+                    </Button>
+                  )}
                 </div>
-              )
-            })}
-            {!activeWorkspace.positionGroups.length && (
-              <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">还没有持仓分组</p>
-            )}
-          </div>
+                {!accountNavigationCollapsed && (
+                  <div className="grid min-w-0 gap-1">
+                    <AssetAccountNavigation
+                      key={activeWorkspace.id}
+                      accounts={activeWorkspace.assetAccounts}
+                      accountGroups={activeWorkspace.accountGroups}
+                      readOnly={Boolean(selectedSnapshot)}
+                      selectedAccountId={selectedAssetAccountId}
+                      selectedAccountGroupId={selectedAccountGroupId}
+                      onSelect={(account) => {
+                        setShowTimeMachine(false)
+                        setSelectedAccountGroupId(null)
+                        setSelectedPositionGroupId(null)
+                        setSelectedAssetAccountId(account.id)
+                      }}
+                      onSelectGroup={(group) => {
+                        setShowTimeMachine(false)
+                        setSelectedAssetAccountId(null)
+                        setSelectedPositionGroupId(null)
+                        setSelectedAccountGroupId(group.id)
+                      }}
+                      onEdit={(account) => setAssetDialog({ open: true, account })}
+                      onDelete={(account) => setDeleteTarget({ kind: 'asset', account })}
+                      onCreateAccount={(group) =>
+                        setAssetDialog({ open: true, groupId: group.id })
+                      }
+                      onEditGroup={(group) =>
+                        setAccountGroupDialog({ open: true, group })
+                      }
+                      onDeleteGroup={(group) =>
+                        setDeleteTarget({ kind: 'account-group', group })
+                      }
+                    />
+                    {!activeWorkspace.assetAccounts.length && (
+                      <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">
+                        还没有资产账户
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="mb-2 mt-5 flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 min-w-0 flex-1 justify-start px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
+                    aria-expanded={!positionNavigationCollapsed}
+                    onClick={() => setPositionNavigationCollapsed((current) => !current)}
+                  >
+                    <ChevronDown
+                      data-icon="inline-start"
+                      className={cn(
+                        'transition-transform',
+                        positionNavigationCollapsed && '-rotate-90'
+                      )}
+                    />
+                    持仓分组
+                  </Button>
+                  {!selectedSnapshot && (
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label="新建持仓分组"
+                      title="新建持仓分组"
+                      onClick={() => setPositionGroupDialog({ open: true })}
+                    >
+                      <Plus />
+                    </Button>
+                  )}
+                </div>
+                {!positionNavigationCollapsed && (
+                  <div className="grid min-w-0 gap-1">
+                    {activeWorkspace.positionGroups.map((group) => {
+                      const selected = selectedPositionGroupId === group.id
+                      return (
+                        <div
+                          key={group.id}
+                          className={cn(
+                            'group flex min-w-0 items-center rounded-sm pr-1 transition-colors hover:bg-muted/70',
+                            selected && SELECTED_NAVIGATION_CLASS_NAME
+                          )}
+                        >
+                          <Button
+                            variant="ghost"
+                            className={cn(
+                              'h-auto min-w-0 flex-1 justify-start gap-3 px-3 py-2.5 font-normal hover:bg-transparent',
+                              selected && 'font-medium'
+                            )}
+                            onClick={() => {
+                              setShowTimeMachine(false)
+                              setSelectedAssetAccountId(null)
+                              setSelectedAccountGroupId(null)
+                              setSelectedPositionGroupId(group.id)
+                            }}
+                          >
+                            <ChartPie />
+                            <span className="min-w-0 flex-1 truncate text-left">
+                              {group.name}
+                            </span>
+                          </Button>
+                          {!selectedSnapshot && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  className={cn(
+                                    'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100',
+                                    selected && 'opacity-100'
+                                  )}
+                                  aria-label={`${group.name}操作`}
+                                >
+                                  <Ellipsis />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-20">
+                                <DropdownMenuGroup>
+                                  <DropdownMenuItem
+                                    onSelect={() =>
+                                      setPositionGroupDialog({ open: true, group })
+                                    }
+                                  >
+                                    <Pencil />
+                                    编辑
+                                  </DropdownMenuItem>
+                                </DropdownMenuGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuGroup>
+                                  <DropdownMenuItem
+                                    variant="destructive"
+                                    onSelect={() =>
+                                      setDeleteTarget({ kind: 'position-group', group })
+                                    }
+                                  >
+                                    <Trash2 />
+                                    删除
+                                  </DropdownMenuItem>
+                                </DropdownMenuGroup>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {!activeWorkspace.positionGroups.length && (
+                      <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">
+                        还没有持仓分组
+                      </p>
+                    )}
+                  </div>
+                )}
+            </>
           </nav>
         </ScrollArea>
 
@@ -1177,12 +1107,18 @@ export function App(): React.JSX.Element {
         </div>
       </aside>
 
-      <AssetValueMaskContext.Provider value={assetValuesMasked}>
-        <ScrollArea className="min-w-0 flex-1">
-          <main className="pt-12">
+      <ScrollArea className="min-w-0 flex-1">
+          <main
+            className={cn(
+              'min-h-full pt-7 transition-colors',
+              selectedSnapshot && 'bg-muted/10'
+            )}
+            aria-label={selectedSnapshot ? '历史快照，只读' : undefined}
+          >
         {selectedSnapshot && !showTimeMachine && (
-          <SnapshotViewingAlert
-            snapshot={selectedSnapshot}
+          <HistoricalVersionBanner
+            snapshotId={selectedSnapshot.id}
+            createdAt={selectedSnapshot.createdAt}
             onReturnLatest={() => setSelectedSnapshotId(null)}
           />
         )}
@@ -1214,10 +1150,6 @@ export function App(): React.JSX.Element {
             baseCurrency={activeWorkspace.baseCurrency}
             exchangeRates={exchangeRates}
             onManageAccounts={() => setGroupAccountsDialogOpen(true)}
-            onRemoveAccount={(assetAccountId) =>
-              removeAccountFromGroup(selectedAccountGroup.id, assetAccountId)
-            }
-            removingAccountIds={removingGroupAccountIds}
           />
         ) : selectedPositionGroup ? (
           <PositionGroupDetail
@@ -1227,15 +1159,7 @@ export function App(): React.JSX.Element {
             readOnly={Boolean(selectedSnapshot)}
             baseCurrency={activeWorkspace.baseCurrency}
             exchangeRates={exchangeRates}
-            imageExporting={imageExporting}
-            onExportImage={() =>
-              exportImage({ kind: 'position-group', group: selectedPositionGroup })
-            }
             onManagePositions={() => setGroupPositionsDialogOpen(true)}
-            onRemovePosition={(positionId) =>
-              removePositionFromGroup(selectedPositionGroup.id, positionId)
-            }
-            removingPositionIds={removingGroupPositionIds}
           />
         ) : selectedAssetAccount ? (
           <AssetAccountDetail
@@ -1243,10 +1167,6 @@ export function App(): React.JSX.Element {
             readOnly={Boolean(selectedSnapshot)}
             baseCurrency={activeWorkspace.baseCurrency}
             exchangeRates={exchangeRates}
-            imageExporting={imageExporting}
-            onExportImage={() =>
-              exportImage({ kind: 'asset-account', account: selectedAssetAccount })
-            }
             onAddPosition={() =>
               setPositionDialog({ open: true, accountId: selectedAssetAccount.id })
             }
@@ -1266,28 +1186,18 @@ export function App(): React.JSX.Element {
         ) : (
           <Overview
             workspace={activeWorkspace}
-            mode={overviewMode}
-            onModeChange={setOverviewMode}
             exchangeRates={exchangeRates}
-            imageExporting={imageExporting}
-            onExportImage={() =>
-              exportImage({ kind: 'overview', mode: overviewMode })
-            }
+            readOnly={Boolean(selectedSnapshot)}
+            onCreateAssetAccount={() => setAssetDialog({ open: true })}
             onOpenAssetAccount={(id) => {
               setSelectedAccountGroupId(null)
               setSelectedPositionGroupId(null)
               setSelectedAssetAccountId(id)
             }}
-            onOpenPositionGroup={(id) => {
-              setSelectedAssetAccountId(null)
-              setSelectedAccountGroupId(null)
-              setSelectedPositionGroupId(id)
-            }}
           />
         )}
           </main>
-        </ScrollArea>
-      </AssetValueMaskContext.Provider>
+      </ScrollArea>
 
       <WorkspaceDialog
         open={workspaceDialog.open}
@@ -1310,7 +1220,6 @@ export function App(): React.JSX.Element {
         open={workspaceSettingsOpen}
         onOpenChange={setWorkspaceSettingsOpen}
         workspace={activeWorkspace}
-        exchangeRates={liveExchangeRateView}
         initialSection={workspaceSettingsSection}
         onSubmit={submitWorkspaceSettings}
         onRequestExport={() => setExportDialogOpen(true)}
@@ -1359,6 +1268,7 @@ export function App(): React.JSX.Element {
           onOpenChange={setGroupPositionsDialogOpen}
           group={selectedPositionGroup}
           assetAccounts={activeWorkspace.assetAccounts}
+          accountGroups={activeWorkspace.accountGroups}
           positionGroups={activeWorkspace.positionGroups}
           onSubmit={submitGroupPositions}
         />
@@ -1380,7 +1290,6 @@ export function App(): React.JSX.Element {
         }}
         title={deleteDialogCopy.title}
         description={deleteDialogCopy.description}
-        actionLabel="确认删除"
         confirmationPhrase={deleteTarget?.kind === 'workspace' ? 'DELETE' : undefined}
         onConfirm={confirmDelete}
       />

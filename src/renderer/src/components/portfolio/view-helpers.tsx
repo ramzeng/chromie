@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { ShieldCheck } from 'lucide-react'
 
 import { BOC_ICON_DATA_URL } from '@/lib/boc-icon'
@@ -13,29 +13,8 @@ import {
 } from '@/lib/portfolio'
 import { cn } from '@/lib/utils'
 
-export const ASSET_VALUE_MASK_STORAGE_KEY = 'chromie.asset-values-masked'
-export const AssetValueMaskContext = createContext(false)
-
 export function MaskedAssetValue({ children }: { children: ReactNode }) {
-  const masked = useContext(AssetValueMaskContext)
-  return masked ? (
-    <span
-      aria-label="资产数据已遮蔽"
-      className="select-none tracking-[0.12em] text-muted-foreground"
-    >
-      ••••••
-    </span>
-  ) : (
-    <>{children}</>
-  )
-}
-
-export function loadAssetValueMask(): boolean {
-  try {
-    return window.localStorage.getItem(ASSET_VALUE_MASK_STORAGE_KEY) === 'true'
-  } catch {
-    return false
-  }
+  return <>{children}</>
 }
 
 export function accountSyncInterval(account: AssetAccount): number {
@@ -57,10 +36,6 @@ export function formatExchangeRate(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 4
   }).format(value)
-}
-
-export function formatTotalMarketValueFormula(baseCurrency: string): string {
-  return `总市值（${baseCurrency}） = SUM(各币种市值 × 该币种兑 ${baseCurrency} 参考汇率)`
 }
 
 export function compareOptionalValuesDescending(
@@ -142,7 +117,7 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
         aria-hidden="true"
         src={BOCI_ICON_DATA_URL}
         alt=""
-        className={cn('shrink-0 rounded-[10%]', className)}
+        className={cn('shrink-0 rounded-sm', className)}
       />
     )
   }
@@ -153,7 +128,7 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
         aria-hidden="true"
         src={BOC_ICON_DATA_URL}
         alt=""
-        className={cn('shrink-0 rounded-[10%]', className)}
+        className={cn('shrink-0 rounded-sm', className)}
       />
     )
   }
@@ -168,22 +143,26 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
         aria-hidden="true"
         src={CMB_ICON_DATA_URL}
         alt=""
-        className={cn('shrink-0 rounded-[10%]', className)}
+        className={cn('shrink-0 rounded-sm', className)}
       />
     )
   }
 
   if (type === 'Ibkr') {
     return (
-      <span
+      <svg
+        viewBox="0 0 48 48"
         aria-hidden="true"
         className={cn(
-          'grid shrink-0 place-items-center rounded-[14%] bg-[#d81222] text-[0.42em] font-bold tracking-[-0.04em] text-white',
+          'shrink-0 overflow-hidden rounded-sm',
           className
         )}
       >
-        IB
-      </span>
+        <rect width="48" height="48" rx="8" fill="#111116" />
+        <path d="M0 48 8.3 22.2 31.8 48Z" fill="#b20b1d" />
+        <path d="M0 14.2 13.4 0H22L0 47Z" fill="#e40b21" />
+        <circle cx="27.5" cy="23.7" r="8.8" fill="#e40b21" />
+      </svg>
     )
   }
 
@@ -192,16 +171,14 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
       <svg
         viewBox="0 0 48 48"
         aria-hidden="true"
-        className={cn('shrink-0', className)}
+        className={cn('shrink-0 overflow-hidden rounded-sm', className)}
       >
-        <rect width="48" height="48" rx="7" fill="#181a20" />
-        <g fill="#f3ba2f">
-          <path d="M24 10l5.1 5.1L24 20.2l-5.1-5.1L24 10Z" />
-          <path d="m15.1 18.9 5.1 5.1-5.1 5.1L10 24l5.1-5.1Z" />
-          <path d="m32.9 18.9 5.1 5.1-5.1 5.1-5.1-5.1 5.1-5.1Z" />
-          <path d="m24 27.8 5.1 5.1L24 38l-5.1-5.1 5.1-5.1Z" />
-          <path d="m24 20.3 3.7 3.7-3.7 3.7-3.7-3.7 3.7-3.7Z" />
-        </g>
+        <rect width="48" height="48" rx="8" fill="#0b0e11" />
+        <path
+          fill="#fcd535"
+          transform="translate(6 6) scale(1.5)"
+          d="m16.624 13.92 2.718 2.716-7.353 7.353-7.353-7.352 2.717-2.717 4.636 4.66 4.635-4.66Zm4.637-4.636L24 12l-2.715 2.716L18.568 12l2.693-2.716Zm-9.272 0 2.716 2.692-2.717 2.717L9.272 12l2.716-2.715Zm-9.273 0L5.409 12l-2.692 2.692L0 12l2.716-2.716ZM11.989.012l7.353 7.329-2.718 2.715-4.635-4.636-4.636 4.66-2.717-2.716L11.989.012Z"
+        />
       </svg>
     )
   }

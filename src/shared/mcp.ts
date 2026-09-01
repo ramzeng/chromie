@@ -3,8 +3,8 @@ import { z } from 'zod'
 export const MCP_TOOL_NAMES = [
   'chromie_list_workspaces',
   'chromie_get_workspace',
-  'chromie_get_overview',
-  'chromie_search_positions',
+  'chromie_get_portfolio_overview',
+  'chromie_list_positions',
   'chromie_list_snapshots',
   'chromie_create_workspace',
   'chromie_update_workspace',
@@ -20,8 +20,7 @@ export const MCP_TOOL_NAMES = [
   'chromie_replace_position_group_members',
   'chromie_create_snapshot',
   'chromie_sync_asset_account',
-  'chromie_refresh_exchange_rates',
-  'chromie_delete_portfolio_item'
+  'chromie_refresh_exchange_rates'
 ] as const
 
 export type McpToolName = (typeof MCP_TOOL_NAMES)[number]
@@ -55,18 +54,18 @@ export const getWorkspaceInputSchema = z.object({
   workspace_id: id,
   view: mcpViewSchema.optional(),
   include_positions: z.boolean()
-    .describe('是否在工作区详情中内嵌持仓；默认 false，持仓较多时请使用查找持仓工具')
+    .describe('是否在工作区详情中内嵌持仓；默认 false，持仓较多时请使用列出持仓工具')
     .optional()
     .default(false)
 }).strict()
 
-export const getOverviewInputSchema = z.object({
+export const getPortfolioOverviewInputSchema = z.object({
   workspace_id: id,
   view: mcpViewSchema.optional(),
   group_by: z.enum(['asset_account', 'account_group', 'position_group', 'currency'])
 }).strict()
 
-export const searchPositionsInputSchema = z.object({
+export const listPositionsInputSchema = z.object({
   workspace_id: id,
   view: mcpViewSchema.optional(),
   query: z.string().trim().max(80).optional(),
@@ -74,7 +73,7 @@ export const searchPositionsInputSchema = z.object({
   currency: currency.optional(),
   asset_account_id: id.optional(),
   account_group_id: id.optional(),
-  group_id: id.optional(),
+  position_group_id: id.optional(),
   cursor: z.string()
     .regex(/^[A-Za-z0-9_-]{1,512}$/)
     .describe('上一页返回的不透明游标，必须与相同查询条件一起使用')
@@ -185,13 +184,13 @@ export const createPositionGroupInputSchema = z.object({
 
 export const updatePositionGroupInputSchema = z.object({
   workspace_id: id,
-  group_id: id,
+  position_group_id: id,
   name
 }).strict()
 
 export const replacePositionGroupMembersInputSchema = z.object({
   workspace_id: id,
-  group_id: id,
+  position_group_id: id,
   position_ids: z.array(id).max(10000)
 }).strict()
 
@@ -208,37 +207,11 @@ export const refreshExchangeRatesInputSchema = z.object({
   workspace_id: id.optional()
 }).strict()
 
-export const deleteTargetSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('workspace'), workspace_id: id }).strict(),
-  z.object({
-    kind: z.literal('account_group'),
-    workspace_id: id,
-    account_group_id: id
-  }).strict(),
-  z.object({
-    kind: z.literal('asset_account'),
-    workspace_id: id,
-    asset_account_id: id
-  }).strict(),
-  z.object({
-    kind: z.literal('position'),
-    workspace_id: id,
-    asset_account_id: id,
-    position_id: id
-  }).strict(),
-  z.object({ kind: z.literal('position_group'), workspace_id: id, group_id: id }).strict(),
-  z.object({ kind: z.literal('snapshot'), workspace_id: id, snapshot_id: id }).strict()
-])
-
-export const deletePortfolioItemInputSchema = z.object({
-  target: deleteTargetSchema
-}).strict()
-
 export const mcpToolInputSchemas = {
   chromie_list_workspaces: listWorkspacesInputSchema,
   chromie_get_workspace: getWorkspaceInputSchema,
-  chromie_get_overview: getOverviewInputSchema,
-  chromie_search_positions: searchPositionsInputSchema,
+  chromie_get_portfolio_overview: getPortfolioOverviewInputSchema,
+  chromie_list_positions: listPositionsInputSchema,
   chromie_list_snapshots: listSnapshotsInputSchema,
   chromie_create_workspace: createWorkspaceInputSchema,
   chromie_update_workspace: updateWorkspaceInputSchema,
@@ -254,8 +227,7 @@ export const mcpToolInputSchemas = {
   chromie_replace_position_group_members: replacePositionGroupMembersInputSchema,
   chromie_create_snapshot: createSnapshotInputSchema,
   chromie_sync_asset_account: syncAssetAccountInputSchema,
-  chromie_refresh_exchange_rates: refreshExchangeRatesInputSchema,
-  chromie_delete_portfolio_item: deletePortfolioItemInputSchema
+  chromie_refresh_exchange_rates: refreshExchangeRatesInputSchema
 } as const
 
 export type McpToolArguments = {
@@ -352,7 +324,7 @@ function toolOutputSchema<Data extends z.ZodType>(data: Data) {
 
 const workspaceIdOutputSchema = z.object({ workspace_id: id }).strict()
 const assetAccountIdOutputSchema = z.object({ asset_account_id: id }).strict()
-const groupIdOutputSchema = z.object({ group_id: id }).strict()
+const positionGroupIdOutputSchema = z.object({ position_group_id: id }).strict()
 
 export const mcpToolOutputSchemas = {
   chromie_list_workspaces: toolOutputSchema(z.object({
@@ -376,7 +348,7 @@ export const mcpToolOutputSchemas = {
     exchange_rates: exchangeRatesOutputSchema.nullable(),
     workspace: workspaceOutputSchema
   }).strict()),
-  chromie_get_overview: toolOutputSchema(z.object({
+  chromie_get_portfolio_overview: toolOutputSchema(z.object({
     view: viewOutputSchema,
     group_by: z.enum(['asset_account', 'account_group', 'position_group', 'currency']),
     base_currency: baseCurrency,
@@ -398,13 +370,13 @@ export const mcpToolOutputSchemas = {
       missing_currencies: z.array(z.string())
     }).strict())
   }).strict()),
-  chromie_search_positions: toolOutputSchema(z.object({
+  chromie_list_positions: toolOutputSchema(z.object({
     view: viewOutputSchema,
     total: count,
     positions: z.array(positionOutputSchema.extend({
       asset_account: z.object({ id, name: z.string() }).strict(),
       account_group: accountGroupOutputSchema.nullable(),
-      group: z.object({ id, name: z.string() }).strict().nullable(),
+      position_group: z.object({ id, name: z.string() }).strict().nullable(),
       valuation: valuationOutputSchema
     }).strict()),
     next_cursor: z.string().optional()
@@ -440,10 +412,10 @@ export const mcpToolOutputSchemas = {
   chromie_update_position: toolOutputSchema(z.object({
     position: positionOutputSchema
   }).strict()),
-  chromie_create_position_group: toolOutputSchema(groupIdOutputSchema),
-  chromie_update_position_group: toolOutputSchema(groupIdOutputSchema),
+  chromie_create_position_group: toolOutputSchema(positionGroupIdOutputSchema),
+  chromie_update_position_group: toolOutputSchema(positionGroupIdOutputSchema),
   chromie_replace_position_group_members: toolOutputSchema(z.object({
-    group_id: id,
+    position_group_id: id,
     position_ids: z.array(id)
   }).strict()),
   chromie_create_snapshot: toolOutputSchema(z.object({
@@ -457,9 +429,6 @@ export const mcpToolOutputSchemas = {
   }).strict()),
   chromie_refresh_exchange_rates: toolOutputSchema(z.object({
     exchange_rates: exchangeRatesOutputSchema
-  }).strict()),
-  chromie_delete_portfolio_item: toolOutputSchema(z.object({
-    target: deleteTargetSchema
   }).strict())
 } as const
 
@@ -470,18 +439,15 @@ export type McpToolSuccess = {
 }
 
 export type McpToolError = z.infer<typeof toolErrorOutputSchema>
-export type McpDeleteTarget = z.infer<typeof deleteTargetSchema>
 
 export type McpAccessSettings = {
   enabled: boolean
   allowWrite: boolean
-  allowDelete: boolean
 }
 
 export const DEFAULT_MCP_ACCESS_SETTINGS: McpAccessSettings = {
   enabled: false,
-  allowWrite: false,
-  allowDelete: false
+  allowWrite: false
 }
 
 export type McpConnectionSettings = {

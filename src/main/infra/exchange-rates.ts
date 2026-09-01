@@ -1,8 +1,9 @@
 import { net } from 'electron'
 
-import type {
-  ExchangeRateProvider,
-  ExchangeRateSnapshot
+import {
+  isExchangeRateCurrency,
+  type ExchangeRateProvider,
+  type ExchangeRateSnapshot
 } from '../../shared/exchange-rates'
 
 const EXCHANGE_RATES_URL = 'https://api.coinbase.com/v2/exchange-rates?currency=USD'
@@ -29,10 +30,11 @@ function normalizeRates(value: unknown): Record<string, number> {
   const rates: Record<string, number> = { USD: 1 }
   entries.forEach(([rawCurrency, rawRate]) => {
     const currency = rawCurrency.trim().toUpperCase()
+    if (!isExchangeRateCurrency(currency)) return
     const rate = typeof rawRate === 'string' || typeof rawRate === 'number'
       ? Number(rawRate)
       : Number.NaN
-    if (!/^[A-Z0-9]{2,12}$/.test(currency) || !Number.isFinite(rate) || rate <= 0) return
+    if (!Number.isFinite(rate) || rate <= 0) return
     rates[currency] = rate
   })
 

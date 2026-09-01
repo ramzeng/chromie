@@ -53,14 +53,14 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     description: '读取工作区当前数据或指定历史快照。返回账户分组、资产账户、持仓分组、可选持仓和脱敏同步状态；默认不内嵌持仓，汇率只返回 CNY、HKD 和 USD。',
     annotations: readOnlyAnnotations
   },
-  chromie_get_overview: {
+  chromie_get_portfolio_overview: {
     title: '读取资产概览',
     description: '按照资产账户、账户分组、持仓分组或币种汇总市值、折算市值、市值占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率，响应只包含 CNY、HKD 和 USD 汇率。',
     annotations: readOnlyAnnotations
   },
-  chromie_search_positions: {
-    title: '搜索持仓',
-    description: '按关键词、市场、币种、资产账户、账户分组或分组检索持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
+  chromie_list_positions: {
+    title: '列出持仓',
+    description: '列出并按关键词、市场、币种、资产账户、账户分组或持仓分组筛选持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
     annotations: readOnlyAnnotations
   },
   chromie_list_snapshots: {
@@ -151,16 +151,6 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: true
-    }
-  },
-  chromie_delete_portfolio_item: {
-    title: '删除 Chromie 数据',
-    description: '删除工作区、账户分组、资产账户、持仓、持仓分组或快照。此操作无法撤销，Agent 应在调用前向用户确认。',
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: true,
-      openWorldHint: false
     }
   }
 }

@@ -23,7 +23,6 @@ import type {
   PortfolioClientLoadResponse,
   PortfolioSyncResponse
 } from '../../../shared/portfolio'
-import type { ShareImageSaveResult } from '../../../shared/share-image'
 
 declare global {
   interface Window {
@@ -59,9 +58,6 @@ declare global {
       backup?: {
         exportData: (content: string) => Promise<BackupExportResult>
         importData: () => Promise<BackupImportResult>
-      }
-      shareImage?: {
-        save: (dataUrl: string, workspaceName: string) => Promise<ShareImageSaveResult>
       }
       mcp?: {
         loadSettings: () => Promise<McpConnectionSettings>

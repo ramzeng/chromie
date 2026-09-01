@@ -50,8 +50,7 @@ export class McpSocketHost implements McpHostOperations {
   private token = ''
   private access: McpAccessSettings = {
     enabled: false,
-    allowWrite: false,
-    allowDelete: false
+    allowWrite: false
   }
 
   constructor(

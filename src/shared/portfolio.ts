@@ -299,7 +299,7 @@ export const defaultCurrencyByMarket: Record<Market, string> = {
   CN: 'CNY',
   HK: 'HKD',
   US: 'USD',
-  CC: 'USDT'
+  CC: 'USD'
 }
 
 export function formatNumber(value: number, maximumFractionDigits = 6): string {
