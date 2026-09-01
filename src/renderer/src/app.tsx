@@ -70,6 +70,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Separator } from '@/components/ui/separator'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/ui/spinner'
 import {
   useExchangeRates,
@@ -761,7 +762,11 @@ export function App(): React.JSX.Element {
           <ChevronUp data-icon="inline-end" className="text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" side="top" align="start">
+      <DropdownMenuContent
+        className="w-[var(--radix-dropdown-menu-trigger-width)]"
+        side="top"
+        align="start"
+      >
         <DropdownMenuLabel>切换账户</DropdownMenuLabel>
         <DropdownMenuGroup>
           {portfolio.productAccounts.map((account) => (
@@ -849,7 +854,8 @@ export function App(): React.JSX.Element {
 
         <Separator />
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <ScrollArea className="min-h-0 flex-1">
+          <nav className="px-3 py-4">
           <div className="mb-5 grid gap-1">
             <Button
               variant="ghost"
@@ -1011,7 +1017,8 @@ export function App(): React.JSX.Element {
               <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">还没有持仓分组</p>
             )}
           </div>
-        </nav>
+          </nav>
+        </ScrollArea>
 
         <div className="border-t px-3 py-3">
           {productAccountSwitcher}
@@ -1019,7 +1026,8 @@ export function App(): React.JSX.Element {
       </aside>
 
       <AssetValueMaskContext.Provider value={assetValuesMasked}>
-        <main className="min-w-0 flex-1 overflow-y-auto pt-12">
+        <ScrollArea className="min-w-0 flex-1">
+          <main className="pt-12">
         {selectedSnapshot && !showTimeMachine && (
           <SnapshotViewingAlert
             snapshot={selectedSnapshot}
@@ -1113,7 +1121,8 @@ export function App(): React.JSX.Element {
             }}
           />
         )}
-        </main>
+          </main>
+        </ScrollArea>
       </AssetValueMaskContext.Provider>
 
       <ProductAccountDialog

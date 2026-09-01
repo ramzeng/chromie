@@ -63,6 +63,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Switch } from '@/components/ui/switch'
@@ -801,8 +802,9 @@ export function ProductAccountSettingsDialog({
               </nav>
             </aside>
 
-            <div className="min-w-0 overflow-y-auto px-6 py-5">
-              {section === 'basic' && (
+            <ScrollArea className="min-h-0 min-w-0">
+              <div className="px-6 py-5">
+                {section === 'basic' && (
                 <section className="grid gap-5">
                   <h3 className="text-base font-semibold">基础信息</h3>
                   <div className="grid gap-2">
@@ -841,7 +843,7 @@ export function ProductAccountSettingsDialog({
                 </section>
               )}
 
-              {section === 'currency' && (
+                {section === 'currency' && (
                 <section className="grid gap-5">
                   <h3 className="text-base font-semibold">币种与汇率</h3>
                   <ReferenceExchangeRates exchangeRates={exchangeRates} />
@@ -1035,7 +1037,7 @@ export function ProductAccountSettingsDialog({
                 </section>
               )}
 
-              {section === 'mcp' && (
+                {section === 'mcp' && (
                 <div className="grid gap-4">
                   {mcpLoading ? (
                     <div className="grid gap-5" aria-label="正在加载 MCP 设置">
@@ -1063,9 +1065,9 @@ export function ProductAccountSettingsDialog({
                     />
                   )}
                 </div>
-              )}
-
-            </div>
+                )}
+              </div>
+            </ScrollArea>
           </div>
 
           <div className="flex items-center justify-between gap-4 border-t px-6 py-3">
