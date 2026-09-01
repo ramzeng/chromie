@@ -98,7 +98,7 @@ export function AppLoadingSkeleton() {
     >
       <div className="window-drag fixed inset-x-0 top-0 z-40 h-2" />
       <aside data-slot="app-sidebar" className="w-64 shrink-0 bg-sidebar pt-8">
-        <div className="flex h-10 items-center gap-0.5 px-4">
+        <div className="flex h-10 items-center gap-2 px-4">
           <Skeleton className="size-6 shrink-0" />
           <Skeleton className="h-4 w-16" />
           <Skeleton className="ml-auto size-7" />

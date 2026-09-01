@@ -11,8 +11,8 @@ createRoot(document.getElementById('root')!).render(
     <App />
     <Toaster
       closeButton
-      position="top-right"
-      offset={{ top: 56, right: 16 }}
+      position="top-center"
+      offset={{ top: 16 }}
       visibleToasts={3}
     />
   </StrictMode>

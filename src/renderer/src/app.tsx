@@ -853,7 +853,7 @@ export function App(): React.JSX.Element {
       >
         <div className="flex h-full w-64 min-w-64 flex-col overflow-hidden">
           <div className="window-drag shrink-0 pt-8">
-            <div className="flex h-10 items-center gap-0.5 px-4">
+            <div className="flex h-10 items-center gap-2 px-4">
               <span className="grid size-6 shrink-0 place-items-center">
                 <img
                   className="size-6 object-contain"

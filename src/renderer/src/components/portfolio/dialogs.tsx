@@ -1432,14 +1432,14 @@ export function GroupPositionsDialog({
         if (!submitting) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent className="max-h-[88vh] max-w-2xl">
+      <DialogContent className="h-[720px] max-h-[calc(100vh-2rem)] max-w-2xl">
         <DialogHeader>
           <DialogTitle>管理“{group.name}”的持仓</DialogTitle>
           <DialogDescription>
             每个持仓只能加入一个分组，已属于其他分组的持仓不可选择
           </DialogDescription>
         </DialogHeader>
-        <DialogBody className="grid content-start gap-4">
+        <DialogBody className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden">
           {positionCount > 0 && (
             <Input
               value={query}
@@ -1448,7 +1448,7 @@ export function GroupPositionsDialog({
               autoFocus
             />
           )}
-          <div className="min-h-28 rounded-sm border bg-muted/10">
+          <ScrollArea className="min-h-28 rounded-sm border bg-muted/10">
           {visibleAccounts.length ? (
             <div className="divide-y">
               {visibleAccounts.map(({ account, positions }) => (
@@ -1534,7 +1534,7 @@ export function GroupPositionsDialog({
               </EmptyHeader>
             </Empty>
           )}
-          </div>
+          </ScrollArea>
         </DialogBody>
         <DialogFooter className="items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">已选择 {selectedKeys.length} 项持仓</p>
