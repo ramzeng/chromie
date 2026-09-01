@@ -318,23 +318,25 @@ export function AssetAccountDetail({
         </div>
       </header>
 
-      <div className="mt-6 flex flex-col gap-6">
+      <div className="mt-6">
         <ValueSummaryCard
           positions={account.positions}
           baseCurrency={baseCurrency}
           exchangeRates={exchangeRates}
         />
         {account.positions.length > 0 && (
-          <AssetDistributionCharts
-            positions={account.positions}
-            breakdownItems={createPositionAllocationItems(account.positions)}
-            breakdownTitle="持仓市值分布"
-            breakdownDimensionLabel="持仓"
-            baseCurrency={baseCurrency}
-            rates={exchangeRates.snapshot?.rates}
-          />
+          <div className="mt-3">
+            <AssetDistributionCharts
+              positions={account.positions}
+              breakdownItems={createPositionAllocationItems(account.positions)}
+              breakdownTitle="持仓市值分布"
+              breakdownDimensionLabel="持仓"
+              baseCurrency={baseCurrency}
+              rates={exchangeRates.snapshot?.rates}
+            />
+          </div>
         )}
-        <Separator />
+        <Separator className="my-6" />
         <PositionTable
           positions={account.positions}
           readOnly={readOnly || Boolean(account.sync)}
@@ -498,7 +500,7 @@ export function AccountGroupDetail({
         )}
       </header>
 
-      <div className="mt-6 flex flex-col gap-6">
+      <div className="mt-6">
         <ValueSummaryCard
           positions={positions}
           baseCurrency={baseCurrency}
@@ -506,15 +508,17 @@ export function AccountGroupDetail({
         />
         {accounts.length ? (
           <>
-            <AssetDistributionCharts
-              positions={positions}
-              breakdownItems={createAccountAllocationItems(accounts)}
-              breakdownTitle="资产账户市值分布"
-              breakdownDimensionLabel="资产账户"
-              baseCurrency={baseCurrency}
-              rates={exchangeRates.snapshot?.rates}
-            />
-            <Separator />
+            <div className="mt-3">
+              <AssetDistributionCharts
+                positions={positions}
+                breakdownItems={createAccountAllocationItems(accounts)}
+                breakdownTitle="资产账户市值分布"
+                breakdownDimensionLabel="资产账户"
+                baseCurrency={baseCurrency}
+                rates={exchangeRates.snapshot?.rates}
+              />
+            </div>
+            <Separator className="my-6" />
             <AccountGroupAccountTable
               accounts={accounts}
               readOnly={readOnly}
@@ -525,7 +529,7 @@ export function AccountGroupDetail({
             />
           </>
         ) : (
-          <Empty className="min-h-64 border bg-card">
+          <Empty className="mt-3 min-h-64 border bg-card">
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <Layers2 data-icon="inline-start" />
@@ -775,23 +779,25 @@ export function PositionGroupDetail({
         </div>
       </header>
 
-      <div className="mt-6 flex flex-col gap-6">
+      <div className="mt-6">
         <ValueSummaryCard
           positions={positions}
           baseCurrency={baseCurrency}
           exchangeRates={exchangeRates}
         />
         {items.length > 0 && (
-          <AssetDistributionCharts
-            positions={positions}
-            breakdownItems={createPositionAllocationItems(positions)}
-            breakdownTitle="持仓市值分布"
-            breakdownDimensionLabel="持仓"
-            baseCurrency={baseCurrency}
-            rates={exchangeRates.snapshot?.rates}
-          />
+          <div className="mt-3">
+            <AssetDistributionCharts
+              positions={positions}
+              breakdownItems={createPositionAllocationItems(positions)}
+              breakdownTitle="持仓市值分布"
+              breakdownDimensionLabel="持仓"
+              baseCurrency={baseCurrency}
+              rates={exchangeRates.snapshot?.rates}
+            />
+          </div>
         )}
-        <Separator />
+        <Separator className="my-6" />
         <GroupPositionTable
           items={items}
           accountGroups={accountGroups}

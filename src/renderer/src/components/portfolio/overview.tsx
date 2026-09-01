@@ -86,6 +86,7 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
     : refreshing
       ? '正在获取汇率'
       : '暂无汇率'
+  const showRateStatus = Boolean(exchangeRates.refresh) || !exchangeRates.snapshot
 
   return (
     <div
@@ -106,28 +107,30 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
           </span>
         ))
       )}
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-        <span className="text-muted-foreground">{rateStatus}</span>
-        {exchangeRates.refresh && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7 shrink-0 text-muted-foreground"
-            disabled={refreshing}
-            aria-busy={refreshing}
-            aria-label={refreshing ? '正在更新汇率' : '更新汇率'}
-            title={refreshing ? '正在更新汇率' : '更新汇率'}
-            onClick={() => void exchangeRates.refresh?.()}
-          >
-            {refreshing ? (
-              <Spinner data-icon="inline-start" />
-            ) : (
-              <RefreshCw data-icon="inline-start" />
-            )}
-          </Button>
-        )}
-      </div>
+      {showRateStatus && (
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <span className="text-muted-foreground">{rateStatus}</span>
+          {exchangeRates.refresh && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0 text-muted-foreground"
+              disabled={refreshing}
+              aria-busy={refreshing}
+              aria-label={refreshing ? '正在更新汇率' : '更新汇率'}
+              title={refreshing ? '正在更新汇率' : '更新汇率'}
+              onClick={() => void exchangeRates.refresh?.()}
+            >
+              {refreshing ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <RefreshCw data-icon="inline-start" />
+              )}
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -544,7 +547,7 @@ export function Overview({
         />
       </section>
 
-      <section className="mt-6">
+      <section className="mt-3">
         <TabsContent value="accounts" className="mt-0">
           {workspace.assetAccounts.length > 0 ? (
             <div className="flex flex-col gap-6">
