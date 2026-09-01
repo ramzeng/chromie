@@ -14,7 +14,6 @@ createRoot(document.getElementById('root')!).render(
       position="top-center"
       offset={{ top: 64 }}
       visibleToasts={3}
-      style={{ left: 'calc(50% + 8rem)' }}
     />
   </StrictMode>
 )
