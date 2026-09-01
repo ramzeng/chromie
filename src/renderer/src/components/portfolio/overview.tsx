@@ -14,6 +14,10 @@ import {
   formatLastSyncedAt,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
+import {
+  AssetDistributionCharts,
+  createAccountAllocationItems
+} from '@/components/portfolio/asset-allocation-chart'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -45,7 +49,7 @@ import {
   type AssetAccount,
   type Position,
   type PositionGroup,
-  type ProductAccount
+  type Workspace
 } from '@/lib/portfolio'
 import { valuePositions } from '@/lib/valuation'
 
@@ -76,7 +80,7 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
   const refreshing =
     exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing'
   const rateStatus = exchangeRates.snapshot
-    ? `${refreshing ? '正在刷新，上次同步' : '最近同步'} ${formatLastSyncedAt(exchangeRates.snapshot.fetchedAt)}`
+    ? `${refreshing ? '正在更新，上次更新' : '最近更新'} ${formatLastSyncedAt(exchangeRates.snapshot.fetchedAt)}`
     : refreshing
       ? '正在获取汇率'
       : '暂无汇率'
@@ -110,8 +114,8 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
             className="size-7 shrink-0 text-muted-foreground"
             disabled={refreshing}
             aria-busy={refreshing}
-            aria-label={refreshing ? '正在刷新汇率' : '刷新汇率'}
-            title={refreshing ? '正在刷新汇率' : '刷新汇率'}
+            aria-label={refreshing ? '正在更新汇率' : '更新汇率'}
+            title={refreshing ? '正在更新汇率' : '更新汇率'}
             onClick={() => void exchangeRates.refresh?.()}
           >
             {refreshing ? (
@@ -128,21 +132,21 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
 
 export function ValueSummaryCard({
   positions,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates
 }: {
   positions: Position[]
-  anchorCurrency: string
+  baseCurrency: string
   exchangeRates: ExchangeRateView
 }) {
-  const anchoredValuation = valuePositions(
+  const convertedValuation = valuePositions(
     positions,
-    anchorCurrency,
+    baseCurrency,
     exchangeRates.snapshot?.rates
   )
-  const hasCompleteAnchoredTotal =
-    anchoredValuation.isComplete &&
-    anchoredValuation.totalAnchoredMarketValue !== undefined
+  const hasCompleteConvertedTotal =
+    convertedValuation.isComplete &&
+    convertedValuation.totalConvertedMarketValue !== undefined
   const marketValueSummaries = accountViewCurrencies.map((currency) => {
     let value = 0
     let hasValue = false
@@ -160,13 +164,13 @@ export function ValueSummaryCard({
       <div className="mt-3 grid gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-4">
         <Card className="min-h-[112px] border-border/70 shadow-none">
           <CardHeader>
-            <CardDescription>锚定市值 · {anchorCurrency}</CardDescription>
+            <CardDescription>总市值 · {baseCurrency}</CardDescription>
             <CardTitle className="truncate text-2xl tracking-[-0.03em] tabular-nums">
-              {hasCompleteAnchoredTotal
+              {hasCompleteConvertedTotal
                 ? <MaskedAssetValue>
                     {formatMoney(
-                      anchoredValuation.totalAnchoredMarketValue!,
-                      anchorCurrency
+                      convertedValuation.totalConvertedMarketValue!,
+                      baseCurrency
                     )}
                   </MaskedAssetValue>
                 : '-'}
@@ -191,7 +195,7 @@ export function ValueSummaryCard({
       </div>
       <Alert role="note" className="mt-3 bg-muted/25 py-2">
         <AlertDescription className="text-xs text-muted-foreground">
-          锚定市值 = USD 市值 + HKD 市值 + CNY 市值（汇率折算后）
+          各币种市值按参考汇率折算为 {baseCurrency} 后汇总
         </AlertDescription>
       </Alert>
     </div>
@@ -201,13 +205,13 @@ export function ValueSummaryCard({
 function AssetAccountTable({
   accounts,
   accountGroups,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates,
   onOpen
 }: {
   accounts: AssetAccount[]
-  accountGroups: ProductAccount['accountGroups']
-  anchorCurrency: string
+  accountGroups: Workspace['accountGroups']
+  baseCurrency: string
   exchangeRates: ExchangeRateView
   onOpen: (id: string) => void
 }) {
@@ -231,26 +235,26 @@ function AssetAccountTable({
         marketValues,
         valuation: valuePositions(
           account.positions,
-          anchorCurrency,
+          baseCurrency,
           exchangeRates.snapshot?.rates
         )
       }
     })
     .sort((left, right) => {
       const leftValue = left.valuation.isComplete
-        ? left.valuation.totalAnchoredMarketValue
+        ? left.valuation.totalConvertedMarketValue
         : undefined
       const rightValue = right.valuation.isComplete
-        ? right.valuation.totalAnchoredMarketValue
+        ? right.valuation.totalConvertedMarketValue
         : undefined
       return compareOptionalValuesDescending(leftValue, rightValue)
     })
   const hasMissingRate = rows.some(({ valuation }) => !valuation.isComplete)
-  const totalAnchoredMarketValue = rows.reduce(
-    (total, { valuation }) => total + (valuation.totalAnchoredMarketValue ?? 0),
+  const totalConvertedMarketValue = rows.reduce(
+    (total, { valuation }) => total + (valuation.totalConvertedMarketValue ?? 0),
     0
   )
-  const canCalculatePercentage = !hasMissingRate && totalAnchoredMarketValue !== 0
+  const canCalculatePercentage = !hasMissingRate && totalConvertedMarketValue !== 0
 
   return (
     <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
@@ -258,14 +262,14 @@ function AssetAccountTable({
         <TableHeader className="bg-muted/15">
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-[19%]">资产账户</TableHead>
-            <TableHead className="w-[13%]">资产分组</TableHead>
+            <TableHead className="w-[13%]">账户分组</TableHead>
             {accountViewCurrencies.map((currency) => (
               <TableHead key={currency} className="w-[12%] text-right">
                 {currency}
               </TableHead>
             ))}
-            <TableHead className="w-[20%] text-right">锚定市值</TableHead>
-            <TableHead className="w-[10%] text-right">占比</TableHead>
+            <TableHead className="w-[20%] text-right">折算市值</TableHead>
+            <TableHead className="w-[10%] text-right">市值占比</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -302,17 +306,17 @@ function AssetAccountTable({
                 )
               })}
               <TableCell className="text-right font-semibold tabular-nums">
-                {valuation.isComplete && valuation.totalAnchoredMarketValue !== undefined
+                {valuation.isComplete && valuation.totalConvertedMarketValue !== undefined
                   ? <MaskedAssetValue>
-                      {formatMoney(valuation.totalAnchoredMarketValue, anchorCurrency)}
+                      {formatMoney(valuation.totalConvertedMarketValue, baseCurrency)}
                     </MaskedAssetValue>
                   : '-'}
               </TableCell>
               <TableCell className="text-right tabular-nums text-muted-foreground">
-                {!canCalculatePercentage || valuation.totalAnchoredMarketValue === undefined
+                {!canCalculatePercentage || valuation.totalConvertedMarketValue === undefined
                   ? '-'
                   : `${formatAmount(
-                      valuation.totalAnchoredMarketValue / totalAnchoredMarketValue * 100
+                      valuation.totalConvertedMarketValue / totalConvertedMarketValue * 100
                     )}%`}
               </TableCell>
             </TableRow>
@@ -327,14 +331,14 @@ function PositionGroupOverviewTable({
   items,
   assetAccounts,
   accountGroups,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates,
   onOpen
 }: {
   items: Array<{ group: PositionGroup; positions: Position[] }>
   assetAccounts: AssetAccount[]
-  accountGroups: ProductAccount['accountGroups']
-  anchorCurrency: string
+  accountGroups: Workspace['accountGroups']
+  baseCurrency: string
   exchangeRates: ExchangeRateView
   onOpen: (id: string) => void
 }) {
@@ -371,26 +375,26 @@ function PositionGroupOverviewTable({
         marketValues,
         valuation: valuePositions(
           positions,
-          anchorCurrency,
+          baseCurrency,
           exchangeRates.snapshot?.rates
         )
       }
     })
     .sort((left, right) => {
       const leftValue = left.valuation.isComplete
-        ? left.valuation.totalAnchoredMarketValue
+        ? left.valuation.totalConvertedMarketValue
         : undefined
       const rightValue = right.valuation.isComplete
-        ? right.valuation.totalAnchoredMarketValue
+        ? right.valuation.totalConvertedMarketValue
         : undefined
       return compareOptionalValuesDescending(leftValue, rightValue)
     })
   const hasMissingRate = rows.some(({ valuation }) => !valuation.isComplete)
-  const totalAnchoredMarketValue = rows.reduce(
-    (total, { valuation }) => total + (valuation.totalAnchoredMarketValue ?? 0),
+  const totalConvertedMarketValue = rows.reduce(
+    (total, { valuation }) => total + (valuation.totalConvertedMarketValue ?? 0),
     0
   )
-  const canCalculatePercentage = !hasMissingRate && totalAnchoredMarketValue !== 0
+  const canCalculatePercentage = !hasMissingRate && totalConvertedMarketValue !== 0
 
   return (
     <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
@@ -398,14 +402,14 @@ function PositionGroupOverviewTable({
         <TableHeader className="bg-muted/15">
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-[19%]">持仓分组</TableHead>
-            <TableHead className="w-[14%]">资产分组</TableHead>
+            <TableHead className="w-[14%]">账户分组</TableHead>
             {accountViewCurrencies.map((currency) => (
               <TableHead key={currency} className="w-[11%] text-right">
                 {currency}
               </TableHead>
             ))}
-            <TableHead className="w-[22%] text-right">锚定市值</TableHead>
-            <TableHead className="w-[10%] text-right">占比</TableHead>
+            <TableHead className="w-[22%] text-right">折算市值</TableHead>
+            <TableHead className="w-[10%] text-right">市值占比</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -442,17 +446,17 @@ function PositionGroupOverviewTable({
                 )
               })}
               <TableCell className="text-right font-semibold tabular-nums">
-                {valuation.isComplete && valuation.totalAnchoredMarketValue !== undefined
+                {valuation.isComplete && valuation.totalConvertedMarketValue !== undefined
                   ? <MaskedAssetValue>
-                      {formatMoney(valuation.totalAnchoredMarketValue, anchorCurrency)}
+                      {formatMoney(valuation.totalConvertedMarketValue, baseCurrency)}
                     </MaskedAssetValue>
                   : '-'}
               </TableCell>
               <TableCell className="text-right tabular-nums text-muted-foreground">
-                {!canCalculatePercentage || valuation.totalAnchoredMarketValue === undefined
+                {!canCalculatePercentage || valuation.totalConvertedMarketValue === undefined
                   ? '-'
                   : `${formatAmount(
-                      valuation.totalAnchoredMarketValue / totalAnchoredMarketValue * 100
+                      valuation.totalConvertedMarketValue / totalConvertedMarketValue * 100
                     )}%`}
               </TableCell>
             </TableRow>
@@ -464,7 +468,7 @@ function PositionGroupOverviewTable({
 }
 
 export function Overview({
-  account,
+  workspace,
   mode,
   onModeChange,
   exchangeRates,
@@ -473,7 +477,7 @@ export function Overview({
   onOpenAssetAccount,
   onOpenPositionGroup
 }: {
-  account: ProductAccount
+  workspace: Workspace
   mode: OverviewMode
   onModeChange: (mode: OverviewMode) => void
   exchangeRates: ExchangeRateView
@@ -482,9 +486,9 @@ export function Overview({
   onOpenAssetAccount: (id: string) => void
   onOpenPositionGroup: (id: string) => void
 }) {
-  const positions = account.assetAccounts.flatMap((assetAccount) => assetAccount.positions)
+  const positions = workspace.assetAccounts.flatMap((assetAccount) => assetAccount.positions)
   const positionsById = new Map(positions.map((position) => [position.id, position]))
-  const groupItems = account.positionGroups
+  const groupItems = workspace.positionGroups
     .map((group) => {
       const groupPositions = group.positionIds.flatMap((positionId) => {
         const position = positionsById.get(positionId)
@@ -504,7 +508,7 @@ export function Overview({
       }}
     >
       <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold tracking-[-0.04em]">资产透视</h1>
+        <h1 className="text-3xl font-semibold tracking-[-0.04em]">资产概览</h1>
         <Button
           variant="outline"
           onClick={() => void onExportImage()}
@@ -533,20 +537,27 @@ export function Overview({
       <section className="mt-6">
         <ValueSummaryCard
           positions={positions}
-          anchorCurrency={account.anchorCurrency}
+          baseCurrency={workspace.baseCurrency}
           exchangeRates={exchangeRates}
         />
       </section>
 
       <section className="mt-6">
         <TabsContent value="accounts" className="mt-0">
-          {account.assetAccounts.length > 0 ? (
-            <div>
-              <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
+          {workspace.assetAccounts.length > 0 ? (
+            <div className="flex flex-col gap-6">
+              <AssetDistributionCharts
+                positions={positions}
+                breakdownItems={createAccountAllocationItems(workspace.assetAccounts)}
+                breakdownTitle="资产账户市值分布"
+                breakdownDimensionLabel="资产账户"
+                baseCurrency={workspace.baseCurrency}
+                rates={exchangeRates.snapshot?.rates}
+              />
               <AssetAccountTable
-                accounts={account.assetAccounts}
-                accountGroups={account.accountGroups}
-                anchorCurrency={account.anchorCurrency}
+                accounts={workspace.assetAccounts}
+                accountGroups={workspace.accountGroups}
+                baseCurrency={workspace.baseCurrency}
                 exchangeRates={exchangeRates}
                 onOpen={onOpenAssetAccount}
               />
@@ -565,13 +576,24 @@ export function Overview({
         </TabsContent>
         <TabsContent value="groups" className="mt-0">
           {groupItems.length > 0 ? (
-            <div>
-              <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
+            <div className="flex flex-col gap-6">
+              <AssetDistributionCharts
+                positions={positions}
+                breakdownItems={groupItems.map(({ group, positions: groupPositions }) => ({
+                  id: group.id,
+                  label: group.name,
+                  positions: groupPositions
+                }))}
+                breakdownTitle="分组市值分布"
+                breakdownDimensionLabel="持仓分组"
+                baseCurrency={workspace.baseCurrency}
+                rates={exchangeRates.snapshot?.rates}
+              />
               <PositionGroupOverviewTable
                 items={groupItems}
-                assetAccounts={account.assetAccounts}
-                accountGroups={account.accountGroups}
-                anchorCurrency={account.anchorCurrency}
+                assetAccounts={workspace.assetAccounts}
+                accountGroups={workspace.accountGroups}
+                baseCurrency={workspace.baseCurrency}
                 exchangeRates={exchangeRates}
                 onOpen={onOpenPositionGroup}
               />
@@ -583,7 +605,7 @@ export function Overview({
                   <Folder data-icon="inline-start" />
                 </EmptyMedia>
                 <EmptyTitle>暂无持仓分组</EmptyTitle>
-                <EmptyDescription>将不同资产账户中的持仓归入持仓分组后，在这里查看币种和锚定市值</EmptyDescription>
+                <EmptyDescription>将不同资产账户中的持仓归入持仓分组后，在这里查看币种和折算市值</EmptyDescription>
               </EmptyHeader>
             </Empty>
           )}

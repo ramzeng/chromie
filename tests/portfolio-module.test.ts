@@ -80,17 +80,17 @@ test('MCP starts disabled and read-only access cannot mutate', async () => {
   const module = createModule()
 
   await assert.rejects(
-    () => module.callMcpTool('chromie_list_accounts', {}),
+    () => module.callMcpTool('chromie_list_workspaces', {}),
     (error: unknown) =>
       error instanceof McpOperationError && error.code === 'MCP_DISABLED'
   )
 
   await assert.rejects(
     () => module.callMcpTool(
-      'chromie_create_account',
+      'chromie_create_workspace',
       {
         name: '家庭资产',
-        anchor_currency: 'CNY'
+        base_currency: 'CNY'
       },
       readAccess
     ),
@@ -101,21 +101,21 @@ test('MCP starts disabled and read-only access cannot mutate', async () => {
 
 test('MCP CRUD reads and writes portfolio data', async () => {
   const module = createModule()
-  const createdAccount = await module.callMcpTool(
-    'chromie_create_account',
+  const createdWorkspace = await module.callMcpTool(
+    'chromie_create_workspace',
     {
       name: '家庭资产',
-      anchor_currency: 'CNY'
+      base_currency: 'CNY'
     },
     fullAccess
   )
-  const accountId = dataOf<{ account_id: string }>(createdAccount).account_id
-  assert.ok(accountId)
+  const workspaceId = dataOf<{ workspace_id: string }>(createdWorkspace).workspace_id
+  assert.ok(workspaceId)
 
   const accountGroupResult = await module.callMcpTool(
     'chromie_create_account_group',
     {
-      account_id: accountId,
+      workspace_id: workspaceId,
       name: 'Moon'
     },
     fullAccess
@@ -126,7 +126,7 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   const updatedAccountGroup = await module.callMcpTool(
     'chromie_update_account_group',
     {
-      account_id: accountId,
+      workspace_id: workspaceId,
       account_group_id: accountGroupId,
       name: 'Moon Updated'
     },
@@ -142,7 +142,7 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   const assetResult = await module.callMcpTool(
     'chromie_create_asset_account',
     {
-      account_id: accountId,
+      workspace_id: workspaceId,
       name: '券商账户',
       type: 'General'
     },
@@ -153,7 +153,7 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   const accountGroupMembers = await module.callMcpTool(
     'chromie_replace_account_group_members',
     {
-      account_id: accountId,
+      workspace_id: workspaceId,
       account_group_id: accountGroupId,
       asset_account_ids: [assetAccountId]
     },
@@ -163,7 +163,7 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   const positionResult = await module.callMcpTool(
     'chromie_create_position',
     {
-      account_id: accountId,
+      workspace_id: workspaceId,
       asset_account_id: assetAccountId,
       market: 'US',
       symbol: 'AAPL',
@@ -180,7 +180,7 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   assertValidOutput('chromie_create_position', positionResult)
 
   const listed = await module.callMcpTool(
-    'chromie_list_accounts',
+    'chromie_list_workspaces',
     {},
     readAccess
   )
@@ -190,23 +190,23 @@ test('MCP CRUD reads and writes portfolio data', async () => {
     { CNY: 7, HKD: 7.8, USD: 1 }
   )
   assert.equal(
-    dataOf<{ accounts: Array<{ account_group_count: number }> }>(listed)
-      .accounts[0].account_group_count,
+    dataOf<{ workspaces: Array<{ account_group_count: number }> }>(listed)
+      .workspaces[0].account_group_count,
     1
   )
-  assertValidOutput('chromie_list_accounts', listed)
+  assertValidOutput('chromie_list_workspaces', listed)
 
   const overview = await module.callMcpTool(
     'chromie_get_overview',
-    { account_id: accountId, group_by: 'asset_account' },
+    { workspace_id: workspaceId, group_by: 'asset_account' },
     readAccess
   )
   const overviewData = dataOf<{
-    total: { anchored_market_value: number }
-    rows: Array<{ anchored_market_value: number }>
+    total: { converted_market_value: number }
+    rows: Array<{ converted_market_value: number }>
   }>(overview)
-  assert.equal(overviewData.total.anchored_market_value, 1400)
-  assert.equal(overviewData.rows[0].anchored_market_value, 1400)
+  assert.equal(overviewData.total.converted_market_value, 1400)
+  assert.equal(overviewData.rows[0].converted_market_value, 1400)
   assert.deepEqual(
     dataOf<{ exchange_rates: { rates: Record<string, number> } }>(overview)
       .exchange_rates.rates,
@@ -216,20 +216,20 @@ test('MCP CRUD reads and writes portfolio data', async () => {
 
   const accountGroupOverview = await module.callMcpTool(
     'chromie_get_overview',
-    { account_id: accountId, group_by: 'account_group' },
+    { workspace_id: workspaceId, group_by: 'account_group' },
     readAccess
   )
   assert.equal(
-    dataOf<{ rows: Array<{ id: string; anchored_market_value: number }> }>(
+    dataOf<{ rows: Array<{ id: string; converted_market_value: number }> }>(
       accountGroupOverview
-    ).rows.find((row) => row.id === accountGroupId)?.anchored_market_value,
+    ).rows.find((row) => row.id === accountGroupId)?.converted_market_value,
     1400
   )
   assertValidOutput('chromie_get_overview', accountGroupOverview)
 
   const refreshedRates = await module.callMcpTool(
     'chromie_refresh_exchange_rates',
-    { account_id: accountId },
+    { workspace_id: workspaceId },
     fullAccess
   )
   assert.deepEqual(
@@ -239,13 +239,13 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   )
   assertValidOutput('chromie_refresh_exchange_rates', refreshedRates)
 
-  const account = await module.callMcpTool(
-    'chromie_get_account',
-    { account_id: accountId },
+  const workspace = await module.callMcpTool(
+    'chromie_get_workspace',
+    { workspace_id: workspaceId },
     readAccess
   )
-  const accountData = dataOf<{
-    account: {
+  const workspaceData = dataOf<{
+    workspace: {
       account_groups: Array<{
         id: string
         name: string
@@ -256,39 +256,39 @@ test('MCP CRUD reads and writes portfolio data', async () => {
         positions?: Array<{ id: string }>
       }>
     }
-  }>(account)
-  assert.deepEqual(accountData.account.account_groups, [
+  }>(workspace)
+  assert.deepEqual(workspaceData.workspace.account_groups, [
     {
       id: accountGroupId,
       name: 'Moon Updated',
       asset_account_ids: [assetAccountId]
     }
   ])
-  assert.equal(accountData.account.asset_accounts[0].positions, undefined)
-  assert.deepEqual(accountData.account.asset_accounts[0].sync, {
+  assert.equal(workspaceData.workspace.asset_accounts[0].positions, undefined)
+  assert.deepEqual(workspaceData.workspace.asset_accounts[0].sync, {
     capable: false,
     configured: false
   })
-  assertValidOutput('chromie_get_account', account)
+  assertValidOutput('chromie_get_workspace', workspace)
 
-  const accountWithPositions = await module.callMcpTool(
-    'chromie_get_account',
-    { account_id: accountId, include_positions: true },
+  const workspaceWithPositions = await module.callMcpTool(
+    'chromie_get_workspace',
+    { workspace_id: workspaceId, include_positions: true },
     readAccess
   )
-  const accountWithPositionsData = dataOf<{
-    account: { asset_accounts: Array<{ positions: Array<{ id: string }> }> }
-  }>(accountWithPositions)
+  const workspaceWithPositionsData = dataOf<{
+    workspace: { asset_accounts: Array<{ positions: Array<{ id: string }> }> }
+  }>(workspaceWithPositions)
   assert.equal(
-    accountWithPositionsData.account.asset_accounts[0].positions[0].id,
+    workspaceWithPositionsData.workspace.asset_accounts[0].positions[0].id,
     position.id
   )
-  assertValidOutput('chromie_get_account', accountWithPositions)
+  assertValidOutput('chromie_get_workspace', workspaceWithPositions)
 
   const updatedPosition = await module.callMcpTool(
     'chromie_update_position',
     {
-      account_id: accountId,
+      workspace_id: workspaceId,
       asset_account_id: assetAccountId,
       position_id: position.id,
       name: 'Apple Inc.'
@@ -303,13 +303,13 @@ test('MCP CRUD reads and writes portfolio data', async () => {
 
   const createdGroup = await module.callMcpTool(
     'chromie_create_position_group',
-    { account_id: accountId, name: '科技股' },
+    { workspace_id: workspaceId, name: '科技股' },
     fullAccess
   )
   const groupId = dataOf<{ group_id: string }>(createdGroup).group_id
   const updatedGroup = await module.callMcpTool(
     'chromie_update_position_group',
-    { account_id: accountId, group_id: groupId, name: '科技' },
+    { workspace_id: workspaceId, group_id: groupId, name: '科技' },
     fullAccess
   )
   assert.equal(dataOf<{ group_id: string }>(updatedGroup).group_id, groupId)
@@ -320,14 +320,14 @@ test('MCP CRUD reads and writes portfolio data', async () => {
 test('position pagination uses a query-bound stable cursor', async () => {
   const module = createModule()
   const createdAccount = await module.callMcpTool(
-    'chromie_create_account',
-    { name: '分页测试', anchor_currency: 'USD' },
+    'chromie_create_workspace',
+    { name: '分页测试', base_currency: 'USD' },
     fullAccess
   )
-  const accountId = dataOf<{ account_id: string }>(createdAccount).account_id
+  const workspaceId = dataOf<{ workspace_id: string }>(createdAccount).workspace_id
   const createdAccountGroup = await module.callMcpTool(
     'chromie_create_account_group',
-    { account_id: accountId, name: 'Tester' },
+    { workspace_id: workspaceId, name: 'Tester' },
     fullAccess
   )
   const accountGroupId = dataOf<{ account_group: { id: string } }>(
@@ -336,7 +336,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
   const createdAssetAccount = await module.callMcpTool(
     'chromie_create_asset_account',
     {
-      account_id: accountId,
+      workspace_id: workspaceId,
       name: 'Manual',
       type: 'General'
     },
@@ -347,7 +347,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
   await module.callMcpTool(
     'chromie_replace_account_group_members',
     {
-      account_id: accountId,
+      workspace_id: workspaceId,
       account_group_id: accountGroupId,
       asset_account_ids: [assetAccountId]
     },
@@ -358,7 +358,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
     await module.callMcpTool(
       'chromie_create_position',
       {
-        account_id: accountId,
+        workspace_id: workspaceId,
         asset_account_id: assetAccountId,
         market: 'US',
         symbol,
@@ -373,7 +373,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
 
   const allPositionsResult = await module.callMcpTool(
     'chromie_search_positions',
-    { account_id: accountId, limit: 100 },
+    { workspace_id: workspaceId, limit: 100 },
     readAccess
   )
   const allPositionIds = dataOf<{ positions: Array<{ id: string }> }>(
@@ -381,7 +381,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
   ).positions.map((position) => position.id)
   const firstPageResult = await module.callMcpTool(
     'chromie_search_positions',
-    { account_id: accountId, limit: 1 },
+    { workspace_id: workspaceId, limit: 1 },
     readAccess
   )
   const firstPage = dataOf<{
@@ -395,7 +395,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
     () => module.callMcpTool(
       'chromie_search_positions',
       {
-        account_id: accountId,
+        workspace_id: workspaceId,
         query: 'Stock',
         cursor: firstPage.next_cursor,
         limit: 1
@@ -411,7 +411,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
     {
       target: {
         kind: 'position',
-        account_id: accountId,
+        workspace_id: workspaceId,
         asset_account_id: assetAccountId,
         position_id: allPositionIds[0]
       }
@@ -420,7 +420,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
   )
   const secondPageResult = await module.callMcpTool(
     'chromie_search_positions',
-    { account_id: accountId, cursor: firstPage.next_cursor, limit: 1 },
+    { workspace_id: workspaceId, cursor: firstPage.next_cursor, limit: 1 },
     readAccess
   )
   const secondPage = dataOf<{ positions: Array<{ id: string }> }>(secondPageResult)
@@ -430,7 +430,7 @@ test('position pagination uses a query-bound stable cursor', async () => {
 
 test('tool output schemas accept structured errors', () => {
   assert.deepEqual(
-    mcpToolOutputSchemas.chromie_list_accounts.parse({
+    mcpToolOutputSchemas.chromie_list_workspaces.parse({
       ok: false,
       error: {
         code: 'APP_NOT_RUNNING',
@@ -452,16 +452,16 @@ test('tool output schemas accept structured errors', () => {
 test('delete executes directly after the client grants permission', async () => {
   const module = createModule()
   const created = await module.callMcpTool(
-    'chromie_create_account',
+    'chromie_create_workspace',
     {
-      name: '待删除账户',
-      anchor_currency: 'USD'
+      name: '待删除工作区',
+      base_currency: 'USD'
     },
     fullAccess
   )
-  const accountId = dataOf<{ account_id: string }>(created).account_id
+  const workspaceId = dataOf<{ workspace_id: string }>(created).workspace_id
   const argumentsValue = {
-    target: { kind: 'account', account_id: accountId }
+    target: { kind: 'workspace', workspace_id: workspaceId }
   }
   const deleted = await module.callMcpTool(
     'chromie_delete_portfolio_item',
@@ -470,30 +470,30 @@ test('delete executes directly after the client grants permission', async () => 
   )
   assertValidOutput('chromie_delete_portfolio_item', deleted)
   const listed = await module.callMcpTool(
-    'chromie_list_accounts',
+    'chromie_list_workspaces',
     {},
     readAccess
   )
-  assert.deepEqual(dataOf<{ accounts: unknown[] }>(listed).accounts, [])
+  assert.deepEqual(dataOf<{ workspaces: unknown[] }>(listed).workspaces, [])
 })
 
 test('invalid group and snapshot writes leave portfolio data unchanged', async () => {
   const module = createModule()
   const created = await module.callMcpTool(
-    'chromie_create_account',
+    'chromie_create_workspace',
     {
       name: '边界测试',
-      anchor_currency: 'CNY'
+      base_currency: 'CNY'
     },
     fullAccess
   )
-  const accountId = dataOf<{ account_id: string }>(created).account_id
+  const workspaceId = dataOf<{ workspace_id: string }>(created).workspace_id
 
   await assert.rejects(
     () => module.callMcpTool(
       'chromie_update_position_group',
       {
-        account_id: accountId,
+        workspace_id: workspaceId,
         group_id: 'missing-group',
         name: '不存在'
       },
@@ -505,7 +505,7 @@ test('invalid group and snapshot writes leave portfolio data unchanged', async (
   await assert.rejects(
     () => module.callMcpTool(
       'chromie_create_snapshot',
-      { account_id: 'missing-account' },
+      { workspace_id: 'missing-workspace' },
       fullAccess
     ),
     (error: unknown) =>
@@ -513,14 +513,14 @@ test('invalid group and snapshot writes leave portfolio data unchanged', async (
   )
 
   const listed = await module.callMcpTool(
-    'chromie_list_accounts',
+    'chromie_list_workspaces',
     {},
     readAccess
   )
-  const accounts = dataOf<{ accounts: Array<{ id: string; name: string }> }>(
+  const workspaces = dataOf<{ workspaces: Array<{ id: string; name: string }> }>(
     listed
-  ).accounts
-  assert.equal(accounts.length, 1)
-  assert.equal(accounts[0].id, accountId)
-  assert.equal(accounts[0].name, '边界测试')
+  ).workspaces
+  assert.equal(workspaces.length, 1)
+  assert.equal(workspaces[0].id, workspaceId)
+  assert.equal(workspaces[0].name, '边界测试')
 })

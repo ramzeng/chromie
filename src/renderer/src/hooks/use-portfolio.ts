@@ -4,17 +4,17 @@ import type { ExchangeRateSnapshot } from '../../../shared/exchange-rates'
 import type { AssetAccountIntegrationView } from '../../../shared/integrations'
 import {
   EMPTY_PORTFOLIO_DATA,
-  type AccountBackup,
+  type WorkspaceBackup,
   type AccountGroupInput,
   type AppData,
   type AssetAccountInput,
   type PortfolioCommand,
-  type PortfolioSnapshot,
+  type WorkspaceSnapshot,
   type PositionGroupInput,
   type PositionInput,
-  type ProductAccount,
-  type ProductAccountInput,
-  type ProductAccountSettingsInput
+  type Workspace,
+  type WorkspaceInput,
+  type WorkspaceSettingsInput
 } from '../../../shared/portfolio'
 
 function cleanIpcError(error: unknown): string {
@@ -87,11 +87,11 @@ export function usePortfolio() {
     return response.result
   }
 
-  const activeProductAccount =
-    data.productAccounts.find((account) => account.id === data.activeProductAccountId) ?? null
-  const activeSnapshots = activeProductAccount
+  const activeWorkspace =
+    data.workspaces.find((workspace) => workspace.id === data.activeWorkspaceId) ?? null
+  const activeSnapshots = activeWorkspace
     ? data.snapshots.filter(
-        (snapshot) => snapshot.productAccountId === activeProductAccount.id
+        (snapshot) => snapshot.workspaceId === activeWorkspace.id
       )
     : []
 
@@ -99,202 +99,202 @@ export function usePortfolio() {
     loading,
     error,
     refreshError,
-    productAccounts: data.productAccounts,
-    activeProductAccount,
+    workspaces: data.workspaces,
+    activeWorkspace,
     activeSnapshots,
     getAssetAccountIntegration: (assetAccountId: string) =>
       integrations.find(
         (integration) => integration.assetAccountId === assetAccountId
       ),
-    setActiveProductAccount: (id: string) =>
-      execute({ type: 'set-active-product-account', id }).then(() => undefined),
+    setActiveWorkspace: (id: string) =>
+      execute({ type: 'set-active-workspace', id }).then(() => undefined),
     createSnapshot: (
-      productAccountId: string,
+      workspaceId: string,
       exchangeRates?: ExchangeRateSnapshot | null
     ) =>
-      execute({ type: 'create-snapshot', productAccountId, exchangeRates }).then(
+      execute({ type: 'create-snapshot', workspaceId, exchangeRates }).then(
         (result) => result ?? null
       ),
     deleteSnapshot: (snapshotId: string) =>
       execute({ type: 'delete-snapshot', snapshotId }).then(() => undefined),
-    createProductAccount: (input: ProductAccountInput) =>
-      execute({ type: 'create-product-account', input }).then((result) => {
-        if (typeof result !== 'string') throw new Error('创建账户失败')
+    createWorkspace: (input: WorkspaceInput) =>
+      execute({ type: 'create-workspace', input }).then((result) => {
+        if (typeof result !== 'string') throw new Error('创建工作区失败')
         return result
       }),
-    updateProductAccount: (id: string, input: ProductAccountSettingsInput) =>
-      execute({ type: 'update-product-account', id, input }).then(() => undefined),
-    deleteProductAccount: (id: string) =>
-      execute({ type: 'delete-product-account', id }).then(() => undefined),
-    createAccountGroup: (productAccountId: string, input: AccountGroupInput) =>
-      execute({ type: 'create-account-group', productAccountId, input }).then(
+    updateWorkspace: (id: string, input: WorkspaceSettingsInput) =>
+      execute({ type: 'update-workspace', id, input }).then(() => undefined),
+    deleteWorkspace: (id: string) =>
+      execute({ type: 'delete-workspace', id }).then(() => undefined),
+    createAccountGroup: (workspaceId: string, input: AccountGroupInput) =>
+      execute({ type: 'create-account-group', workspaceId, input }).then(
         (result) => {
-          if (typeof result !== 'string') throw new Error('创建资产分组失败')
+          if (typeof result !== 'string') throw new Error('创建账户分组失败')
           return result
         }
       ),
     updateAccountGroup: (
-      productAccountId: string,
+      workspaceId: string,
       groupId: string,
       input: AccountGroupInput
     ) =>
-      execute({ type: 'update-account-group', productAccountId, groupId, input }).then(
+      execute({ type: 'update-account-group', workspaceId, groupId, input }).then(
         () => undefined
       ),
-    deleteAccountGroup: (productAccountId: string, groupId: string) =>
-      execute({ type: 'delete-account-group', productAccountId, groupId }).then(
+    deleteAccountGroup: (workspaceId: string, groupId: string) =>
+      execute({ type: 'delete-account-group', workspaceId, groupId }).then(
         () => undefined
       ),
     setAccountGroupAccounts: (
-      productAccountId: string,
+      workspaceId: string,
       groupId: string,
       assetAccountIds: string[]
     ) =>
       execute({
         type: 'set-account-group-accounts',
-        productAccountId,
+        workspaceId,
         groupId,
         assetAccountIds
       }).then((result) => result ?? null),
     removeAccountFromGroup: (
-      productAccountId: string,
+      workspaceId: string,
       groupId: string,
       assetAccountId: string
     ) =>
       execute({
         type: 'remove-account-from-group',
-        productAccountId,
+        workspaceId,
         groupId,
         assetAccountId
       }).then(() => undefined),
-    createPositionGroup: (productAccountId: string, input: PositionGroupInput) =>
-      execute({ type: 'create-position-group', productAccountId, input }).then(
+    createPositionGroup: (workspaceId: string, input: PositionGroupInput) =>
+      execute({ type: 'create-position-group', workspaceId, input }).then(
         (result) => {
           if (typeof result !== 'string') throw new Error('创建持仓分组失败')
           return result
         }
       ),
     updatePositionGroup: (
-      productAccountId: string,
+      workspaceId: string,
       groupId: string,
       input: PositionGroupInput
     ) =>
-      execute({ type: 'update-position-group', productAccountId, groupId, input }).then(
+      execute({ type: 'update-position-group', workspaceId, groupId, input }).then(
         () => undefined
       ),
-    deletePositionGroup: (productAccountId: string, groupId: string) =>
-      execute({ type: 'delete-position-group', productAccountId, groupId }).then(
+    deletePositionGroup: (workspaceId: string, groupId: string) =>
+      execute({ type: 'delete-position-group', workspaceId, groupId }).then(
         () => undefined
       ),
     setPositionGroupPositions: (
-      productAccountId: string,
+      workspaceId: string,
       groupId: string,
       positionIds: string[]
     ) =>
       execute({
         type: 'set-position-group-positions',
-        productAccountId,
+        workspaceId,
         groupId,
         positionIds
       }).then((result) => result ?? null),
     removePositionFromGroup: (
-      productAccountId: string,
+      workspaceId: string,
       groupId: string,
       positionId: string
     ) =>
       execute({
         type: 'remove-position-from-group',
-        productAccountId,
+        workspaceId,
         groupId,
         positionId
       }).then(() => undefined),
-    createAssetAccount: (productAccountId: string, input: AssetAccountInput) =>
-      execute({ type: 'create-asset-account', productAccountId, input }).then(
+    createAssetAccount: (workspaceId: string, input: AssetAccountInput) =>
+      execute({ type: 'create-asset-account', workspaceId, input }).then(
         (result) => {
           if (typeof result !== 'string') throw new Error('创建资产账户失败')
           return result
         }
       ),
     updateAssetAccount: (
-      productAccountId: string,
+      workspaceId: string,
       assetAccountId: string,
       input: AssetAccountInput
     ) =>
       execute({
         type: 'update-asset-account',
-        productAccountId,
+        workspaceId,
         assetAccountId,
         input
       }).then(() => undefined),
-    deleteAssetAccount: (productAccountId: string, assetAccountId: string) =>
-      execute({ type: 'delete-asset-account', productAccountId, assetAccountId }).then(
+    deleteAssetAccount: (workspaceId: string, assetAccountId: string) =>
+      execute({ type: 'delete-asset-account', workspaceId, assetAccountId }).then(
         () => undefined
       ),
     savePosition: (
-      productAccountId: string,
+      workspaceId: string,
       assetAccountId: string,
       input: PositionInput,
       positionId?: string
     ) =>
       execute({
         type: 'save-position',
-        productAccountId,
+        workspaceId,
         assetAccountId,
         input,
         positionId
       }).then((result) => result ?? null),
     deletePosition: (
-      productAccountId: string,
+      workspaceId: string,
       assetAccountId: string,
       positionId: string
     ) =>
       execute({
         type: 'delete-position',
-        productAccountId,
+        workspaceId,
         assetAccountId,
         positionId
       }).then(() => undefined),
     replacePositions: (
-      productAccountId: string,
+      workspaceId: string,
       assetAccountId: string,
       positions: PositionInput[],
       lastSyncedAt?: string
     ) =>
       execute({
         type: 'replace-positions',
-        productAccountId,
+        workspaceId,
         assetAccountId,
         positions,
         lastSyncedAt
       }).then(() => undefined),
     syncAssetAccount: async (
-      productAccountId: string,
+      workspaceId: string,
       assetAccountId: string
     ) => {
       if (!window.desktop.portfolio?.syncAssetAccount) {
         throw new Error('资产同步组件尚未加载，请重启 Chromie')
       }
       return window.desktop.portfolio.syncAssetAccount(
-        productAccountId,
+        workspaceId,
         assetAccountId
       )
     },
-    importAccount: (account: ProductAccount, snapshots: PortfolioSnapshot[] = []) =>
-      execute({ type: 'import-account', account, snapshots }).then((result) => {
-        if (typeof result !== 'string') throw new Error('导入账户失败')
+    importWorkspace: (workspace: Workspace, snapshots: WorkspaceSnapshot[] = []) =>
+      execute({ type: 'import-workspace', workspace, snapshots }).then((result) => {
+        if (typeof result !== 'string') throw new Error('导入工作区失败')
         return result
       }),
-    inspectBackup: async (content: string): Promise<AccountBackup | null> => {
+    inspectBackup: async (content: string): Promise<WorkspaceBackup | null> => {
       if (!window.desktop.portfolio) {
         throw new Error('资产数据组件尚未加载，请重启 Chromie')
       }
       return window.desktop.portfolio.inspectBackup(content)
     },
-    exportAccount: async (): Promise<string> => {
+    exportWorkspace: async (): Promise<string> => {
       if (!window.desktop.portfolio) {
         throw new Error('资产数据组件尚未加载，请重启 Chromie')
       }
-      return window.desktop.portfolio.exportActiveAccount()
+      return window.desktop.portfolio.exportActiveWorkspace()
     }
   }
 }

@@ -25,13 +25,13 @@ import {
 } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
-import type { PortfolioSnapshot } from '@/lib/portfolio'
+import type { WorkspaceSnapshot } from '@/lib/portfolio'
 
 export function reportPortfolioError(error: unknown, title = '操作失败'): void {
   toast.error(title, { description: cleanErrorMessage(error) })
 }
 
-export function EmptyProductAccount({
+export function EmptyWorkspace({
   onCreate,
   onImport,
   importing
@@ -56,13 +56,13 @@ export function EmptyProductAccount({
             </span>
           </EmptyMedia>
           <EmptyTitle className="text-2xl">开始使用 Chromie</EmptyTitle>
-          <EmptyDescription>创建你的第一个账户，或从已有备份继续管理本地资产。</EmptyDescription>
+          <EmptyDescription>创建你的第一个工作区，或从已有备份继续管理本地资产。</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <div className="grid w-full gap-2">
             <Button size="lg" onClick={onCreate}>
               <Plus data-icon="inline-start" />
-              创建账户
+              创建工作区
             </Button>
             <Button
               variant="outline"
@@ -75,7 +75,7 @@ export function EmptyProductAccount({
               ) : (
                 <Download data-icon="inline-start" />
               )}
-              {importing ? '读取中…' : '导入账户'}
+              {importing ? '读取中…' : '导入工作区'}
             </Button>
           </div>
         </EmptyContent>
@@ -150,7 +150,7 @@ export function SnapshotViewingAlert({
   snapshot,
   onReturnLatest
 }: {
-  snapshot: PortfolioSnapshot
+  snapshot: WorkspaceSnapshot
   onReturnLatest: () => void
 }) {
   return (
@@ -161,7 +161,7 @@ export function SnapshotViewingAlert({
         <AlertDescription className="flex min-w-0 items-center gap-2">
           <Badge variant="secondary">历史快照</Badge>
           <span className="truncate">
-            版本 #{shortSnapshotHash(snapshot.id)} · {formatLastSyncedAt(snapshot.createdAt)}
+            快照 #{shortSnapshotHash(snapshot.id)} · {formatLastSyncedAt(snapshot.createdAt)}
           </span>
           <Button
             variant="ghost"
@@ -169,7 +169,7 @@ export function SnapshotViewingAlert({
             className="h-7 shrink-0"
             onClick={onReturnLatest}
           >
-            返回最新版
+            返回当前数据
           </Button>
         </AlertDescription>
       </Alert>

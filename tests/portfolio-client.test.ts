@@ -27,17 +27,17 @@ async function createOkxPortfolio() {
     portfolioRepository,
     integrationRepository
   )
-  const createdAccount = await portfolio.execute(
+  const createdWorkspace = await portfolio.execute(
     {
-      type: 'create-product-account',
-      input: { name: '家庭资产', anchorCurrency: 'CNY' }
+      type: 'create-workspace',
+      input: { name: '家庭资产', baseCurrency: 'CNY' }
     }
   )
-  const accountId = createdAccount.result as string
+  const workspaceId = createdWorkspace.result as string
   const createdAccountGroup = await portfolio.execute(
     {
       type: 'create-account-group',
-      productAccountId: accountId,
+      workspaceId,
       input: { name: 'Moon' }
     }
   )
@@ -45,7 +45,7 @@ async function createOkxPortfolio() {
   const createdAssetAccount = await portfolio.execute(
     {
       type: 'create-asset-account',
-      productAccountId: accountId,
+      workspaceId,
       input: {
         name: 'OKX',
         type: 'Okx',
@@ -69,7 +69,7 @@ async function createOkxPortfolio() {
   const assetAccountId = createdAssetAccount.result as string
   await portfolio.execute({
     type: 'set-account-group-accounts',
-    productAccountId: accountId,
+    workspaceId,
     groupId: accountGroupId,
     assetAccountIds: [assetAccountId]
   })
@@ -77,7 +77,7 @@ async function createOkxPortfolio() {
   return {
     portfolio,
     integrationRepository,
-    accountId,
+    workspaceId,
     assetAccountId
   }
 }
@@ -86,15 +86,24 @@ test('client portfolio responses redact credentials and preserve them on edit', 
   const {
     portfolio,
     integrationRepository,
-    accountId,
+    workspaceId,
     assetAccountId
   } = await createOkxPortfolio()
   const state = await loadPortfolioClientState(portfolio)
   const serializedState = JSON.stringify(state)
+  const backup = JSON.parse(await portfolio.exportActiveWorkspace()) as {
+    format: string
+    workspace: { id: string }
+    account?: unknown
+  }
 
   assert.equal(serializedState.includes('api-key-secret'), false)
   assert.equal(serializedState.includes('secret-key-secret'), false)
   assert.equal(serializedState.includes('passphrase-secret'), false)
+  assert.equal(backup.format, 'chromie-workspace')
+  assert.equal(backup.workspace.id, workspaceId)
+  assert.equal(backup.account, undefined)
+  assert.equal(portfolio.inspectBackup(JSON.stringify(backup))?.workspace.id, workspaceId)
   assert.deepEqual(state.integrations, [
     {
       assetAccountId,
@@ -103,11 +112,11 @@ test('client portfolio responses redact credentials and preserve them on edit', 
     }
   ])
 
-  const account = state.data.productAccounts.find((item) => item.id === accountId)!
-  const assetAccount = account.assetAccounts.find((item) => item.id === assetAccountId)!
+  const workspace = state.data.workspaces.find((item) => item.id === workspaceId)!
+  const assetAccount = workspace.assetAccounts.find((item) => item.id === assetAccountId)!
   const result = await executePortfolioClientCommand(portfolio, {
     type: 'update-asset-account',
-    productAccountId: accountId,
+    workspaceId,
     assetAccountId,
     input: {
       name: 'OKX 长期账户',
@@ -129,10 +138,10 @@ test('client portfolio responses redact credentials and preserve them on edit', 
 test('legacy holder backups are rejected after the one-time migration boundary', async () => {
   const portfolioRepository = new MemoryRepository()
   const integrationRepository = new MemoryRepository()
-  const legacyAccount = {
-    id: 'account-1',
+  const legacyWorkspace = {
+    id: 'workspace-1',
     name: '家庭资产',
-    anchorCurrency: 'CNY',
+    baseCurrency: 'CNY',
     exchangeRateProvider: 'coinbase',
     exchangeRateRefreshIntervalMinutes: 15,
     holders: [{ id: 'holder-1', name: '家庭' }],
@@ -153,19 +162,19 @@ test('legacy holder backups are rejected after the one-time migration boundary',
   )
   portfolioRepository.content = JSON.stringify({
     version: 1,
-    activeProductAccountId: legacyAccount.id,
-    productAccounts: [legacyAccount],
+    activeWorkspaceId: legacyWorkspace.id,
+    workspaces: [legacyWorkspace],
     snapshots: []
   })
   const loaded = await portfolio.load()
-  assert.deepEqual(loaded.data.productAccounts, [])
+  assert.deepEqual(loaded.data.workspaces, [])
   assert.match(portfolioRepository.content, /"holders"/)
 
   const inspectedBackup = portfolio.inspectBackup(JSON.stringify({
     format: 'chromie-account',
     version: 1,
     exportedAt: '2026-09-01T00:00:00.000Z',
-    account: legacyAccount,
+    account: legacyWorkspace,
     snapshots: []
   }))
   assert.equal(inspectedBackup, null)

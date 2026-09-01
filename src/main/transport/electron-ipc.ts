@@ -88,21 +88,21 @@ export function registerDesktopIpc(
   })
   ipcMain.handle(
     'portfolio:sync-asset-account',
-    (event, accountId: unknown, assetAccountId: unknown) => {
+    (event, workspaceId: unknown, assetAccountId: unknown) => {
       assertTrustedSender(event, validateSender)
-      if (typeof accountId !== 'string' || typeof assetAccountId !== 'string') {
+      if (typeof workspaceId !== 'string' || typeof assetAccountId !== 'string') {
         throw new Error('资产账户同步请求无效')
       }
-      return portfolio.syncAssetAccount(accountId, assetAccountId)
+      return portfolio.syncAssetAccount(workspaceId, assetAccountId)
     }
   )
   ipcMain.handle('portfolio:inspect-backup', (event, content: unknown) => {
     assertTrustedSender(event, validateSender)
     return portfolio.inspectBackup(content)
   })
-  ipcMain.handle('portfolio:export-active-account', (event) => {
+  ipcMain.handle('portfolio:export-active-workspace', (event) => {
     assertTrustedSender(event, validateSender)
-    return portfolio.exportActiveAccount()
+    return portfolio.exportActiveWorkspace()
   })
   ipcMain.handle('backup:export', (event, content: unknown) => {
     assertTrustedSender(event, validateSender)
@@ -114,9 +114,9 @@ export function registerDesktopIpc(
   })
   ipcMain.handle(
     'share-image:save',
-    (event, dataUrl: unknown, accountName: unknown) => {
+    (event, dataUrl: unknown, workspaceName: unknown) => {
       assertTrustedSender(event, validateSender)
-      return service.saveShareImage(event.sender.id, dataUrl, accountName)
+      return service.saveShareImage(event.sender.id, dataUrl, workspaceName)
     }
   )
   ipcMain.handle('mcp:load-settings', (event) => {

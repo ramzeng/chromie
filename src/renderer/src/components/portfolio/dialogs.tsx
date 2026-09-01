@@ -11,9 +11,12 @@ import {
   Check,
   Coins,
   Copy,
+  Download,
   FolderTree,
   Plus,
   SlidersHorizontal,
+  Trash2,
+  Upload,
   Wrench
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -80,10 +83,10 @@ import type { ExchangeRateState } from '@/lib/exchange-rates'
 import type { McpAccessSettings, McpConnectionSettings } from '@/lib/mcp'
 import { AccountTypeIcon } from './view-helpers'
 import {
-  ANCHOR_CURRENCIES,
+  BASE_CURRENCIES,
   assetAccountTypeLabels,
   defaultCurrencyByMarket,
-  DEFAULT_ANCHOR_CURRENCY,
+  DEFAULT_BASE_CURRENCY,
   DEFAULT_EXCHANGE_RATE_PROVIDER,
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   DEFAULT_FUTU_OPEND_HOST,
@@ -101,7 +104,7 @@ import {
   type AssetAccountIntegrationView,
   type AssetAccountInput,
   type AssetAccountType,
-  type AnchorCurrency,
+  type BaseCurrency,
   type ExchangeRateProvider,
   type AccountGroup,
   type AccountGroupInput,
@@ -110,9 +113,9 @@ import {
   type PositionGroup,
   type PositionGroupInput,
   type PositionInput,
-  type ProductAccount,
-  type ProductAccountInput,
-  type ProductAccountSettingsInput
+  type Workspace,
+  type WorkspaceInput,
+  type WorkspaceSettingsInput
 } from '@/lib/portfolio'
 
 type BaseDialogProps = {
@@ -219,7 +222,7 @@ function McpSettingsSection({
           <div>
             <Label htmlFor="mcp-write">允许编辑</Label>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              允许创建和修改账户、持仓、分组及快照
+              允许创建和修改工作区、资产账户、持仓、分组及快照
             </p>
           </div>
           <Switch
@@ -314,7 +317,7 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
   }
 
   const status = exchangeRates.snapshot
-    ? `${exchangeRates.status === 'error' ? '使用缓存' : exchangeRates.status === 'refreshing' ? '正在刷新' : '更新时间'} ${formatExchangeRateTime(exchangeRates.snapshot.fetchedAt)}`
+    ? `${exchangeRates.status === 'error' ? '使用缓存' : exchangeRates.status === 'refreshing' ? '正在更新' : '更新时间'} ${formatExchangeRateTime(exchangeRates.snapshot.fetchedAt)}`
     : exchangeRates.status === 'loading' || exchangeRates.status === 'refreshing'
       ? '正在获取汇率'
       : '暂无汇率数据'
@@ -380,7 +383,7 @@ export function AccountGroupDialog({
     if (submissionInFlight.current) return
     const normalizedName = name.trim()
     if (!normalizedName) {
-      setError('请输入资产分组名称')
+      setError('请输入账户分组名称')
       return
     }
     if (!beginSubmission()) return
@@ -389,7 +392,7 @@ export function AccountGroupDialog({
       onOpenChange(false)
     } catch (submitError) {
       reportOperationError(
-        group ? '更新资产分组失败' : '创建资产分组失败',
+        group ? '更新账户分组失败' : '创建账户分组失败',
         submitError
       )
     } finally {
@@ -406,12 +409,12 @@ export function AccountGroupDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{group ? '编辑资产分组' : '新建资产分组'}</DialogTitle>
+          <DialogTitle>{group ? '编辑账户分组' : '新建账户分组'}</DialogTitle>
           <DialogDescription>把多个资产账户汇总到一起查看</DialogDescription>
         </DialogHeader>
         <form className="grid gap-5" onSubmit={handleSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="account-group-name">资产分组名称</Label>
+            <Label htmlFor="account-group-name">账户分组名称</Label>
             <Input
               id="account-group-name"
               value={name}
@@ -419,7 +422,7 @@ export function AccountGroupDialog({
                 setName(event.target.value)
                 setError('')
               }}
-              placeholder="输入资产分组名称"
+              placeholder="输入账户分组名称"
               autoFocus
               maxLength={40}
             />
@@ -442,7 +445,7 @@ export function AccountGroupDialog({
                   : '创建中…'
                 : group
                   ? '保存修改'
-                  : '创建资产分组'}
+                  : '创建账户分组'}
             </Button>
           </DialogFooter>
         </form>
@@ -451,16 +454,16 @@ export function AccountGroupDialog({
   )
 }
 
-export function ProductAccountDialog({
+export function WorkspaceDialog({
   open,
   onOpenChange,
   onSubmit
 }: BaseDialogProps & {
-  onSubmit: (input: ProductAccountInput) => Promise<void>
+  onSubmit: (input: WorkspaceInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
-  const [anchorCurrency, setAnchorCurrency] = useState<AnchorCurrency>(
-    DEFAULT_ANCHOR_CURRENCY
+  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>(
+    DEFAULT_BASE_CURRENCY
   )
   const [error, setError] = useState('')
   const { submitting, submissionInFlight, beginSubmission, endSubmission } =
@@ -469,7 +472,7 @@ export function ProductAccountDialog({
   useEffect(() => {
     if (!open) return
     setName('')
-    setAnchorCurrency(DEFAULT_ANCHOR_CURRENCY)
+    setBaseCurrency(DEFAULT_BASE_CURRENCY)
     setError('')
   }, [open])
 
@@ -477,15 +480,15 @@ export function ProductAccountDialog({
     event.preventDefault()
     if (submissionInFlight.current) return
     if (!name.trim()) {
-      setError('请输入账户名称')
+      setError('请输入工作区名称')
       return
     }
     if (!beginSubmission()) return
     try {
-      await onSubmit({ name, anchorCurrency })
+      await onSubmit({ name, baseCurrency })
       onOpenChange(false)
     } catch (submitError) {
-      reportOperationError('创建账户失败', submitError)
+      reportOperationError('创建工作区失败', submitError)
     } finally {
       endSubmission()
     }
@@ -500,39 +503,39 @@ export function ProductAccountDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>新建账户</DialogTitle>
-          <DialogDescription>不同账户的数据相互独立</DialogDescription>
+          <DialogTitle>新建工作区</DialogTitle>
+          <DialogDescription>每个工作区的数据、设置和历史快照相互独立</DialogDescription>
         </DialogHeader>
         <form className="grid gap-5" onSubmit={handleSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="product-account-name">账户名称</Label>
+            <Label htmlFor="workspace-name">工作区名称</Label>
             <Input
-              id="product-account-name"
+              id="workspace-name"
               value={name}
               onChange={(event) => {
                 setName(event.target.value)
                 setError('')
               }}
-              placeholder="例如：我的账户"
+              placeholder="例如：家庭资产"
               autoFocus
               maxLength={40}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="product-account-anchor-currency">锚定币种</Label>
+            <Label htmlFor="workspace-base-currency">本位币</Label>
             <Select
-              value={anchorCurrency}
+              value={baseCurrency}
               onValueChange={(value) => {
-                setAnchorCurrency(value as AnchorCurrency)
+                setBaseCurrency(value as BaseCurrency)
                 setError('')
               }}
             >
-              <SelectTrigger id="product-account-anchor-currency">
-                <SelectValue placeholder="选择锚定币种" />
+              <SelectTrigger id="workspace-base-currency">
+                <SelectValue placeholder="选择本位币" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  {ANCHOR_CURRENCIES.map((currency) => (
+                  {BASE_CURRENCIES.map((currency) => (
                     <SelectItem key={currency} value={currency}>
                       {currency}
                     </SelectItem>
@@ -541,7 +544,7 @@ export function ProductAccountDialog({
               </SelectContent>
             </Select>
             <p className="text-xs leading-5 text-muted-foreground">
-              自动换算锚定市值，并据此计算全部持仓占比
+              各币种市值按参考汇率折算为本位币，并据此计算全部持仓的市值占比
             </p>
           </div>
           {error && <FieldMessage>{error}</FieldMessage>}
@@ -556,7 +559,7 @@ export function ProductAccountDialog({
             </Button>
             <Button type="submit" disabled={submitting} aria-busy={submitting}>
               {submitting && <Spinner data-icon="inline-start" />}
-              {submitting ? '创建中…' : '创建账户'}
+              {submitting ? '创建中…' : '创建工作区'}
             </Button>
           </DialogFooter>
         </form>
@@ -565,37 +568,41 @@ export function ProductAccountDialog({
   )
 }
 
-export function ProductAccountSwitcherDialog({
+export function WorkspaceSwitcherDialog({
   open,
   onOpenChange,
-  accounts,
-  activeAccountId,
-  onSelect
+  workspaces,
+  activeWorkspaceId,
+  onSelect,
+  onImport,
+  importing
 }: BaseDialogProps & {
-  accounts: ProductAccount[]
-  activeAccountId: string
-  onSelect: (accountId: string) => Promise<void>
+  workspaces: Workspace[]
+  activeWorkspaceId: string
+  onSelect: (workspaceId: string) => Promise<void>
+  onImport: () => void
+  importing: boolean
 }) {
-  const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null)
+  const [switchingWorkspaceId, setSwitchingWorkspaceId] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!open) setSwitchingAccountId(null)
+    if (!open) setSwitchingWorkspaceId(null)
   }, [open])
 
-  async function handleSelect(accountId: string): Promise<void> {
-    if (switchingAccountId) return
-    if (accountId === activeAccountId) {
+  async function handleSelect(workspaceId: string): Promise<void> {
+    if (switchingWorkspaceId) return
+    if (workspaceId === activeWorkspaceId) {
       onOpenChange(false)
       return
     }
-    setSwitchingAccountId(accountId)
+    setSwitchingWorkspaceId(workspaceId)
     try {
-      await onSelect(accountId)
+      await onSelect(workspaceId)
       onOpenChange(false)
     } catch (error) {
-      reportOperationError('切换账户失败', error)
+      reportOperationError('切换工作区失败', error)
     } finally {
-      setSwitchingAccountId(null)
+      setSwitchingWorkspaceId(null)
     }
   }
 
@@ -603,33 +610,33 @@ export function ProductAccountSwitcherDialog({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!switchingAccountId) onOpenChange(nextOpen)
+        if (!switchingWorkspaceId) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>切换账户</DialogTitle>
-          <DialogDescription>选择要进入的账户</DialogDescription>
+          <DialogTitle>切换工作区</DialogTitle>
+          <DialogDescription>选择要进入的工作区</DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
-          {accounts.map((account) => {
-            const active = account.id === activeAccountId
-            const switching = account.id === switchingAccountId
+          {workspaces.map((workspace) => {
+            const active = workspace.id === activeWorkspaceId
+            const switching = workspace.id === switchingWorkspaceId
             return (
               <Button
-                key={account.id}
+                key={workspace.id}
                 type="button"
                 variant={active ? 'secondary' : 'outline'}
                 className="h-auto w-full justify-start gap-3 p-3"
-                disabled={Boolean(switchingAccountId)}
+                disabled={Boolean(switchingWorkspaceId)}
                 aria-current={active ? 'true' : undefined}
-                onClick={() => void handleSelect(account.id)}
+                onClick={() => void handleSelect(workspace.id)}
               >
                 <span className="grid size-9 shrink-0 place-items-center rounded-sm bg-background text-sm font-semibold">
-                  {account.name.trim().slice(0, 1).toUpperCase()}
+                  {workspace.name.trim().slice(0, 1).toUpperCase()}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-left">
-                  {account.name}
+                  {workspace.name}
                 </span>
                 {switching ? (
                   <Spinner data-icon="inline-end" />
@@ -640,29 +647,50 @@ export function ProductAccountSwitcherDialog({
             )
           })}
         </div>
+        <Separator />
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full"
+          disabled={Boolean(switchingWorkspaceId) || importing}
+          aria-busy={importing}
+          onClick={() => {
+            onOpenChange(false)
+            onImport()
+          }}
+        >
+          {importing ? (
+            <Spinner data-icon="inline-start" />
+          ) : (
+            <Download data-icon="inline-start" />
+          )}
+          {importing ? '读取中…' : '导入工作区'}
+        </Button>
       </DialogContent>
     </Dialog>
   )
 }
 
-export function ProductAccountSettingsDialog({
+export function WorkspaceSettingsDialog({
   open,
   onOpenChange,
-  account,
+  workspace,
   exchangeRates,
   initialSection = 'basic',
   onSubmit,
+  onRequestExport,
   onRequestDelete
 }: BaseDialogProps & {
-  account: ProductAccount
+  workspace: Workspace
   exchangeRates: ExchangeRateView
   initialSection?: 'basic' | 'currency' | 'mcp'
-  onSubmit: (input: ProductAccountSettingsInput) => Promise<void>
+  onSubmit: (input: WorkspaceSettingsInput) => Promise<void>
+  onRequestExport: () => void
   onRequestDelete: () => void
 }) {
   const [name, setName] = useState('')
-  const [anchorCurrency, setAnchorCurrency] = useState<AnchorCurrency>(
-    DEFAULT_ANCHOR_CURRENCY
+  const [baseCurrency, setBaseCurrency] = useState<BaseCurrency>(
+    DEFAULT_BASE_CURRENCY
   )
   const [exchangeRateProvider, setExchangeRateProvider] =
     useState<ExchangeRateProvider>(DEFAULT_EXCHANGE_RATE_PROVIDER)
@@ -682,27 +710,27 @@ export function ProductAccountSettingsDialog({
 
   useEffect(() => {
     if (!open) return
-    setName(account.name)
-    setAnchorCurrency(account.anchorCurrency)
+    setName(workspace.name)
+    setBaseCurrency(workspace.baseCurrency)
     setExchangeRateProvider(
-      EXCHANGE_RATE_PROVIDERS.includes(account.exchangeRateProvider)
-        ? account.exchangeRateProvider
+      EXCHANGE_RATE_PROVIDERS.includes(workspace.exchangeRateProvider)
+        ? workspace.exchangeRateProvider
         : DEFAULT_EXCHANGE_RATE_PROVIDER
     )
     setExchangeRateRefreshInterval(
       String(
-        Number.isInteger(account.exchangeRateRefreshIntervalMinutes) &&
-          account.exchangeRateRefreshIntervalMinutes >=
+        Number.isInteger(workspace.exchangeRateRefreshIntervalMinutes) &&
+          workspace.exchangeRateRefreshIntervalMinutes >=
             MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES &&
-          account.exchangeRateRefreshIntervalMinutes <=
+          workspace.exchangeRateRefreshIntervalMinutes <=
             MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
-          ? account.exchangeRateRefreshIntervalMinutes
+          ? workspace.exchangeRateRefreshIntervalMinutes
           : DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
       )
     )
     setSection(initialSection)
     setError('')
-  }, [account.id, initialSection, open])
+  }, [workspace.id, initialSection, open])
 
   useEffect(() => {
     if (!open || section !== 'mcp') return
@@ -771,7 +799,7 @@ export function ProductAccountSettingsDialog({
     }
     if (!name.trim()) {
       setSection('basic')
-      setError('请输入账户名称')
+      setError('请输入工作区名称')
       return
     }
     const refreshInterval = Number(exchangeRateRefreshInterval)
@@ -782,7 +810,7 @@ export function ProductAccountSettingsDialog({
     ) {
       setSection('currency')
       setError(
-        `刷新间隔请输入 ${MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}–${MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES} 分钟之间的整数`
+        `更新间隔请输入 ${MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}–${MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES} 分钟之间的整数`
       )
       return
     }
@@ -790,13 +818,13 @@ export function ProductAccountSettingsDialog({
     try {
       await onSubmit({
         name,
-        anchorCurrency,
+        baseCurrency,
         exchangeRateProvider,
         exchangeRateRefreshIntervalMinutes: refreshInterval
       })
       onOpenChange(false)
     } catch (submitError) {
-      reportOperationError('保存账户设置失败', submitError)
+      reportOperationError('保存工作区设置失败', submitError)
     } finally {
       endSubmission()
     }
@@ -811,9 +839,9 @@ export function ProductAccountSettingsDialog({
       >
       <DialogContent className="h-[640px] max-h-[calc(100vh-2rem)] max-w-[760px] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b px-6 py-5">
-          <DialogTitle>账户设置</DialogTitle>
+          <DialogTitle>工作区设置</DialogTitle>
           <DialogDescription className="sr-only">
-            管理账户基础信息、币种与汇率、MCP 和账户状态
+            管理工作区基础信息、币种与汇率、MCP 和工作区状态
           </DialogDescription>
         </DialogHeader>
         <form
@@ -821,15 +849,15 @@ export function ProductAccountSettingsDialog({
           onSubmit={handleSubmit}
         >
           <div className="grid min-h-0 grid-cols-[10.5rem_minmax(0,1fr)] overflow-hidden">
-            <aside className="border-r bg-muted/25 p-3">
-              <nav className="grid content-start gap-1" aria-label="账户设置菜单">
+            <aside className="border-r border-sidebar-border bg-sidebar p-3 text-sidebar-foreground">
+              <nav className="grid content-start gap-1" aria-label="工作区设置菜单">
                 <Button
                   type="button"
                   variant="ghost"
                   className={cn(
-                    'h-9 justify-start gap-2.5 px-3 font-normal',
+                    'h-9 justify-start gap-2.5 px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                     section === 'basic' &&
-                      'bg-background font-medium shadow-xs hover:bg-background'
+                      'bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent'
                   )}
                   onClick={() => setSection('basic')}
                 >
@@ -840,9 +868,9 @@ export function ProductAccountSettingsDialog({
                   type="button"
                   variant="ghost"
                   className={cn(
-                    'h-9 justify-start gap-2.5 px-3 font-normal',
+                    'h-9 justify-start gap-2.5 px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                     section === 'currency' &&
-                      'bg-background font-medium shadow-xs hover:bg-background'
+                      'bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent'
                   )}
                   onClick={() => setSection('currency')}
                 >
@@ -853,9 +881,9 @@ export function ProductAccountSettingsDialog({
                   type="button"
                   variant="ghost"
                   className={cn(
-                    'h-9 justify-start gap-2.5 px-3 font-normal',
+                    'h-9 justify-start gap-2.5 px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                     section === 'mcp' &&
-                      'bg-background font-medium shadow-xs hover:bg-background'
+                      'bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent'
                   )}
                   onClick={() => setSection('mcp')}
                 >
@@ -871,24 +899,45 @@ export function ProductAccountSettingsDialog({
                 <section className="grid gap-5">
                   <h3 className="text-base font-semibold">基础信息</h3>
                   <div className="grid gap-2">
-                    <Label htmlFor="account-settings-name">账户名称</Label>
+                    <Label htmlFor="workspace-settings-name">工作区名称</Label>
                     <Input
-                      id="account-settings-name"
+                      id="workspace-settings-name"
                       value={name}
                       onChange={(event) => {
                         setName(event.target.value)
                         setError('')
                       }}
-                      placeholder="输入账户名称"
+                      placeholder="输入工作区名称"
                       maxLength={40}
                     />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between gap-5">
                     <div className="grid gap-1">
-                      <p className="text-sm font-medium">注销账户</p>
+                      <p className="text-sm font-medium">导出工作区</p>
                       <p className="text-xs leading-5 text-muted-foreground">
-                        将删除账户内的全部数据，且无法撤销
+                        导出工作区数据与历史快照，备份不包含同步凭据
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => {
+                        onOpenChange(false)
+                        onRequestExport()
+                      }}
+                    >
+                      <Upload data-icon="inline-start" />
+                      导出工作区
+                    </Button>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between gap-5">
+                    <div className="grid gap-1">
+                      <p className="text-sm font-medium">删除工作区</p>
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        将删除工作区内的全部数据，且无法撤销
                       </p>
                     </div>
                     <Button
@@ -900,7 +949,8 @@ export function ProductAccountSettingsDialog({
                         onRequestDelete()
                       }}
                     >
-                      注销账户
+                      <Trash2 data-icon="inline-start" />
+                      删除工作区
                     </Button>
                   </div>
                 </section>
@@ -911,22 +961,22 @@ export function ProductAccountSettingsDialog({
                   <h3 className="text-base font-semibold">币种与汇率</h3>
                   <ReferenceExchangeRates exchangeRates={exchangeRates} />
                   <div className="grid gap-2">
-                    <Label htmlFor="account-settings-anchor-currency">
-                      锚定币种
+                    <Label htmlFor="workspace-settings-base-currency">
+                      本位币
                     </Label>
                     <Select
-                      value={anchorCurrency}
+                      value={baseCurrency}
                       onValueChange={(value) => {
-                        setAnchorCurrency(value as AnchorCurrency)
+                        setBaseCurrency(value as BaseCurrency)
                         setError('')
                       }}
                     >
-                      <SelectTrigger id="account-settings-anchor-currency">
+                      <SelectTrigger id="workspace-settings-base-currency">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
-                          {ANCHOR_CURRENCIES.map((currency) => (
+                          {BASE_CURRENCIES.map((currency) => (
                             <SelectItem key={currency} value={currency}>
                               {currency}
                             </SelectItem>
@@ -935,11 +985,11 @@ export function ProductAccountSettingsDialog({
                       </SelectContent>
                     </Select>
                     <p className="text-xs leading-5 text-muted-foreground">
-                      自动换算锚定市值，并据此计算全部持仓占比
+                      各币种市值按参考汇率折算为本位币，并据此计算全部持仓的市值占比
                     </p>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="account-settings-exchange-rate-provider">
+                    <Label htmlFor="workspace-settings-exchange-rate-provider">
                       汇率数据源
                     </Label>
                     <Select
@@ -949,7 +999,7 @@ export function ProductAccountSettingsDialog({
                         setError('')
                       }}
                     >
-                      <SelectTrigger id="account-settings-exchange-rate-provider">
+                      <SelectTrigger id="workspace-settings-exchange-rate-provider">
                         <SelectValue placeholder="选择汇率数据源">
                           {exchangeRateProviderLabels[exchangeRateProvider]}
                         </SelectValue>
@@ -969,11 +1019,11 @@ export function ProductAccountSettingsDialog({
                     </p>
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="account-settings-exchange-rate-refresh-interval">
-                      刷新间隔（分钟）
+                    <Label htmlFor="workspace-settings-exchange-rate-refresh-interval">
+                      更新间隔（分钟）
                     </Label>
                     <Input
-                      id="account-settings-exchange-rate-refresh-interval"
+                      id="workspace-settings-exchange-rate-refresh-interval"
                       type="number"
                       min={MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}
                       max={MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}
@@ -985,7 +1035,7 @@ export function ProductAccountSettingsDialog({
                       }}
                     />
                     <p className="text-xs leading-5 text-muted-foreground">
-                      打开账户后立即同步，之后按此间隔自动刷新
+                      打开工作区后立即更新，之后按此间隔自动更新
                     </p>
                   </div>
                 </section>
@@ -1117,12 +1167,12 @@ export function GroupAccountsDialog({
     try {
       const submitError = await onSubmit(selectedIds)
       if (submitError) {
-        reportOperationError('保存分组账户失败', submitError)
+        reportOperationError('更新账户分组失败', submitError)
         return
       }
       onOpenChange(false)
     } catch (submitError) {
-      reportOperationError('保存分组账户失败', submitError)
+      reportOperationError('更新账户分组失败', submitError)
     } finally {
       endSubmission()
     }
@@ -1139,7 +1189,7 @@ export function GroupAccountsDialog({
         <DialogHeader>
           <DialogTitle>管理“{group.name}”的资产账户</DialogTitle>
           <DialogDescription>
-            每个资产账户只能加入一个资产分组，已属于其他分组的账户不可选择
+            每个资产账户只能加入一个账户分组，已属于其他分组的资产账户不可选择
           </DialogDescription>
         </DialogHeader>
         {assetAccounts.length > 0 && (
@@ -1546,14 +1596,14 @@ export function GroupPositionsDialog({
 export function ImportBackupDialog({
   open,
   onOpenChange,
-  accountName,
+  workspaceName,
   assetAccountCount,
   groupCount,
   positionCount,
   snapshotCount,
   onConfirm
 }: BaseDialogProps & {
-  accountName: string
+  workspaceName: string
   assetAccountCount: number
   groupCount: number
   positionCount: number
@@ -1582,10 +1632,10 @@ export function ImportBackupDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>导入“{accountName}”？</DialogTitle>
+          <DialogTitle>导入“{workspaceName}”？</DialogTitle>
           <DialogDescription>
             包含 {assetAccountCount} 个资产账户、{groupCount} 个持仓分组、{positionCount}{' '}
-            项持仓和 {snapshotCount} 个历史快照，将作为新账户导入
+            项持仓和 {snapshotCount} 个历史快照，将作为新工作区导入
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -1641,7 +1691,7 @@ export function ExportBackupDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>导出当前账户</DialogTitle>
+          <DialogTitle>导出当前工作区</DialogTitle>
           <DialogDescription>备份不包含同步凭据，导入后需重新配置</DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -1993,10 +2043,10 @@ export function AssetAccountDialog({
                   {type === 'Futu'
                     ? '通过本机 Futu OpenD 同步持仓'
                     : type === 'Ibkr'
-                      ? '通过本机 Client Portal Gateway 同步资产'
+                      ? '通过本机 Client Portal Gateway 同步持仓'
                       : type === 'Okx'
-                        ? '通过 OKX 只读 API 同步资产'
-                        : '通过币安只读 API 同步资产'}
+                        ? '通过 OKX 只读 API 同步持仓'
+                        : '通过币安只读 API 同步持仓'}
                 </p>
               </div>
               <Switch
@@ -2022,7 +2072,7 @@ export function AssetAccountDialog({
                     : type === 'Boc'
                       ? '中国银行'
                     : '通用'}
-                账户暂不支持自动同步，可手动添加和编辑持仓
+                此类资产账户暂不支持自动同步，可手动添加和编辑持仓
               </p>
             </div>
           )}
@@ -2345,7 +2395,7 @@ export function AssetAccountDialog({
                   : '添加中…'
                 : account
                   ? '保存修改'
-                  : '添加账户'}
+                  : '添加资产账户'}
             </Button>
           </DialogFooter>
         </form>
@@ -2614,7 +2664,7 @@ export function DeleteConfirmDialog({
         {confirmationPhrase && (
           <div className="grid gap-2">
             <Label htmlFor={confirmationInputId}>
-              输入 {confirmationPhrase} 确认注销
+              输入 {confirmationPhrase} 确认删除
             </Label>
             <Input
               id={confirmationInputId}

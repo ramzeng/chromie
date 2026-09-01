@@ -3,16 +3,16 @@ import { createHash } from 'node:crypto'
 
 import {
   DEFAULT_MCP_ACCESS_SETTINGS,
-  createAccountInputSchema,
+  createWorkspaceInputSchema,
   createAssetAccountInputSchema,
   createAccountGroupInputSchema,
   createPositionGroupInputSchema,
   createPositionInputSchema,
   createSnapshotInputSchema,
   deletePortfolioItemInputSchema,
-  getAccountInputSchema,
+  getWorkspaceInputSchema,
   getOverviewInputSchema,
-  listAccountsInputSchema,
+  listWorkspacesInputSchema,
   listSnapshotsInputSchema,
   mcpToolInputSchemas,
   refreshExchangeRatesInputSchema,
@@ -20,7 +20,7 @@ import {
   replacePositionGroupMembersInputSchema,
   searchPositionsInputSchema,
   syncAssetAccountInputSchema,
-  updateAccountInputSchema,
+  updateWorkspaceInputSchema,
   updateAssetAccountInputSchema,
   updateAccountGroupInputSchema,
   updatePositionGroupInputSchema,
@@ -46,8 +46,8 @@ import {
   type PortfolioSyncResponse,
   type Position,
   type PositionInput,
-  type ProductAccount,
-  type ProductAccountSettingsInput
+  type Workspace,
+  type WorkspaceSettingsInput
 } from '../../shared/portfolio'
 import { valuePositions } from '../../shared/valuation'
 import type { DesktopOperations } from './desktop-service'
@@ -84,13 +84,13 @@ export interface PortfolioModuleOperations extends PortfolioOperations {
     access?: McpAccessSettings
   ): Promise<McpToolSuccess>
   syncAssetAccount(
-    accountId: string,
+    workspaceId: string,
     assetAccountId: string
   ): Promise<PortfolioSyncResponse>
 }
 
-type AccountView = {
-  account: ProductAccount
+type WorkspaceView = {
+  workspace: Workspace
   exchangeRates: ExchangeRateSnapshot | null
   view: {
     kind: 'latest'
@@ -102,8 +102,8 @@ type AccountView = {
 }
 
 const WRITE_TOOLS = new Set<McpToolName>([
-  'chromie_create_account',
-  'chromie_update_account',
+  'chromie_create_workspace',
+  'chromie_update_workspace',
   'chromie_create_account_group',
   'chromie_update_account_group',
   'chromie_replace_account_group_members',
@@ -154,7 +154,7 @@ function positionCursorScope(
 ): string {
   return createHash('sha256')
     .update(JSON.stringify({
-      account_id: input.account_id,
+      workspace_id: input.workspace_id,
       view: input.view ?? { kind: 'latest' },
       query: input.query?.toLocaleLowerCase() ?? null,
       market: input.market ?? null,
@@ -194,17 +194,17 @@ function decodePositionCursor(value: string, scope: string): string {
   )
 }
 
-function requireAccount(data: AppData, accountId: string): ProductAccount {
-  const account = data.productAccounts.find((item) => item.id === accountId)
-  if (!account) throw new McpOperationError('NOT_FOUND', '没有找到对应的账户')
-  return account
+function requireWorkspace(data: AppData, workspaceId: string): Workspace {
+  const workspace = data.workspaces.find((item) => item.id === workspaceId)
+  if (!workspace) throw new McpOperationError('NOT_FOUND', '没有找到对应的工作区')
+  return workspace
 }
 
 function requireAssetAccount(
-  account: ProductAccount,
+  workspace: Workspace,
   assetAccountId: string
 ): AssetAccount {
-  const assetAccount = account.assetAccounts.find((item) => item.id === assetAccountId)
+  const assetAccount = workspace.assetAccounts.find((item) => item.id === assetAccountId)
   if (!assetAccount) {
     throw new McpOperationError('NOT_FOUND', '没有找到对应的资产账户')
   }
@@ -233,24 +233,24 @@ function safeIntegrationStatus(
   }
 }
 
-function safeAccount(
-  account: ProductAccount,
+function safeWorkspace(
+  workspace: Workspace,
   integrations: AssetAccountIntegration[],
   includePositions: boolean
 ) {
   return {
-    id: account.id,
-    name: account.name,
-    anchor_currency: account.anchorCurrency,
-    exchange_rate_provider: account.exchangeRateProvider,
+    id: workspace.id,
+    name: workspace.name,
+    base_currency: workspace.baseCurrency,
+    exchange_rate_provider: workspace.exchangeRateProvider,
     exchange_rate_refresh_interval_minutes:
-      account.exchangeRateRefreshIntervalMinutes,
-    account_groups: account.accountGroups.map((accountGroup) => ({
+      workspace.exchangeRateRefreshIntervalMinutes,
+    account_groups: workspace.accountGroups.map((accountGroup) => ({
       id: accountGroup.id,
       name: accountGroup.name,
       asset_account_ids: [...accountGroup.assetAccountIds]
     })),
-    asset_accounts: account.assetAccounts.map((assetAccount) => ({
+    asset_accounts: workspace.assetAccounts.map((assetAccount) => ({
       id: assetAccount.id,
       name: assetAccount.name,
       type: assetAccount.type,
@@ -263,7 +263,7 @@ function safeAccount(
         ? { positions: assetAccount.positions.map((position) => ({ ...position })) }
         : {})
     })),
-    position_groups: account.positionGroups.map((group) => ({
+    position_groups: workspace.positionGroups.map((group) => ({
       id: group.id,
       name: group.name,
       position_ids: [...group.positionIds]
@@ -301,20 +301,20 @@ function integrationInput(
 
 function positionValue(
   position: Position,
-  anchorCurrency: string,
+  baseCurrency: string,
   exchangeRates: ExchangeRateSnapshot | null
 ) {
   const valuation = valuePositions(
     [position],
-    anchorCurrency,
+    baseCurrency,
     exchangeRates?.rates
   )
   const item = valuation.byPositionId.get(position.id)
   return {
     ...(item?.marketValue === undefined ? {} : { market_value: item.marketValue }),
-    ...(item?.anchoredMarketValue === undefined
+    ...(item?.convertedMarketValue === undefined
       ? {}
-      : { anchored_market_value: item.anchoredMarketValue }),
+      : { converted_market_value: item.convertedMarketValue }),
     missing_currencies: valuation.missingCurrencies
   }
 }
@@ -343,8 +343,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     return this.portfolio.inspectBackup(content)
   }
 
-  exportActiveAccount(): Promise<string> {
-    return this.portfolio.exportActiveAccount()
+  exportActiveWorkspace(): Promise<string> {
+    return this.portfolio.exportActiveWorkspace()
   }
 
   subscribe(listener: PortfolioChangeListener): () => void {
@@ -369,10 +369,10 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }
 
     switch (name) {
-        case 'chromie_list_accounts':
-          return await this.listAccounts(listAccountsInputSchema.parse(parsed.data))
-        case 'chromie_get_account':
-          return await this.getAccount(getAccountInputSchema.parse(parsed.data))
+        case 'chromie_list_workspaces':
+          return await this.listWorkspaces(listWorkspacesInputSchema.parse(parsed.data))
+        case 'chromie_get_workspace':
+          return await this.getWorkspace(getWorkspaceInputSchema.parse(parsed.data))
         case 'chromie_get_overview':
           return await this.getOverview(getOverviewInputSchema.parse(parsed.data))
         case 'chromie_search_positions':
@@ -381,10 +381,10 @@ export class PortfolioModule implements PortfolioModuleOperations {
           )
         case 'chromie_list_snapshots':
           return await this.listSnapshots(listSnapshotsInputSchema.parse(parsed.data))
-        case 'chromie_create_account':
-          return await this.createAccount(createAccountInputSchema.parse(parsed.data))
-        case 'chromie_update_account':
-          return await this.updateAccount(updateAccountInputSchema.parse(parsed.data))
+        case 'chromie_create_workspace':
+          return await this.createWorkspace(createWorkspaceInputSchema.parse(parsed.data))
+        case 'chromie_update_workspace':
+          return await this.updateWorkspace(updateWorkspaceInputSchema.parse(parsed.data))
         case 'chromie_create_account_group':
           return await this.createAccountGroup(
             createAccountGroupInputSchema.parse(parsed.data)
@@ -437,12 +437,12 @@ export class PortfolioModule implements PortfolioModuleOperations {
   }
 
   async syncAssetAccount(
-    accountId: string,
+    workspaceId: string,
     assetAccountId: string
   ): Promise<PortfolioSyncResponse> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, accountId)
-    const assetAccount = requireAssetAccount(account, assetAccountId)
+    const workspace = requireWorkspace(state.data, workspaceId)
+    const assetAccount = requireAssetAccount(workspace, assetAccountId)
     const integration = state.integrations.find(
       (item) => item.assetAccountId === assetAccountId
     )
@@ -487,7 +487,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
 
       await this.portfolio.execute({
         type: 'replace-positions',
-        productAccountId: accountId,
+        workspaceId,
         assetAccountId,
         positions: result.positions,
         lastSyncedAt: result.syncedAt
@@ -522,19 +522,19 @@ export class PortfolioModule implements PortfolioModuleOperations {
 
   private async resolveView(
     state: PortfolioLoadResponse,
-    accountId: string,
+    workspaceId: string,
     view: { kind: 'latest' } | { kind: 'snapshot'; snapshot_id: string } = {
       kind: 'latest'
     }
-  ): Promise<AccountView> {
-    const latestAccount = requireAccount(state.data, accountId)
+  ): Promise<WorkspaceView> {
+    const currentWorkspace = requireWorkspace(state.data, workspaceId)
     if (view.kind === 'snapshot') {
       const snapshot = state.data.snapshots.find(
-        (item) => item.id === view.snapshot_id && item.productAccountId === accountId
+        (item) => item.id === view.snapshot_id && item.workspaceId === workspaceId
       )
       if (!snapshot) throw new McpOperationError('NOT_FOUND', '没有找到对应的快照')
       return {
-        account: snapshot.account,
+        workspace: snapshot.workspace,
         exchangeRates: snapshot.exchangeRates ?? null,
         view: {
           kind: 'snapshot',
@@ -544,58 +544,58 @@ export class PortfolioModule implements PortfolioModuleOperations {
       }
     }
     return {
-      account: latestAccount,
+      workspace: currentWorkspace,
       exchangeRates: await this.desktop.loadExchangeRates(),
       view: { kind: 'latest' }
     }
   }
 
-  private async listAccounts(
-    _input: McpToolArguments['chromie_list_accounts']
+  private async listWorkspaces(
+    _input: McpToolArguments['chromie_list_workspaces']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const exchangeRates = await this.desktop.loadExchangeRates()
-    const accounts = state.data.productAccounts.map((account) => {
-      const positions = account.assetAccounts.flatMap((item) => item.positions)
+    const workspaces = state.data.workspaces.map((workspace) => {
+      const positions = workspace.assetAccounts.flatMap((item) => item.positions)
       const valuation = valuePositions(
         positions,
-        account.anchorCurrency,
+        workspace.baseCurrency,
         exchangeRates?.rates
       )
       return {
-        id: account.id,
-        name: account.name,
-        anchor_currency: account.anchorCurrency,
-        account_group_count: account.accountGroups.length,
-        asset_account_count: account.assetAccounts.length,
-        position_group_count: account.positionGroups.length,
+        id: workspace.id,
+        name: workspace.name,
+        base_currency: workspace.baseCurrency,
+        account_group_count: workspace.accountGroups.length,
+        asset_account_count: workspace.assetAccounts.length,
+        position_group_count: workspace.positionGroups.length,
         position_count: positions.length,
         snapshot_count: state.data.snapshots.filter(
-          (snapshot) => snapshot.productAccountId === account.id
+          (snapshot) => snapshot.workspaceId === workspace.id
         ).length,
-        ...(valuation.totalAnchoredMarketValue === undefined
+        ...(valuation.totalConvertedMarketValue === undefined
           ? {}
-          : { total_anchored_market_value: valuation.totalAnchoredMarketValue }),
+          : { total_converted_market_value: valuation.totalConvertedMarketValue }),
         missing_currencies: valuation.missingCurrencies
       }
     })
-    return success(`找到 ${accounts.length} 个账户`, {
-      active_account_id: state.data.activeProductAccountId,
+    return success(`找到 ${workspaces.length} 个工作区`, {
+      active_workspace_id: state.data.activeWorkspaceId,
       exchange_rates: mcpExchangeRates(exchangeRates),
-      accounts
+      workspaces
     })
   }
 
-  private async getAccount(
-    input: McpToolArguments['chromie_get_account']
+  private async getWorkspace(
+    input: McpToolArguments['chromie_get_workspace']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const resolved = await this.resolveView(state, input.account_id, input.view)
-    return success(`已读取账户“${resolved.account.name}”`, {
+    const resolved = await this.resolveView(state, input.workspace_id, input.view)
+    return success(`已读取工作区“${resolved.workspace.name}”`, {
       view: resolved.view,
       exchange_rates: mcpExchangeRates(resolved.exchangeRates),
-      account: safeAccount(
-        resolved.account,
+      workspace: safeWorkspace(
+        resolved.workspace,
         resolved.view.kind === 'latest' ? state.integrations : [],
         input.include_positions
       )
@@ -606,10 +606,10 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_get_overview']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const resolved = await this.resolveView(state, input.account_id, input.view)
-    const { account, exchangeRates } = resolved
-    const allPositions = account.assetAccounts.flatMap((item) => item.positions)
-    const total = valuePositions(allPositions, account.anchorCurrency, exchangeRates?.rates)
+    const resolved = await this.resolveView(state, input.workspace_id, input.view)
+    const { workspace, exchangeRates } = resolved
+    const allPositions = workspace.assetAccounts.flatMap((item) => item.positions)
+    const total = valuePositions(allPositions, workspace.baseCurrency, exchangeRates?.rates)
     const positionById = new Map(allPositions.map((position) => [position.id, position]))
     let rawRows: Array<{
       id: string
@@ -619,16 +619,16 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }>
 
     if (input.group_by === 'asset_account') {
-      rawRows = account.assetAccounts.map((item) => ({
+      rawRows = workspace.assetAccounts.map((item) => ({
         id: item.id,
         name: item.name,
         positions: item.positions
       }))
     } else if (input.group_by === 'account_group') {
       const assetAccountById = new Map(
-        account.assetAccounts.map((assetAccount) => [assetAccount.id, assetAccount] as const)
+        workspace.assetAccounts.map((assetAccount) => [assetAccount.id, assetAccount] as const)
       )
-      rawRows = account.accountGroups.map((group) => ({
+      rawRows = workspace.accountGroups.map((group) => ({
         id: group.id,
         name: group.name,
         positions: group.assetAccountIds.flatMap(
@@ -636,7 +636,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         )
       }))
     } else if (input.group_by === 'position_group') {
-      rawRows = account.positionGroups.map((group) => ({
+      rawRows = workspace.positionGroups.map((group) => ({
         id: group.id,
         name: group.name,
         positions: group.positionIds.flatMap((positionId) => {
@@ -663,7 +663,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const rows = rawRows.map((row) => {
       const valuation = valuePositions(
         row.positions,
-        account.anchorCurrency,
+        workspace.baseCurrency,
         exchangeRates?.rates
       )
       const originalMarketValue = row.originalCurrency
@@ -683,17 +683,17 @@ export class PortfolioModule implements PortfolioModuleOperations {
               currency: row.originalCurrency,
               market_value: originalMarketValue
             }),
-        ...(valuation.totalAnchoredMarketValue === undefined
+        ...(valuation.totalConvertedMarketValue === undefined
           ? {}
           : {
-              anchored_market_value: valuation.totalAnchoredMarketValue,
+              converted_market_value: valuation.totalConvertedMarketValue,
               ...(total.isComplete &&
               valuation.isComplete &&
-              total.totalAnchoredMarketValue
+              total.totalConvertedMarketValue
                 ? {
                     allocation_percent:
-                      valuation.totalAnchoredMarketValue /
-                      total.totalAnchoredMarketValue *
+                      valuation.totalConvertedMarketValue /
+                      total.totalConvertedMarketValue *
                       100
                   }
                 : {})
@@ -703,20 +703,20 @@ export class PortfolioModule implements PortfolioModuleOperations {
     })
     rows.sort(
       (left, right) =>
-        (right.anchored_market_value ?? Number.NEGATIVE_INFINITY) -
-        (left.anchored_market_value ?? Number.NEGATIVE_INFINITY)
+        (right.converted_market_value ?? Number.NEGATIVE_INFINITY) -
+        (left.converted_market_value ?? Number.NEGATIVE_INFINITY)
     )
 
-    return success(`已生成“${account.name}”资产透视`, {
+    return success(`已生成“${workspace.name}”资产概览`, {
       view: resolved.view,
       group_by: input.group_by,
-      anchor_currency: account.anchorCurrency,
+      base_currency: workspace.baseCurrency,
       exchange_rates: mcpExchangeRates(exchangeRates),
       total: {
         position_count: allPositions.length,
-        ...(total.totalAnchoredMarketValue === undefined
+        ...(total.totalConvertedMarketValue === undefined
           ? {}
-          : { anchored_market_value: total.totalAnchoredMarketValue }),
+          : { converted_market_value: total.totalConvertedMarketValue }),
         missing_currencies: total.missingCurrencies,
         complete: total.isComplete
       },
@@ -728,22 +728,22 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_search_positions']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const resolved = await this.resolveView(state, input.account_id, input.view)
-    const account = resolved.account
+    const resolved = await this.resolveView(state, input.workspace_id, input.view)
+    const workspace = resolved.workspace
     const accountGroupByAssetAccountId = new Map(
-      account.accountGroups.flatMap((accountGroup) =>
+      workspace.accountGroups.flatMap((accountGroup) =>
         accountGroup.assetAccountIds.map(
           (assetAccountId) => [assetAccountId, accountGroup] as const
         )
       )
     )
     const groupsByPositionId = new Map(
-      account.positionGroups.flatMap((group) =>
+      workspace.positionGroups.flatMap((group) =>
         group.positionIds.map((positionId) => [positionId, group] as const)
       )
     )
     const normalizedQuery = input.query?.toLocaleLowerCase()
-    const rows = account.assetAccounts.flatMap((assetAccount) => {
+    const rows = workspace.assetAccounts.flatMap((assetAccount) => {
       if (input.asset_account_id && input.asset_account_id !== assetAccount.id) return []
       if (
         input.account_group_id &&
@@ -780,7 +780,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
             group: group ? { id: group.id, name: group.name } : null,
             valuation: positionValue(
               position,
-              account.anchorCurrency,
+              workspace.baseCurrency,
               resolved.exchangeRates
             )
           }
@@ -814,59 +814,59 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_list_snapshots']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
+    const workspace = requireWorkspace(state.data, input.workspace_id)
     const snapshots = state.data.snapshots
-      .filter((snapshot) => snapshot.productAccountId === account.id)
+      .filter((snapshot) => snapshot.workspaceId === workspace.id)
       .map((snapshot) => ({
         id: snapshot.id,
         created_at: snapshot.createdAt,
-        asset_account_count: snapshot.account.assetAccounts.length,
-        position_group_count: snapshot.account.positionGroups.length,
-        position_count: snapshot.account.assetAccounts.reduce(
+        asset_account_count: snapshot.workspace.assetAccounts.length,
+        position_group_count: snapshot.workspace.positionGroups.length,
+        position_count: snapshot.workspace.assetAccounts.reduce(
           (count, item) => count + item.positions.length,
           0
         ),
         exchange_rates_fetched_at: snapshot.exchangeRates?.fetchedAt ?? null
       }))
     return success(`找到 ${snapshots.length} 个历史快照`, {
-      account: { id: account.id, name: account.name },
+      workspace: { id: workspace.id, name: workspace.name },
       snapshots
     })
   }
 
-  private async createAccount(
-    input: McpToolArguments['chromie_create_account']
+  private async createWorkspace(
+    input: McpToolArguments['chromie_create_workspace']
   ): Promise<McpToolSuccess> {
     const response = await this.portfolio.execute({
-      type: 'create-product-account',
-      input: { name: input.name, anchorCurrency: input.anchor_currency }
+      type: 'create-workspace',
+      input: { name: input.name, baseCurrency: input.base_currency }
     })
-    return success(`已创建账户“${input.name}”`, {
-      account_id: response.result
+    return success(`已创建工作区“${input.name}”`, {
+      workspace_id: response.result
     })
   }
 
-  private async updateAccount(
-    input: McpToolArguments['chromie_update_account']
+  private async updateWorkspace(
+    input: McpToolArguments['chromie_update_workspace']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    const settings: ProductAccountSettingsInput = {
-      name: input.name ?? account.name,
-      anchorCurrency: input.anchor_currency ?? account.anchorCurrency,
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    const settings: WorkspaceSettingsInput = {
+      name: input.name ?? workspace.name,
+      baseCurrency: input.base_currency ?? workspace.baseCurrency,
       exchangeRateProvider:
-        input.exchange_rate_provider ?? account.exchangeRateProvider,
+        input.exchange_rate_provider ?? workspace.exchangeRateProvider,
       exchangeRateRefreshIntervalMinutes:
         input.exchange_rate_refresh_interval_minutes ??
-        account.exchangeRateRefreshIntervalMinutes
+        workspace.exchangeRateRefreshIntervalMinutes
     }
     await this.portfolio.execute({
-      type: 'update-product-account',
-      id: account.id,
+      type: 'update-workspace',
+      id: workspace.id,
       input: settings
     })
-    return success(`已更新账户“${settings.name}”`, {
-      account_id: account.id
+    return success(`已更新工作区“${settings.name}”`, {
+      workspace_id: workspace.id
     })
   }
 
@@ -874,10 +874,10 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_create_account_group']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    requireAccount(state.data, input.account_id)
+    requireWorkspace(state.data, input.workspace_id)
     const response = await this.portfolio.execute({
       type: 'create-account-group',
-      productAccountId: input.account_id,
+      workspaceId: input.workspace_id,
       input: { name: input.name }
     })
     if (typeof response.result !== 'string') {
@@ -896,8 +896,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_update_account_group']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    const existing = account.accountGroups.find(
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    const existing = workspace.accountGroups.find(
       (accountGroup) => accountGroup.id === input.account_group_id
     )
     if (!existing) {
@@ -905,7 +905,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }
     await this.portfolio.execute({
       type: 'update-account-group',
-      productAccountId: account.id,
+      workspaceId: workspace.id,
       groupId: existing.id,
       input: { name: input.name }
     })
@@ -922,13 +922,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_replace_account_group_members']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    if (!account.accountGroups.some((group) => group.id === input.account_group_id)) {
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    if (!workspace.accountGroups.some((group) => group.id === input.account_group_id)) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
     }
     const response = await this.portfolio.execute({
       type: 'set-account-group-accounts',
-      productAccountId: account.id,
+      workspaceId: workspace.id,
       groupId: input.account_group_id,
       assetAccountIds: input.asset_account_ids
     })
@@ -944,7 +944,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
   ): Promise<McpToolSuccess> {
     const response = await this.portfolio.execute({
       type: 'create-asset-account',
-      productAccountId: input.account_id,
+      workspaceId: input.workspace_id,
       input: {
         name: input.name,
         type: input.type
@@ -959,8 +959,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_update_asset_account']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    const assetAccount = requireAssetAccount(account, input.asset_account_id)
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    const assetAccount = requireAssetAccount(workspace, input.asset_account_id)
     const integration = state.integrations.find(
       (item) => item.assetAccountId === assetAccount.id
     )
@@ -973,7 +973,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }
     await this.portfolio.execute({
       type: 'update-asset-account',
-      productAccountId: account.id,
+      workspaceId: workspace.id,
       assetAccountId: assetAccount.id,
       input: {
         name: input.name ?? assetAccount.name,
@@ -991,10 +991,10 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_create_position']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    const assetAccount = requireAssetAccount(account, input.asset_account_id)
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    const assetAccount = requireAssetAccount(workspace, input.asset_account_id)
     if (assetAccount.sync) {
-      throw new McpOperationError('READ_ONLY', '自动同步账户不能手动修改持仓')
+      throw new McpOperationError('READ_ONLY', '自动同步的资产账户不能手动修改持仓')
     }
     const positionInput: PositionInput = {
       market: input.market,
@@ -1006,7 +1006,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         ? {}
         : { price: input.price })
     }
-    const position = await this.persistPosition(account, assetAccount, positionInput)
+    const position = await this.persistPosition(workspace, assetAccount, positionInput)
     return success(`已创建持仓 ${position.symbol}`, { position })
   }
 
@@ -1014,10 +1014,10 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_update_position']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    const assetAccount = requireAssetAccount(account, input.asset_account_id)
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    const assetAccount = requireAssetAccount(workspace, input.asset_account_id)
     if (assetAccount.sync) {
-      throw new McpOperationError('READ_ONLY', '自动同步账户不能手动修改持仓')
+      throw new McpOperationError('READ_ONLY', '自动同步的资产账户不能手动修改持仓')
     }
     const existing = assetAccount.positions.find(
       (position) => position.id === input.position_id
@@ -1042,7 +1042,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
       )
     }
     const position = await this.persistPosition(
-      account,
+      workspace,
       assetAccount,
       positionInput,
       existing.id
@@ -1051,21 +1051,21 @@ export class PortfolioModule implements PortfolioModuleOperations {
   }
 
   private async persistPosition(
-    account: ProductAccount,
+    workspace: Workspace,
     assetAccount: AssetAccount,
     positionInput: PositionInput,
     positionId?: string
   ): Promise<Position> {
     const response = await this.portfolio.execute({
       type: 'save-position',
-      productAccountId: account.id,
+      workspaceId: workspace.id,
       assetAccountId: assetAccount.id,
       input: positionInput,
       ...(positionId ? { positionId } : {})
     })
     assertCommandResult(response)
-    const stored = response.data.productAccounts
-      .find((item) => item.id === account.id)
+    const stored = response.data.workspaces
+      .find((item) => item.id === workspace.id)
       ?.assetAccounts.find((item) => item.id === assetAccount.id)
       ?.positions.find((position) =>
         positionId
@@ -1081,10 +1081,10 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_create_position_group']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    requireAccount(state.data, input.account_id)
+    requireWorkspace(state.data, input.workspace_id)
     const response = await this.portfolio.execute({
       type: 'create-position-group',
-      productAccountId: input.account_id,
+      workspaceId: input.workspace_id,
       input: { name: input.name }
     })
     if (typeof response.result !== 'string') {
@@ -1099,13 +1099,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_update_position_group']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    if (!account.positionGroups.some((group) => group.id === input.group_id)) {
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    if (!workspace.positionGroups.some((group) => group.id === input.group_id)) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
     }
     await this.portfolio.execute({
       type: 'update-position-group',
-      productAccountId: input.account_id,
+      workspaceId: input.workspace_id,
       groupId: input.group_id,
       input: { name: input.name }
     })
@@ -1118,13 +1118,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_replace_position_group_members']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    if (!account.positionGroups.some((group) => group.id === input.group_id)) {
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    if (!workspace.positionGroups.some((group) => group.id === input.group_id)) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
     }
     const response = await this.portfolio.execute({
       type: 'set-position-group-positions',
-      productAccountId: input.account_id,
+      workspaceId: input.workspace_id,
       groupId: input.group_id,
       positionIds: input.position_ids
     })
@@ -1139,15 +1139,15 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_create_snapshot']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    requireAccount(state.data, input.account_id)
+    requireWorkspace(state.data, input.workspace_id)
     const exchangeRates = await this.desktop.loadExchangeRates()
     const response = await this.portfolio.execute({
       type: 'create-snapshot',
-      productAccountId: input.account_id,
+      workspaceId: input.workspace_id,
       exchangeRates
     })
     if (!response.result) {
-      throw new McpOperationError('NOT_FOUND', '没有找到对应的账户')
+      throw new McpOperationError('NOT_FOUND', '没有找到对应的工作区')
     }
     return success('已创建资产快照', {
       snapshot_id: response.result,
@@ -1159,7 +1159,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_sync_asset_account']
   ): Promise<McpToolSuccess> {
     const result = await this.syncAssetAccount(
-      input.account_id,
+      input.workspace_id,
       input.asset_account_id
     )
     return success(`已同步 ${result.positionCount} 项持仓`, {
@@ -1173,8 +1173,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     input: McpToolArguments['chromie_refresh_exchange_rates']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const provider = input.account_id
-      ? requireAccount(state.data, input.account_id).exchangeRateProvider
+    const provider = input.workspace_id
+      ? requireWorkspace(state.data, input.workspace_id).exchangeRateProvider
       : DEFAULT_EXCHANGE_RATE_PROVIDER
     const snapshot = await this.desktop.fetchExchangeRates(provider)
     return success(`已刷新 ${snapshot.provider} 汇率`, {
@@ -1187,13 +1187,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const target = input.target
-    const account = requireAccount(state.data, target.account_id)
+    const workspace = requireWorkspace(state.data, target.workspace_id)
     let command: PortfolioCommand
 
-    if (target.kind === 'account') {
-      command = { type: 'delete-product-account', id: account.id }
+    if (target.kind === 'workspace') {
+      command = { type: 'delete-workspace', id: workspace.id }
     } else if (target.kind === 'account_group') {
-      const accountGroup = account.accountGroups.find(
+      const accountGroup = workspace.accountGroups.find(
         (item) => item.id === target.account_group_id
       )
       if (!accountGroup) {
@@ -1201,42 +1201,42 @@ export class PortfolioModule implements PortfolioModuleOperations {
       }
       command = {
         type: 'delete-account-group',
-        productAccountId: account.id,
+        workspaceId: workspace.id,
         groupId: accountGroup.id
       }
     } else if (target.kind === 'asset_account') {
-      requireAssetAccount(account, target.asset_account_id)
+      requireAssetAccount(workspace, target.asset_account_id)
       command = {
         type: 'delete-asset-account',
-        productAccountId: account.id,
+        workspaceId: workspace.id,
         assetAccountId: target.asset_account_id
       }
     } else if (target.kind === 'position') {
-      const assetAccount = requireAssetAccount(account, target.asset_account_id)
+      const assetAccount = requireAssetAccount(workspace, target.asset_account_id)
       if (!assetAccount.positions.some((item) => item.id === target.position_id)) {
         throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓')
       }
       if (assetAccount.sync) {
-        throw new McpOperationError('READ_ONLY', '自动同步账户不能手动删除持仓')
+        throw new McpOperationError('READ_ONLY', '自动同步的资产账户不能手动删除持仓')
       }
       command = {
         type: 'delete-position',
-        productAccountId: account.id,
+        workspaceId: workspace.id,
         assetAccountId: assetAccount.id,
         positionId: target.position_id
       }
     } else if (target.kind === 'position_group') {
-      if (!account.positionGroups.some((item) => item.id === target.group_id)) {
+      if (!workspace.positionGroups.some((item) => item.id === target.group_id)) {
         throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
       }
       command = {
         type: 'delete-position-group',
-        productAccountId: account.id,
+        workspaceId: workspace.id,
         groupId: target.group_id
       }
     } else {
       const snapshot = state.data.snapshots.find(
-        (item) => item.id === target.snapshot_id && item.productAccountId === account.id
+        (item) => item.id === target.snapshot_id && item.workspaceId === workspace.id
       )
       if (!snapshot) throw new McpOperationError('NOT_FOUND', '没有找到对应的快照')
       command = { type: 'delete-snapshot', snapshotId: snapshot.id }
@@ -1251,22 +1251,22 @@ export class PortfolioModule implements PortfolioModuleOperations {
     state: PortfolioLoadResponse,
     target: McpDeleteTarget
   ): { title: string; description: string } {
-    const account = requireAccount(state.data, target.account_id)
-    if (target.kind === 'account') {
-      const positionCount = account.assetAccounts.reduce(
+    const workspace = requireWorkspace(state.data, target.workspace_id)
+    if (target.kind === 'workspace') {
+      const positionCount = workspace.assetAccounts.reduce(
         (count, item) => count + item.positions.length,
         0
       )
       const snapshotCount = state.data.snapshots.filter(
-        (item) => item.productAccountId === account.id
+        (item) => item.workspaceId === workspace.id
       ).length
       return {
-        title: `删除账户“${account.name}”`,
-        description: `将同时删除 ${account.accountGroups.length} 个账户分组、${account.assetAccounts.length} 个资产账户、${account.positionGroups.length} 个持仓分组、${positionCount} 项持仓和 ${snapshotCount} 个历史快照。此操作无法撤销。`
+        title: `删除工作区“${workspace.name}”`,
+        description: `将同时删除 ${workspace.accountGroups.length} 个账户分组、${workspace.assetAccounts.length} 个资产账户、${workspace.positionGroups.length} 个持仓分组、${positionCount} 项持仓和 ${snapshotCount} 个历史快照。此操作无法撤销。`
       }
     }
     if (target.kind === 'account_group') {
-      const accountGroup = account.accountGroups.find(
+      const accountGroup = workspace.accountGroups.find(
         (item) => item.id === target.account_group_id
       )
       if (!accountGroup) {
@@ -1278,8 +1278,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
       }
     }
     if (target.kind === 'asset_account') {
-      const assetAccount = requireAssetAccount(account, target.asset_account_id)
-      const membershipCount = account.positionGroups.reduce(
+      const assetAccount = requireAssetAccount(workspace, target.asset_account_id)
+      const membershipCount = workspace.positionGroups.reduce(
         (count, group) =>
           count + group.positionIds.filter((id) =>
             assetAccount.positions.some((position) => position.id === id)
@@ -1292,12 +1292,12 @@ export class PortfolioModule implements PortfolioModuleOperations {
       }
     }
     if (target.kind === 'position') {
-      const assetAccount = requireAssetAccount(account, target.asset_account_id)
+      const assetAccount = requireAssetAccount(workspace, target.asset_account_id)
       const position = assetAccount.positions.find(
         (item) => item.id === target.position_id
       )
       if (!position) throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓')
-      const group = account.positionGroups.find((item) =>
+      const group = workspace.positionGroups.find((item) =>
         item.positionIds.includes(position.id)
       )
       return {
@@ -1306,7 +1306,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
       }
     }
     if (target.kind === 'position_group') {
-      const group = account.positionGroups.find((item) => item.id === target.group_id)
+      const group = workspace.positionGroups.find((item) => item.id === target.group_id)
       if (!group) throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
       return {
         title: `删除持仓分组“${group.name}”`,
@@ -1314,12 +1314,12 @@ export class PortfolioModule implements PortfolioModuleOperations {
       }
     }
     const snapshot = state.data.snapshots.find(
-      (item) => item.id === target.snapshot_id && item.productAccountId === account.id
+      (item) => item.id === target.snapshot_id && item.workspaceId === workspace.id
     )
     if (!snapshot) throw new McpOperationError('NOT_FOUND', '没有找到对应的快照')
     return {
       title: `删除 ${snapshot.createdAt} 的历史快照`,
-      description: '只会删除这个历史版本，最新版资产不会受到影响。此操作无法撤销。'
+      description: '只会删除这个历史快照，当前数据不会受到影响。此操作无法撤销。'
     }
   }
 }

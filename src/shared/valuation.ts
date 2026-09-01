@@ -2,12 +2,12 @@ import type { Position } from './portfolio'
 
 export type PositionValuation = {
   marketValue?: number
-  anchoredMarketValue?: number
+  convertedMarketValue?: number
 }
 
 export type PositionValuationSummary = {
   byPositionId: Map<string, PositionValuation>
-  totalAnchoredMarketValue?: number
+  totalConvertedMarketValue?: number
   missingCurrencies: string[]
   isComplete: boolean
 }
@@ -22,41 +22,41 @@ function hasRate(currency: string, usdRates?: Record<string, number>): boolean {
   return typeof rate === 'number' && Number.isFinite(rate) && rate > 0
 }
 
-export function convertToAnchorCurrency(
+export function convertToBaseCurrency(
   amount: number,
   sourceCurrency: string,
-  anchorCurrency: string,
+  baseCurrency: string,
   usdRates?: Record<string, number>
 ): number | undefined {
   const source = normalizedCurrency(sourceCurrency)
-  const anchor = normalizedCurrency(anchorCurrency)
-  if (!Number.isFinite(amount) || !source || !anchor) return undefined
-  if (source === anchor) return amount
+  const base = normalizedCurrency(baseCurrency)
+  if (!Number.isFinite(amount) || !source || !base) return undefined
+  if (source === base) return amount
 
   const sourceRate = source === 'USD' ? 1 : usdRates?.[source]
-  const anchorRate = anchor === 'USD' ? 1 : usdRates?.[anchor]
+  const baseRate = base === 'USD' ? 1 : usdRates?.[base]
   if (
     typeof sourceRate !== 'number' ||
     !Number.isFinite(sourceRate) ||
     sourceRate <= 0 ||
-    typeof anchorRate !== 'number' ||
-    !Number.isFinite(anchorRate) ||
-    anchorRate <= 0
+    typeof baseRate !== 'number' ||
+    !Number.isFinite(baseRate) ||
+    baseRate <= 0
   ) {
     return undefined
   }
-  return amount * anchorRate / sourceRate
+  return amount * baseRate / sourceRate
 }
 
 export function valuePositions(
   positions: Position[],
-  anchorCurrency: string,
+  baseCurrency: string,
   usdRates?: Record<string, number>
 ): PositionValuationSummary {
   const byPositionId = new Map<string, PositionValuation>()
   const missingCurrencies = new Set<string>()
   let total = 0
-  let hasAnchoredValue = false
+  let hasConvertedValue = false
 
   positions.forEach((position) => {
     if (position.price === undefined) {
@@ -64,35 +64,35 @@ export function valuePositions(
       return
     }
     const marketValue = position.quantity * position.price
-    const anchoredMarketValue = convertToAnchorCurrency(
+    const convertedMarketValue = convertToBaseCurrency(
       marketValue,
       position.currency,
-      anchorCurrency,
+      baseCurrency,
       usdRates
     )
     byPositionId.set(position.id, {
       marketValue,
-      ...(anchoredMarketValue === undefined ? {} : { anchoredMarketValue })
+      ...(convertedMarketValue === undefined ? {} : { convertedMarketValue })
     })
-    if (anchoredMarketValue === undefined) {
+    if (convertedMarketValue === undefined) {
       const sourceCurrency = normalizedCurrency(position.currency)
-      const normalizedAnchorCurrency = normalizedCurrency(anchorCurrency)
+      const normalizedBaseCurrency = normalizedCurrency(baseCurrency)
       if (sourceCurrency && !hasRate(sourceCurrency, usdRates)) {
         missingCurrencies.add(sourceCurrency)
       }
-      if (normalizedAnchorCurrency && !hasRate(normalizedAnchorCurrency, usdRates)) {
-        missingCurrencies.add(normalizedAnchorCurrency)
+      if (normalizedBaseCurrency && !hasRate(normalizedBaseCurrency, usdRates)) {
+        missingCurrencies.add(normalizedBaseCurrency)
       }
       return
     }
-    total += anchoredMarketValue
-    hasAnchoredValue = true
+    total += convertedMarketValue
+    hasConvertedValue = true
   })
 
   const missing = [...missingCurrencies].sort()
   return {
     byPositionId,
-    ...(hasAnchoredValue ? { totalAnchoredMarketValue: total } : {}),
+    ...(hasConvertedValue ? { totalConvertedMarketValue: total } : {}),
     missingCurrencies: missing,
     isComplete: missing.length === 0
   }

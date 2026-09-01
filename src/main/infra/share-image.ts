@@ -31,10 +31,10 @@ function imageFromDataUrl(value: unknown): Electron.NativeImage {
   return image
 }
 
-function defaultShareImageName(accountName: unknown): string {
+function defaultShareImageName(workspaceName: unknown): string {
   const safeAccountName =
-    typeof accountName === 'string'
-      ? accountName.trim().replace(/[\\/:*?"<>|]/g, '-').slice(0, 40)
+    typeof workspaceName === 'string'
+      ? workspaceName.trim().replace(/[\\/:*?"<>|]/g, '-').slice(0, 40)
       : ''
   const date = new Date()
   const year = date.getFullYear()
@@ -46,12 +46,12 @@ function defaultShareImageName(accountName: unknown): string {
 export async function saveShareImage(
   ownerId: number,
   dataUrl: unknown,
-  accountName: unknown
+  workspaceName: unknown
 ): Promise<ShareImageSaveResult> {
   const image = imageFromDataUrl(dataUrl)
   const options: SaveDialogOptions = {
     title: '保存分享图片',
-    defaultPath: defaultShareImageName(accountName),
+    defaultPath: defaultShareImageName(workspaceName),
     filters: [{ name: 'PNG 图片', extensions: ['png'] }]
   }
   const owner = ownerWindow(ownerId)

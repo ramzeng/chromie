@@ -14,7 +14,7 @@ import type {
 } from '../shared/mcp'
 import type { OkxSyncOptions, OkxSyncResult } from '../shared/okx'
 import type {
-  AccountBackup,
+  WorkspaceBackup,
   PortfolioCommand,
   PortfolioClientCommandResponse,
   PortfolioClientLoadResponse,
@@ -51,12 +51,12 @@ contextBridge.exposeInMainWorld('desktop', {
     execute: (command: PortfolioCommand): Promise<PortfolioClientCommandResponse> =>
       ipcRenderer.invoke('portfolio:execute', command),
     syncAssetAccount: (
-      accountId: string,
+      workspaceId: string,
       assetAccountId: string
     ): Promise<PortfolioSyncResponse> =>
       ipcRenderer.invoke(
         'portfolio:sync-asset-account',
-        accountId,
+        workspaceId,
         assetAccountId
       ),
     onChanged: (listener: () => void): (() => void) => {
@@ -66,10 +66,10 @@ contextBridge.exposeInMainWorld('desktop', {
       ipcRenderer.on('portfolio:changed', handleChange)
       return () => ipcRenderer.removeListener('portfolio:changed', handleChange)
     },
-    inspectBackup: (content: string): Promise<AccountBackup | null> =>
+    inspectBackup: (content: string): Promise<WorkspaceBackup | null> =>
       ipcRenderer.invoke('portfolio:inspect-backup', content),
-    exportActiveAccount: (): Promise<string> =>
-      ipcRenderer.invoke('portfolio:export-active-account')
+    exportActiveWorkspace: (): Promise<string> =>
+      ipcRenderer.invoke('portfolio:export-active-workspace')
   },
   backup: {
     exportData: (content: string): Promise<BackupExportResult> =>
@@ -77,8 +77,8 @@ contextBridge.exposeInMainWorld('desktop', {
     importData: (): Promise<BackupImportResult> => ipcRenderer.invoke('backup:import')
   },
   shareImage: {
-    save: (dataUrl: string, accountName: string): Promise<ShareImageSaveResult> =>
-      ipcRenderer.invoke('share-image:save', dataUrl, accountName)
+    save: (dataUrl: string, workspaceName: string): Promise<ShareImageSaveResult> =>
+      ipcRenderer.invoke('share-image:save', dataUrl, workspaceName)
   },
   mcp: {
     loadSettings: (): Promise<McpConnectionSettings> =>

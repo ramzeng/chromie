@@ -22,7 +22,7 @@ function defaultBackupName(): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
-  return `Chromie-account-${year}-${month}-${day}.json`
+  return `Chromie-workspace-${year}-${month}-${day}.json`
 }
 
 export async function exportBackup(
@@ -34,9 +34,9 @@ export async function exportBackup(
   }
 
   const options: SaveDialogOptions = {
-    title: '导出账户',
+    title: '导出工作区',
     defaultPath: defaultBackupName(),
-    filters: [{ name: 'Chromie 账户', extensions: ['json'] }]
+    filters: [{ name: 'Chromie 工作区', extensions: ['json'] }]
   }
   const owner = ownerWindow(ownerId)
   const result = owner
@@ -52,8 +52,8 @@ export async function importBackup(
   ownerId: number
 ): Promise<BackupImportResult> {
   const options: OpenDialogOptions = {
-    title: '导入账户',
-    filters: [{ name: 'Chromie 账户', extensions: ['json'] }],
+    title: '导入工作区',
+    filters: [{ name: 'Chromie 工作区', extensions: ['json'] }],
     properties: ['openFile']
   }
   const owner = ownerWindow(ownerId)

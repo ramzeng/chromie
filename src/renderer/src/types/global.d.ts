@@ -17,7 +17,7 @@ import type {
 } from '../../../shared/mcp'
 import type { OkxSyncOptions, OkxSyncResult } from '../../../shared/okx'
 import type {
-  AccountBackup,
+  WorkspaceBackup,
   PortfolioCommand,
   PortfolioClientCommandResponse,
   PortfolioClientLoadResponse,
@@ -49,19 +49,19 @@ declare global {
         load: () => Promise<PortfolioClientLoadResponse>
         execute: (command: PortfolioCommand) => Promise<PortfolioClientCommandResponse>
         syncAssetAccount: (
-          accountId: string,
+          workspaceId: string,
           assetAccountId: string
         ) => Promise<PortfolioSyncResponse>
         onChanged: (listener: () => void) => () => void
-        inspectBackup: (content: string) => Promise<AccountBackup | null>
-        exportActiveAccount: () => Promise<string>
+        inspectBackup: (content: string) => Promise<WorkspaceBackup | null>
+        exportActiveWorkspace: () => Promise<string>
       }
       backup?: {
         exportData: (content: string) => Promise<BackupExportResult>
         importData: () => Promise<BackupImportResult>
       }
       shareImage?: {
-        save: (dataUrl: string, accountName: string) => Promise<ShareImageSaveResult>
+        save: (dataUrl: string, workspaceName: string) => Promise<ShareImageSaveResult>
       }
       mcp?: {
         loadSettings: () => Promise<McpConnectionSettings>

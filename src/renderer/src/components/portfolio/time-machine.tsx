@@ -34,14 +34,14 @@ import {
 } from '@/components/ui/table'
 import {
   formatMoney,
-  type PortfolioSnapshot,
-  type ProductAccount
+  type WorkspaceSnapshot,
+  type Workspace
 } from '@/lib/portfolio'
 import { cn } from '@/lib/utils'
 import { valuePositions } from '@/lib/valuation'
 
 export function TimeMachine({
-  account,
+  workspace,
   snapshots,
   selectedSnapshotId,
   liveExchangeRates,
@@ -51,28 +51,28 @@ export function TimeMachine({
   onViewSnapshot,
   onDeleteSnapshot
 }: {
-  account: ProductAccount
-  snapshots: PortfolioSnapshot[]
+  workspace: Workspace
+  snapshots: WorkspaceSnapshot[]
   selectedSnapshotId: string | null
   liveExchangeRates: ExchangeRateView
   creating: boolean
   onCreate: () => Promise<void>
   onViewLatest: () => void
   onViewSnapshot: (snapshotId: string) => void
-  onDeleteSnapshot: (snapshot: PortfolioSnapshot) => void
+  onDeleteSnapshot: (snapshot: WorkspaceSnapshot) => void
 }) {
   const rows = [
     {
       id: 'latest',
       kind: 'latest' as const,
-      account,
+      workspace,
       createdAt: null,
       rates: liveExchangeRates.snapshot?.rates
     },
     ...snapshots.map((snapshot) => ({
       id: snapshot.id,
       kind: 'snapshot' as const,
-      account: snapshot.account,
+      workspace: snapshot.workspace,
       createdAt: snapshot.createdAt,
       rates: snapshot.exchangeRates?.rates,
       snapshot
@@ -89,7 +89,7 @@ export function TimeMachine({
           onClick={() => void onCreate()}
           disabled={selectedSnapshotId !== null || creating}
           aria-busy={creating}
-          title={selectedSnapshotId ? '请先切换到最新版' : undefined}
+          title={selectedSnapshotId ? '请先切换到当前数据' : undefined}
         >
           {creating ? (
             <Spinner data-icon="inline-start" />
@@ -101,26 +101,27 @@ export function TimeMachine({
       </header>
 
       <section className="mt-6 overflow-hidden rounded-lg border border-border/70 bg-card">
-        <Table className="min-w-[800px]">
+        <Table className="min-w-[900px] table-fixed">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
-              <TableHead>版本</TableHead>
-              <TableHead>时间点</TableHead>
-              <TableHead className="text-right">资产账户</TableHead>
-              <TableHead className="text-right">持仓</TableHead>
-              <TableHead className="text-right">锚定市值</TableHead>
-              <TableHead>状态</TableHead>
+              <TableHead className="w-[14%]">数据</TableHead>
+              <TableHead className="w-[14%]">工作区名称</TableHead>
+              <TableHead className="w-[20%]">时间点</TableHead>
+              <TableHead className="w-[10%] text-right">资产账户数</TableHead>
+              <TableHead className="w-[8%] text-right">持仓数</TableHead>
+              <TableHead className="w-[19%] text-right">折算市值</TableHead>
+              <TableHead className="w-[9%]">状态</TableHead>
               <TableHead className="w-16" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.map((row) => {
-              const positions = row.account.assetAccounts.flatMap(
+              const positions = row.workspace.assetAccounts.flatMap(
                 (assetAccount) => assetAccount.positions
               )
               const valuation = valuePositions(
                 positions,
-                row.account.anchorCurrency,
+                row.workspace.baseCurrency,
                 row.rates
               )
               const isSelected = row.kind === 'latest'
@@ -144,32 +145,30 @@ export function TimeMachine({
                           <History className="size-4" />
                         )}
                       </span>
-                      <div className="min-w-0">
-                        <p className="font-medium">
-                          {row.kind === 'latest'
-                            ? '最新版'
-                            : `版本 #${shortSnapshotHash(row.id)}`}
-                        </p>
-                        <p className="mt-0.5 max-w-44 truncate text-xs text-muted-foreground">
-                          {row.account.name}
-                        </p>
-                      </div>
+                      <span className="truncate font-medium">
+                        {row.kind === 'latest'
+                          ? '当前数据'
+                          : `快照 #${shortSnapshotHash(row.id)}`}
+                      </span>
                     </div>
                   </TableCell>
+                  <TableCell className="truncate text-muted-foreground">
+                    {row.workspace.name}
+                  </TableCell>
                   <TableCell className="tabular-nums text-muted-foreground">
-                    {row.createdAt ? formatLastSyncedAt(row.createdAt) : '实时更新'}
+                    {row.createdAt ? formatLastSyncedAt(row.createdAt) : '当前数据'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {row.account.assetAccounts.length}
+                    {row.workspace.assetAccounts.length}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{positions.length}</TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
                     {valuation.isComplete &&
-                    valuation.totalAnchoredMarketValue !== undefined ? (
+                    valuation.totalConvertedMarketValue !== undefined ? (
                       <MaskedAssetValue>
                         {formatMoney(
-                          valuation.totalAnchoredMarketValue,
-                          row.account.anchorCurrency
+                          valuation.totalConvertedMarketValue,
+                          row.workspace.baseCurrency
                         )}
                       </MaskedAssetValue>
                     ) : (
@@ -178,7 +177,7 @@ export function TimeMachine({
                   </TableCell>
                   <TableCell>
                     <Badge variant={isSelected ? 'default' : 'secondary'}>
-                      {isSelected ? '正在查看' : row.kind === 'latest' ? '实时' : '只读'}
+                      {isSelected ? '正在查看' : row.kind === 'latest' ? '当前' : '只读'}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -188,7 +187,7 @@ export function TimeMachine({
                           variant="ghost"
                           size="icon"
                           disabled={isSelected && row.kind === 'latest'}
-                          aria-label={`${row.kind === 'latest' ? '最新版' : `版本 #${shortSnapshotHash(row.id)}`}操作`}
+                          aria-label={`${row.kind === 'latest' ? '当前数据' : `快照 #${shortSnapshotHash(row.id)}`}操作`}
                         >
                           <Ellipsis className="size-4" />
                         </Button>
@@ -204,7 +203,7 @@ export function TimeMachine({
                             }
                           >
                             <Eye className="size-4" />
-                            {isSelected ? '当前版本' : '查看'}
+                            {isSelected ? '当前数据' : '查看'}
                           </DropdownMenuItem>
                         </DropdownMenuGroup>
                         {row.kind === 'snapshot' && (

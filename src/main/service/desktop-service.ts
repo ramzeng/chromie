@@ -38,7 +38,7 @@ export type DesktopServiceDependencies = {
   saveShareImage: (
     ownerId: number,
     dataUrl: unknown,
-    accountName: unknown
+    workspaceName: unknown
   ) => Promise<ShareImageSaveResult>
 }
 
@@ -51,7 +51,7 @@ export interface DesktopOperations {
   saveShareImage(
     ownerId: number,
     dataUrl: unknown,
-    accountName: unknown
+    workspaceName: unknown
   ): Promise<ShareImageSaveResult>
 }
 
@@ -94,8 +94,8 @@ export class DesktopService implements DesktopOperations {
   saveShareImage(
     ownerId: number,
     dataUrl: unknown,
-    accountName: unknown
+    workspaceName: unknown
   ): Promise<ShareImageSaveResult> {
-    return this.dependencies.saveShareImage(ownerId, dataUrl, accountName)
+    return this.dependencies.saveShareImage(ownerId, dataUrl, workspaceName)
   }
 }

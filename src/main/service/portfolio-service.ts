@@ -8,7 +8,7 @@ import {
   type ExchangeRateSnapshot
 } from '../../shared/exchange-rates'
 import {
-  DEFAULT_ANCHOR_CURRENCY,
+  DEFAULT_BASE_CURRENCY,
   DEFAULT_FUTU_OPEND_HOST,
   DEFAULT_FUTU_OPEND_PORT,
   DEFAULT_IBKR_GATEWAY_HOST,
@@ -16,10 +16,10 @@ import {
   DEFAULT_SYNC_INTERVAL,
   EMPTY_PORTFOLIO_DATA,
   marketMeta,
-  type AccountBackup,
+  type WorkspaceBackup,
   type AccountGroup,
   type AccountGroupInput,
-  type AnchorCurrency,
+  type BaseCurrency,
   type AppData,
   type AssetAccount,
   type AssetAccountInput,
@@ -29,14 +29,14 @@ import {
   type PortfolioCommand,
   type PortfolioCommandResponse,
   type PortfolioLoadResponse,
-  type PortfolioSnapshot,
+  type WorkspaceSnapshot,
   type Position,
   type PositionGroup,
   type PositionGroupInput,
   type PositionInput,
-  type ProductAccount,
-  type ProductAccountInput,
-  type ProductAccountSettingsInput
+  type Workspace,
+  type WorkspaceInput,
+  type WorkspaceSettingsInput
 } from '../../shared/portfolio'
 import {
   EMPTY_INTEGRATION_DATA,
@@ -54,12 +54,12 @@ function isCurrencyCode(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Z0-9]{2,12}$/.test(value.trim().toUpperCase())
 }
 
-function normalizeAnchorCurrency(value: unknown): AnchorCurrency {
-  if (!isCurrencyCode(value)) return DEFAULT_ANCHOR_CURRENCY
+function normalizeBaseCurrency(value: unknown): BaseCurrency {
+  if (!isCurrencyCode(value)) return DEFAULT_BASE_CURRENCY
   const currency = value.trim().toUpperCase()
   return currency === 'CNY' || currency === 'HKD' || currency === 'USD'
     ? currency
-    : DEFAULT_ANCHOR_CURRENCY
+    : DEFAULT_BASE_CURRENCY
 }
 
 function normalizeExchangeRateProvider(value: unknown): ExchangeRateProvider {
@@ -415,24 +415,24 @@ function normalizeStoredData(input: unknown): AppData | null {
   if (!input || typeof input !== 'object') return null
   const value = input as {
     version?: unknown
-    activeProductAccountId?: unknown
-    productAccounts?: unknown
+    activeWorkspaceId?: unknown
+    workspaces?: unknown
     snapshots?: unknown
   }
   if (
     value.version !== 1 ||
-    !Array.isArray(value.productAccounts) ||
+    !Array.isArray(value.workspaces) ||
     !Array.isArray(value.snapshots)
   ) {
     return null
   }
 
-  const productAccounts = value.productAccounts.flatMap((account) => {
-      if (!account || typeof account !== 'object') return []
-      const storedAccount = account as {
+  const workspaces = value.workspaces.flatMap((workspace) => {
+      if (!workspace || typeof workspace !== 'object') return []
+      const storedWorkspace = workspace as {
         id?: unknown
         name?: unknown
-        anchorCurrency?: unknown
+        baseCurrency?: unknown
         exchangeRateProvider?: unknown
         exchangeRateRefreshIntervalMinutes?: unknown
         accountGroups?: unknown
@@ -440,16 +440,16 @@ function normalizeStoredData(input: unknown): AppData | null {
         positionGroups?: unknown
       }
       if (
-        typeof storedAccount.id !== 'string' ||
-        typeof storedAccount.name !== 'string' ||
-        !Array.isArray(storedAccount.accountGroups) ||
-        !Array.isArray(storedAccount.assetAccounts) ||
-        !Array.isArray(storedAccount.positionGroups)
+        typeof storedWorkspace.id !== 'string' ||
+        typeof storedWorkspace.name !== 'string' ||
+        !Array.isArray(storedWorkspace.accountGroups) ||
+        !Array.isArray(storedWorkspace.assetAccounts) ||
+        !Array.isArray(storedWorkspace.positionGroups)
       ) {
         return []
       }
       const usedPositionIds = new Set<string>()
-      const assetAccounts = storedAccount.assetAccounts.flatMap((assetAccount) => {
+      const assetAccounts = storedWorkspace.assetAccounts.flatMap((assetAccount) => {
         if (!assetAccount || typeof assetAccount !== 'object') return []
         const storedAssetAccount = assetAccount as {
           id?: unknown
@@ -491,7 +491,7 @@ function normalizeStoredData(input: unknown): AppData | null {
       )
       const usedAccountGroupIds = new Set<string>()
       const assignedAssetAccountIds = new Set<string>()
-      const accountGroups = storedAccount.accountGroups.flatMap((accountGroup) => {
+      const accountGroups = storedWorkspace.accountGroups.flatMap((accountGroup) => {
             if (!accountGroup || typeof accountGroup !== 'object') return []
             const storedAccountGroup = accountGroup as {
               id?: unknown
@@ -532,8 +532,8 @@ function normalizeStoredData(input: unknown): AppData | null {
             }]
           })
       const accountGroupsAreStrict =
-        accountGroups.length === storedAccount.accountGroups.length &&
-        storedAccount.accountGroups.every((accountGroup) => {
+        accountGroups.length === storedWorkspace.accountGroups.length &&
+        storedWorkspace.accountGroups.every((accountGroup) => {
           if (!accountGroup || typeof accountGroup !== 'object') return false
           const storedAccountGroup = accountGroup as {
             id?: unknown
@@ -555,7 +555,7 @@ function normalizeStoredData(input: unknown): AppData | null {
         )
       )
       const assignedPositionIds = new Set<string>()
-      const positionGroups = storedAccount.positionGroups.flatMap((group) => {
+      const positionGroups = storedWorkspace.positionGroups.flatMap((group) => {
             if (!group || typeof group !== 'object') return []
             const storedGroup = group as {
               id?: unknown
@@ -593,14 +593,14 @@ function normalizeStoredData(input: unknown): AppData | null {
           })
       return [
         {
-          id: storedAccount.id,
-          name: storedAccount.name,
-          anchorCurrency: normalizeAnchorCurrency(storedAccount.anchorCurrency),
+          id: storedWorkspace.id,
+          name: storedWorkspace.name,
+          baseCurrency: normalizeBaseCurrency(storedWorkspace.baseCurrency),
           exchangeRateProvider: normalizeExchangeRateProvider(
-            storedAccount.exchangeRateProvider
+            storedWorkspace.exchangeRateProvider
           ),
           exchangeRateRefreshIntervalMinutes: normalizeExchangeRateRefreshInterval(
-            storedAccount.exchangeRateRefreshIntervalMinutes
+            storedWorkspace.exchangeRateRefreshIntervalMinutes
           ),
           accountGroups,
           assetAccounts,
@@ -608,55 +608,55 @@ function normalizeStoredData(input: unknown): AppData | null {
         }
       ]
   })
-  const activeProductAccountId = productAccounts.some(
-    (account) => account.id === value.activeProductAccountId
+  const activeWorkspaceId = workspaces.some(
+    (workspace) => workspace.id === value.activeWorkspaceId
   )
-    ? (value.activeProductAccountId as string)
-    : (productAccounts[0]?.id ?? null)
+    ? (value.activeWorkspaceId as string)
+    : (workspaces[0]?.id ?? null)
 
-  const productAccountIds = new Set(productAccounts.map((account) => account.id))
+  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id))
   const usedSnapshotIds = new Set<string>()
   const snapshots = value.snapshots.flatMap((snapshot) => {
         if (!snapshot || typeof snapshot !== 'object') return []
         const storedSnapshot = snapshot as {
           id?: unknown
-          productAccountId?: unknown
+          workspaceId?: unknown
           createdAt?: unknown
-          account?: unknown
+          workspace?: unknown
           exchangeRates?: unknown
         }
         if (
           typeof storedSnapshot.id !== 'string' ||
           !storedSnapshot.id.trim() ||
           usedSnapshotIds.has(storedSnapshot.id) ||
-          typeof storedSnapshot.productAccountId !== 'string' ||
-          !productAccountIds.has(storedSnapshot.productAccountId) ||
+          typeof storedSnapshot.workspaceId !== 'string' ||
+          !workspaceIds.has(storedSnapshot.workspaceId) ||
           typeof storedSnapshot.createdAt !== 'string' ||
           !Number.isFinite(Date.parse(storedSnapshot.createdAt))
         ) {
           return []
         }
-        const normalizedAccountData = normalizeStoredData({
+        const normalizedWorkspaceData = normalizeStoredData({
           version: 1,
-          activeProductAccountId: storedSnapshot.productAccountId,
-          productAccounts: [storedSnapshot.account],
+          activeWorkspaceId: storedSnapshot.workspaceId,
+          workspaces: [storedSnapshot.workspace],
           snapshots: []
         })
-        const account = normalizedAccountData?.productAccounts[0]
-        if (!account || account.id !== storedSnapshot.productAccountId) return []
+        const workspace = normalizedWorkspaceData?.workspaces[0]
+        if (!workspace || workspace.id !== storedSnapshot.workspaceId) return []
         const exchangeRates = normalizeStoredExchangeRates(storedSnapshot.exchangeRates)
         usedSnapshotIds.add(storedSnapshot.id)
         return [{
           id: storedSnapshot.id,
-          productAccountId: storedSnapshot.productAccountId,
+          workspaceId: storedSnapshot.workspaceId,
           createdAt: storedSnapshot.createdAt,
-          account,
+          workspace,
           ...(exchangeRates ? { exchangeRates } : {})
         }]
       })
 
   snapshots.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
-  return { version: 1, activeProductAccountId, productAccounts, snapshots }
+  return { version: 1, activeWorkspaceId, workspaces, snapshots }
 }
 
 function parseStoredData(raw: string): AppData | null {
@@ -715,10 +715,10 @@ function isValidBackupSync(value: unknown, type: AssetAccountType): boolean {
   )
 }
 
-function stripIntegrationFields(account: ProductAccount): ProductAccount {
+function stripIntegrationFields(workspace: Workspace): Workspace {
   return {
-    ...structuredClone(account),
-    assetAccounts: account.assetAccounts.map((assetAccount) => ({
+    ...structuredClone(workspace),
+    assetAccounts: workspace.assetAccounts.map((assetAccount) => ({
       id: assetAccount.id,
       name: assetAccount.name,
       type: assetAccount.type,
@@ -728,19 +728,19 @@ function stripIntegrationFields(account: ProductAccount): ProductAccount {
   }
 }
 
-function sanitizeSnapshot(snapshot: PortfolioSnapshot): PortfolioSnapshot {
+function sanitizeSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
   return {
     ...structuredClone(snapshot),
-    account: stripIntegrationFields(snapshot.account)
+    workspace: stripIntegrationFields(snapshot.workspace)
   }
 }
 
-function sanitizeAccountBackup(
-  account: ProductAccount,
-  snapshots: PortfolioSnapshot[]
-): AccountBackup {
+function sanitizeWorkspaceBackup(
+  workspace: Workspace,
+  snapshots: WorkspaceSnapshot[]
+): WorkspaceBackup {
   return {
-    account: stripIntegrationFields(account),
+    workspace: stripIntegrationFields(workspace),
     snapshots: snapshots.map(sanitizeSnapshot)
   }
 }
@@ -750,8 +750,8 @@ function reconcileIntegrations(
   integrationData: IntegrationData
 ): { data: AppData; integrationData: IntegrationData } {
   const accountTypes = new Map(
-    data.productAccounts.flatMap((productAccount) =>
-      productAccount.assetAccounts.map(
+    data.workspaces.flatMap((workspace) =>
+      workspace.assetAccounts.map(
         (assetAccount) => [assetAccount.id, assetAccount.type] as const
       )
     )
@@ -765,9 +765,9 @@ function reconcileIntegrations(
   return {
     data: {
       ...data,
-      productAccounts: data.productAccounts.map((productAccount) => ({
-        ...productAccount,
-        assetAccounts: productAccount.assetAccounts.map((assetAccount) => {
+      workspaces: data.workspaces.map((workspace) => ({
+        ...workspace,
+        assetAccounts: workspace.assetAccounts.map((assetAccount) => {
           if (integratedAccountIds.has(assetAccount.id)) {
             return assetAccount.sync
               ? assetAccount
@@ -786,34 +786,34 @@ function reconcileIntegrations(
   }
 }
 
-function isValidBackupAccount(value: unknown): boolean {
+function isValidBackupWorkspace(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false
-  const account = value as Partial<ProductAccount>
+  const workspace = value as Partial<Workspace>
   if (
-    typeof account.id !== 'string' ||
-    !account.id ||
-    typeof account.name !== 'string' ||
-    !account.name.trim() ||
-    (account.anchorCurrency !== undefined &&
-      !isCurrencyCode(account.anchorCurrency)) ||
-    (account.exchangeRateProvider !== undefined &&
-      !EXCHANGE_RATE_PROVIDERS.includes(account.exchangeRateProvider)) ||
-    (account.exchangeRateRefreshIntervalMinutes !== undefined &&
-      (typeof account.exchangeRateRefreshIntervalMinutes !== 'number' ||
-        !Number.isInteger(account.exchangeRateRefreshIntervalMinutes) ||
-        account.exchangeRateRefreshIntervalMinutes <
+    typeof workspace.id !== 'string' ||
+    !workspace.id ||
+    typeof workspace.name !== 'string' ||
+    !workspace.name.trim() ||
+    (workspace.baseCurrency !== undefined &&
+      !isCurrencyCode(workspace.baseCurrency)) ||
+    (workspace.exchangeRateProvider !== undefined &&
+      !EXCHANGE_RATE_PROVIDERS.includes(workspace.exchangeRateProvider)) ||
+    (workspace.exchangeRateRefreshIntervalMinutes !== undefined &&
+      (typeof workspace.exchangeRateRefreshIntervalMinutes !== 'number' ||
+        !Number.isInteger(workspace.exchangeRateRefreshIntervalMinutes) ||
+        workspace.exchangeRateRefreshIntervalMinutes <
           MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES ||
-        account.exchangeRateRefreshIntervalMinutes >
+        workspace.exchangeRateRefreshIntervalMinutes >
           MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES)) ||
-    !Array.isArray(account.accountGroups) ||
-    !Array.isArray(account.assetAccounts)
+    !Array.isArray(workspace.accountGroups) ||
+    !Array.isArray(workspace.assetAccounts)
   ) {
     return false
   }
 
   const assetAccountIds = new Set<string>()
   const positionIds = new Set<string>()
-  const validAssetAccounts = account.assetAccounts.every((assetAccount) => {
+  const validAssetAccounts = workspace.assetAccounts.every((assetAccount) => {
     const type = normalizeAssetAccountType(assetAccount?.type)
     if (
       !assetAccount ||
@@ -840,7 +840,7 @@ function isValidBackupAccount(value: unknown): boolean {
 
   const accountGroupIds = new Set<string>()
   const assignedAssetAccountIds = new Set<string>()
-  const validAccountGroups = account.accountGroups.every((accountGroup) => {
+  const validAccountGroups = workspace.accountGroups.every((accountGroup) => {
     if (
       !accountGroup ||
       typeof accountGroup.id !== 'string' ||
@@ -870,11 +870,11 @@ function isValidBackupAccount(value: unknown): boolean {
   })
   if (!validAccountGroups) return false
 
-  if (!Array.isArray(account.positionGroups)) return false
+  if (!Array.isArray(workspace.positionGroups)) return false
 
   const groupIds = new Set<string>()
   const assignedPositionIds = new Set<string>()
-  return account.positionGroups.every((group) => {
+  return workspace.positionGroups.every((group) => {
     if (
       !group ||
       typeof group.id !== 'string' ||
@@ -906,21 +906,21 @@ function isValidBackupAccount(value: unknown): boolean {
 
 function isValidBackupSnapshot(
   value: unknown,
-  productAccountId: string,
+  workspaceId: string,
   usedIds: Set<string>
-): value is PortfolioSnapshot {
+): value is WorkspaceSnapshot {
   if (!value || typeof value !== 'object') return false
-  const snapshot = value as Partial<PortfolioSnapshot>
-  const snapshotAccount = snapshot.account
+  const snapshot = value as Partial<WorkspaceSnapshot>
+  const snapshotWorkspace = snapshot.workspace
   if (
     typeof snapshot.id !== 'string' ||
     !snapshot.id.trim() ||
     usedIds.has(snapshot.id) ||
-    snapshot.productAccountId !== productAccountId ||
+    snapshot.workspaceId !== workspaceId ||
     typeof snapshot.createdAt !== 'string' ||
     !Number.isFinite(Date.parse(snapshot.createdAt)) ||
-    !isValidBackupAccount(snapshotAccount) ||
-    (snapshotAccount as ProductAccount).id !== productAccountId ||
+    !isValidBackupWorkspace(snapshotWorkspace) ||
+    (snapshotWorkspace as Workspace).id !== workspaceId ||
     (snapshot.exchangeRates !== undefined &&
       !normalizeStoredExchangeRates(snapshot.exchangeRates))
   ) {
@@ -930,14 +930,14 @@ function isValidBackupSnapshot(
   return true
 }
 
-export function createAccountBackup(
-  account: ProductAccount,
-  snapshots: PortfolioSnapshot[] = []
+export function createWorkspaceBackup(
+  workspace: Workspace,
+  snapshots: WorkspaceSnapshot[] = []
 ): string {
-  const backup = sanitizeAccountBackup(account, snapshots)
+  const backup = sanitizeWorkspaceBackup(workspace, snapshots)
   return JSON.stringify(
     {
-      format: 'chromie-account',
+      format: 'chromie-workspace',
       version: 1,
       exportedAt: new Date().toISOString(),
       ...backup
@@ -947,44 +947,44 @@ export function createAccountBackup(
   )
 }
 
-export function parseAccountBackup(raw: string): AccountBackup | null {
+export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
   try {
     const backup = JSON.parse(raw) as {
       format?: unknown
       version?: unknown
       exportedAt?: unknown
-      account?: unknown
+      workspace?: unknown
       snapshots?: unknown
     }
     if (
-      backup.format !== 'chromie-account' ||
+      backup.format !== 'chromie-workspace' ||
       backup.version !== 1 ||
       typeof backup.exportedAt !== 'string' ||
       !Number.isFinite(Date.parse(backup.exportedAt)) ||
-      !isValidBackupAccount(backup.account)
+      !isValidBackupWorkspace(backup.workspace)
     ) {
       return null
     }
-    const account = backup.account as ProductAccount
+    const workspace = backup.workspace as Workspace
     const usedSnapshotIds = new Set<string>()
     const rawSnapshots = backup.snapshots
     if (
       !Array.isArray(rawSnapshots) ||
       !rawSnapshots.every((snapshot) =>
-        isValidBackupSnapshot(snapshot, account.id, usedSnapshotIds)
+        isValidBackupSnapshot(snapshot, workspace.id, usedSnapshotIds)
       )
     ) {
       return null
     }
     const normalized = normalizeStoredData({
       version: 1,
-      activeProductAccountId: account.id,
-      productAccounts: [account],
+      activeWorkspaceId: workspace.id,
+      workspaces: [workspace],
       snapshots: rawSnapshots
     })
-    const normalizedAccount = normalized?.productAccounts[0]
-    if (!normalizedAccount || normalized.snapshots.length !== rawSnapshots.length) return null
-    return { account: normalizedAccount, snapshots: normalized.snapshots }
+    const normalizedWorkspace = normalized?.workspaces[0]
+    if (!normalizedWorkspace || normalized.snapshots.length !== rawSnapshots.length) return null
+    return { workspace: normalizedWorkspace, snapshots: normalized.snapshots }
   } catch {
     return null
   }
@@ -1003,11 +1003,11 @@ function createPortfolioOperations(
   integrationData: IntegrationData,
   setIntegrationData: IntegrationDataUpdater
 ) {
-  const activeProductAccount =
-    data.productAccounts.find((account) => account.id === data.activeProductAccountId) ?? null
-  const activeSnapshots = activeProductAccount
+  const activeWorkspace =
+    data.workspaces.find((workspace) => workspace.id === data.activeWorkspaceId) ?? null
+  const activeSnapshots = activeWorkspace
     ? data.snapshots.filter(
-        (snapshot) => snapshot.productAccountId === activeProductAccount.id
+        (snapshot) => snapshot.workspaceId === activeWorkspace.id
       )
     : []
 
@@ -1031,16 +1031,16 @@ function createPortfolioOperations(
   }
 
   function createSnapshot(
-    productAccountId: string,
+    workspaceId: string,
     exchangeRates?: ExchangeRateSnapshot | null
   ): string | null {
-    const account = data.productAccounts.find((item) => item.id === productAccountId)
-    if (!account) return null
-    const snapshot: PortfolioSnapshot = {
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
+    if (!workspace) return null
+    const snapshot: WorkspaceSnapshot = {
       id: createId(),
-      productAccountId,
+      workspaceId,
       createdAt: new Date().toISOString(),
-      account: structuredClone(account),
+      workspace: structuredClone(workspace),
       ...(exchangeRates ? { exchangeRates: structuredClone(exchangeRates) } : {})
     }
     setData((current) => ({
@@ -1057,16 +1057,16 @@ function createPortfolioOperations(
     }))
   }
 
-  function setActiveProductAccount(id: string): void {
-    if (!data.productAccounts.some((account) => account.id === id)) return
-    setData((current) => ({ ...current, activeProductAccountId: id }))
+  function setActiveWorkspace(id: string): void {
+    if (!data.workspaces.some((workspace) => workspace.id === id)) return
+    setData((current) => ({ ...current, activeWorkspaceId: id }))
   }
 
-  function createProductAccount(input: ProductAccountInput): string {
-    const account: ProductAccount = {
+  function createWorkspace(input: WorkspaceInput): string {
+    const workspace: Workspace = {
       id: createId(),
       name: input.name.trim(),
-      anchorCurrency: normalizeAnchorCurrency(input.anchorCurrency),
+      baseCurrency: normalizeBaseCurrency(input.baseCurrency),
       exchangeRateProvider: DEFAULT_EXCHANGE_RATE_PROVIDER,
       exchangeRateRefreshIntervalMinutes:
         DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
@@ -1076,21 +1076,21 @@ function createPortfolioOperations(
     }
     setData((current) => ({
       ...current,
-      activeProductAccountId: account.id,
-      productAccounts: [...current.productAccounts, account]
+      activeWorkspaceId: workspace.id,
+      workspaces: [...current.workspaces, workspace]
     }))
-    return account.id
+    return workspace.id
   }
 
-  function updateProductAccount(id: string, input: ProductAccountSettingsInput): void {
+  function updateWorkspace(id: string, input: WorkspaceSettingsInput): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === id
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === id
           ? {
-              ...account,
+              ...workspace,
               name: input.name.trim(),
-              anchorCurrency: normalizeAnchorCurrency(input.anchorCurrency),
+              baseCurrency: normalizeBaseCurrency(input.baseCurrency),
               exchangeRateProvider: normalizeExchangeRateProvider(
                 input.exchangeRateProvider
               ),
@@ -1099,28 +1099,28 @@ function createPortfolioOperations(
                   input.exchangeRateRefreshIntervalMinutes
                 )
             }
-          : account
+          : workspace
       )
     }))
   }
 
-  function deleteProductAccount(id: string): void {
+  function deleteWorkspace(id: string): void {
     const deletedAssetAccountIds = new Set(
-      data.productAccounts
-        .find((account) => account.id === id)
+      data.workspaces
+        .find((workspace) => workspace.id === id)
         ?.assetAccounts.map((assetAccount) => assetAccount.id) ?? []
     )
     setData((current) => {
-      const productAccounts = current.productAccounts.filter((account) => account.id !== id)
+      const workspaces = current.workspaces.filter((workspace) => workspace.id !== id)
       return {
         ...current,
-        activeProductAccountId:
-          current.activeProductAccountId === id
-            ? (productAccounts[0]?.id ?? null)
-            : current.activeProductAccountId,
-        productAccounts,
+        activeWorkspaceId:
+          current.activeWorkspaceId === id
+            ? (workspaces[0]?.id ?? null)
+            : current.activeWorkspaceId,
+        workspaces,
         snapshots: current.snapshots.filter(
-          (snapshot) => snapshot.productAccountId !== id
+          (snapshot) => snapshot.workspaceId !== id
         )
       }
     })
@@ -1133,7 +1133,7 @@ function createPortfolioOperations(
   }
 
   function createAccountGroup(
-    productAccountId: string,
+    workspaceId: string,
     input: AccountGroupInput
   ): string {
     const group: AccountGroup = {
@@ -1143,65 +1143,65 @@ function createPortfolioOperations(
     }
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
-          ? { ...account, accountGroups: [...account.accountGroups, group] }
-          : account
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
+          ? { ...workspace, accountGroups: [...workspace.accountGroups, group] }
+          : workspace
       )
     }))
     return group.id
   }
 
   function updateAccountGroup(
-    productAccountId: string,
+    workspaceId: string,
     groupId: string,
     input: AccountGroupInput
   ): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              accountGroups: account.accountGroups.map((group) =>
+              ...workspace,
+              accountGroups: workspace.accountGroups.map((group) =>
                 group.id === groupId ? { ...group, name: input.name.trim() } : group
               )
             }
-          : account
+          : workspace
       )
     }))
   }
 
-  function deleteAccountGroup(productAccountId: string, groupId: string): void {
+  function deleteAccountGroup(workspaceId: string, groupId: string): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              accountGroups: account.accountGroups.filter(
+              ...workspace,
+              accountGroups: workspace.accountGroups.filter(
                 (group) => group.id !== groupId
               )
             }
-          : account
+          : workspace
       )
     }))
   }
 
   function setAccountGroupAccounts(
-    productAccountId: string,
+    workspaceId: string,
     groupId: string,
     assetAccountIds: string[]
   ): string | null {
-    const productAccount = data.productAccounts.find(
-      (account) => account.id === productAccountId
+    const workspace = data.workspaces.find(
+      (workspace) => workspace.id === workspaceId
     )
-    if (!productAccount) return '没有找到对应的账户'
-    if (!productAccount.accountGroups.some((group) => group.id === groupId)) {
+    if (!workspace) return '没有找到对应的工作区'
+    if (!workspace.accountGroups.some((group) => group.id === groupId)) {
       return '没有找到对应的账户分组'
     }
     const availableAssetAccountIds = new Set(
-      productAccount.assetAccounts.map((account) => account.id)
+      workspace.assetAccounts.map((workspace) => workspace.id)
     )
     const normalizedAssetAccountIds = [...new Set(assetAccountIds)]
     if (
@@ -1212,7 +1212,7 @@ function createPortfolioOperations(
       return '部分资产账户已不存在，请重新选择'
     }
     const assignedGroupByAccountId = new Map(
-      productAccount.accountGroups.flatMap((group) =>
+      workspace.accountGroups.flatMap((group) =>
         group.id === groupId
           ? []
           : group.assetAccountIds.map(
@@ -1224,41 +1224,41 @@ function createPortfolioOperations(
       (assetAccountId) => assignedGroupByAccountId.has(assetAccountId)
     )
     if (conflictingAccountId) {
-      const account = productAccount.assetAccounts.find(
+      const assetAccount = workspace.assetAccounts.find(
         (item) => item.id === conflictingAccountId
       )
-      return `${account?.name ?? '所选资产账户'} 已属于“${assignedGroupByAccountId.get(conflictingAccountId)}”，一个资产账户只能加入一个分组`
+      return `${assetAccount?.name ?? '所选资产账户'} 已属于“${assignedGroupByAccountId.get(conflictingAccountId)}”，一个资产账户只能加入一个分组`
     }
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              accountGroups: account.accountGroups.map((group) =>
+              ...workspace,
+              accountGroups: workspace.accountGroups.map((group) =>
                 group.id === groupId
                   ? { ...group, assetAccountIds: normalizedAssetAccountIds }
                   : group
               )
             }
-          : account
+          : workspace
       )
     }))
     return null
   }
 
   function removeAccountFromGroup(
-    productAccountId: string,
+    workspaceId: string,
     groupId: string,
     assetAccountId: string
   ): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              accountGroups: account.accountGroups.map((group) =>
+              ...workspace,
+              accountGroups: workspace.accountGroups.map((group) =>
                 group.id === groupId
                   ? {
                       ...group,
@@ -1269,13 +1269,13 @@ function createPortfolioOperations(
                   : group
               )
             }
-          : account
+          : workspace
       )
     }))
   }
 
   function createPositionGroup(
-    productAccountId: string,
+    workspaceId: string,
     input: PositionGroupInput
   ): string {
     const group: PositionGroup = {
@@ -1285,65 +1285,65 @@ function createPortfolioOperations(
     }
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
-          ? { ...account, positionGroups: [...account.positionGroups, group] }
-          : account
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
+          ? { ...workspace, positionGroups: [...workspace.positionGroups, group] }
+          : workspace
       )
     }))
     return group.id
   }
 
   function updatePositionGroup(
-    productAccountId: string,
+    workspaceId: string,
     groupId: string,
     input: PositionGroupInput
   ): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              positionGroups: account.positionGroups.map((group) =>
+              ...workspace,
+              positionGroups: workspace.positionGroups.map((group) =>
                 group.id === groupId ? { ...group, name: input.name.trim() } : group
               )
             }
-          : account
+          : workspace
       )
     }))
   }
 
-  function deletePositionGroup(productAccountId: string, groupId: string): void {
+  function deletePositionGroup(workspaceId: string, groupId: string): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              positionGroups: account.positionGroups.filter((group) => group.id !== groupId)
+              ...workspace,
+              positionGroups: workspace.positionGroups.filter((group) => group.id !== groupId)
             }
-          : account
+          : workspace
       )
     }))
   }
 
   function setPositionGroupPositions(
-    productAccountId: string,
+    workspaceId: string,
     groupId: string,
     positionIds: string[]
   ): string | null {
-    const productAccount = data.productAccounts.find(
-      (account) => account.id === productAccountId
+    const workspace = data.workspaces.find(
+      (workspace) => workspace.id === workspaceId
     )
-    if (!productAccount) return '没有找到对应的账户'
-    if (!productAccount.positionGroups.some((group) => group.id === groupId)) {
+    if (!workspace) return '没有找到对应的工作区'
+    if (!workspace.positionGroups.some((group) => group.id === groupId)) {
       return '没有找到对应的持仓分组'
     }
 
     const availablePositionIds = new Set(
-      productAccount.assetAccounts.flatMap((account) =>
-        account.positions.map((position) => position.id)
+      workspace.assetAccounts.flatMap((workspace) =>
+        workspace.positions.map((position) => position.id)
       )
     )
     const normalizedPositionIds = [...new Set(positionIds)]
@@ -1351,7 +1351,7 @@ function createPortfolioOperations(
       return '部分持仓已不存在，请重新选择'
     }
     const assignedGroupByPositionId = new Map(
-      productAccount.positionGroups.flatMap((group) =>
+      workspace.positionGroups.flatMap((group) =>
         group.id === groupId
           ? []
           : group.positionIds.map((positionId) => [positionId, group.name] as const)
@@ -1361,42 +1361,42 @@ function createPortfolioOperations(
       assignedGroupByPositionId.has(positionId)
     )
     if (conflictingPositionId) {
-      const position = productAccount.assetAccounts
-        .flatMap((account) => account.positions)
+      const position = workspace.assetAccounts
+        .flatMap((workspace) => workspace.positions)
         .find((item) => item.id === conflictingPositionId)
       return `${position?.symbol ?? '所选持仓'} 已属于“${assignedGroupByPositionId.get(conflictingPositionId)}”，一个持仓只能加入一个分组`
     }
 
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              positionGroups: account.positionGroups.map((group) =>
+              ...workspace,
+              positionGroups: workspace.positionGroups.map((group) =>
                 group.id === groupId
                   ? { ...group, positionIds: normalizedPositionIds }
                   : group
               )
             }
-          : account
+          : workspace
       )
     }))
     return null
   }
 
   function removePositionFromGroup(
-    productAccountId: string,
+    workspaceId: string,
     groupId: string,
     positionId: string
   ): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              positionGroups: account.positionGroups.map((group) =>
+              ...workspace,
+              positionGroups: workspace.positionGroups.map((group) =>
                 group.id === groupId
                   ? {
                       ...group,
@@ -1405,17 +1405,17 @@ function createPortfolioOperations(
                   : group
               )
             }
-          : account
+          : workspace
       )
     }))
   }
 
-  function createAssetAccount(productAccountId: string, input: AssetAccountInput): string {
+  function createAssetAccount(workspaceId: string, input: AssetAccountInput): string {
     const type = normalizeAssetAccountType(input.type) ?? 'Futu'
-    const productAccount = data.productAccounts.find(
-      (account) => account.id === productAccountId
+    const workspace = data.workspaces.find(
+      (workspace) => workspace.id === workspaceId
     )
-    if (!productAccount) throw new Error('没有找到对应的账户')
+    if (!workspace) throw new Error('没有找到对应的工作区')
     const assetAccountId = createId()
     const integration = resolveIntegrationInput(
       input.integration,
@@ -1438,10 +1438,10 @@ function createPortfolioOperations(
     }
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
-          ? { ...account, assetAccounts: [...account.assetAccounts, assetAccount] }
-          : account
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
+          ? { ...workspace, assetAccounts: [...workspace.assetAccounts, assetAccount] }
+          : workspace
       )
     }))
     setAssetAccountIntegration(assetAccount.id, integration)
@@ -1449,16 +1449,16 @@ function createPortfolioOperations(
   }
 
   function updateAssetAccount(
-    productAccountId: string,
+    workspaceId: string,
     assetAccountId: string,
     input: AssetAccountInput
   ): void {
     const type = normalizeAssetAccountType(input.type) ?? 'Futu'
-    const productAccount = data.productAccounts.find(
-      (account) => account.id === productAccountId
+    const workspace = data.workspaces.find(
+      (workspace) => workspace.id === workspaceId
     )
-    if (!productAccount) throw new Error('没有找到对应的账户')
-    if (!productAccount.assetAccounts.some((account) => account.id === assetAccountId)) {
+    if (!workspace) throw new Error('没有找到对应的工作区')
+    if (!workspace.assetAccounts.some((workspace) => workspace.id === assetAccountId)) {
       throw new Error('没有找到对应的资产账户')
     }
     const existingIntegration = integrationData.integrations.find(
@@ -1479,11 +1479,11 @@ function createPortfolioOperations(
       : undefined
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              assetAccounts: account.assetAccounts.map((assetAccount) =>
+              ...workspace,
+              assetAccounts: workspace.assetAccounts.map((assetAccount) =>
                 assetAccount.id === assetAccountId
                   ? {
                       ...assetAccount,
@@ -1494,34 +1494,34 @@ function createPortfolioOperations(
                   : assetAccount
               )
             }
-          : account
+          : workspace
       )
     }))
     setAssetAccountIntegration(assetAccountId, integration)
   }
 
-  function deleteAssetAccount(productAccountId: string, assetAccountId: string): void {
+  function deleteAssetAccount(workspaceId: string, assetAccountId: string): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) => {
-        if (account.id !== productAccountId) return account
+      workspaces: current.workspaces.map((workspace) => {
+        if (workspace.id !== workspaceId) return workspace
         const deletedPositionIds = new Set(
-          account.assetAccounts
+          workspace.assetAccounts
             .find((assetAccount) => assetAccount.id === assetAccountId)
             ?.positions.map((position) => position.id) ?? []
         )
         return {
-          ...account,
-          assetAccounts: account.assetAccounts.filter(
+          ...workspace,
+          assetAccounts: workspace.assetAccounts.filter(
             (assetAccount) => assetAccount.id !== assetAccountId
           ),
-          accountGroups: account.accountGroups.map((group) => ({
+          accountGroups: workspace.accountGroups.map((group) => ({
             ...group,
             assetAccountIds: group.assetAccountIds.filter(
               (id) => id !== assetAccountId
             )
           })),
-          positionGroups: account.positionGroups.map((group) => ({
+          positionGroups: workspace.positionGroups.map((group) => ({
             ...group,
             positionIds: group.positionIds.filter(
               (positionId) => !deletedPositionIds.has(positionId)
@@ -1534,17 +1534,17 @@ function createPortfolioOperations(
   }
 
   function savePosition(
-    productAccountId: string,
+    workspaceId: string,
     assetAccountId: string,
     input: PositionInput,
     positionId?: string
   ): string | null {
     const position = normalizePosition(input, positionId)
-    const assetAccount = data.productAccounts
-      .find((account) => account.id === productAccountId)
-      ?.assetAccounts.find((account) => account.id === assetAccountId)
+    const assetAccount = data.workspaces
+      .find((workspace) => workspace.id === workspaceId)
+      ?.assetAccounts.find((workspace) => workspace.id === assetAccountId)
     if (!assetAccount) return '没有找到对应的资产账户'
-    if (assetAccount.sync) return '自动同步账户不能手动修改持仓'
+    if (assetAccount.sync) return '自动同步的资产账户不能手动修改持仓'
     if (positionId && !assetAccount.positions.some((item) => item.id === positionId)) {
       return '没有找到对应的持仓'
     }
@@ -1559,11 +1559,11 @@ function createPortfolioOperations(
 
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              assetAccounts: account.assetAccounts.map((currentAssetAccount) =>
+              ...workspace,
+              assetAccounts: workspace.assetAccounts.map((currentAssetAccount) =>
                 currentAssetAccount.id === assetAccountId
                   ? {
                       ...currentAssetAccount,
@@ -1576,28 +1576,28 @@ function createPortfolioOperations(
                   : currentAssetAccount
               )
             }
-          : account
+          : workspace
       )
     }))
     return null
   }
 
   function deletePosition(
-    productAccountId: string,
+    workspaceId: string,
     assetAccountId: string,
     positionId: string
   ): void {
-    const assetAccount = data.productAccounts
-      .find((account) => account.id === productAccountId)
-      ?.assetAccounts.find((account) => account.id === assetAccountId)
+    const assetAccount = data.workspaces
+      .find((workspace) => workspace.id === workspaceId)
+      ?.assetAccounts.find((workspace) => workspace.id === assetAccountId)
     if (!assetAccount || assetAccount.sync) return
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) =>
-        account.id === productAccountId
+      workspaces: current.workspaces.map((workspace) =>
+        workspace.id === workspaceId
           ? {
-              ...account,
-              assetAccounts: account.assetAccounts.map((assetAccount) =>
+              ...workspace,
+              assetAccounts: workspace.assetAccounts.map((assetAccount) =>
                 assetAccount.id === assetAccountId && !assetAccount.sync
                   ? {
                       ...assetAccount,
@@ -1607,30 +1607,30 @@ function createPortfolioOperations(
                     }
                   : assetAccount
               ),
-              positionGroups: account.positionGroups.map((group) => ({
+              positionGroups: workspace.positionGroups.map((group) => ({
                 ...group,
                 positionIds: group.positionIds.filter((id) => id !== positionId)
               }))
             }
-          : account
+          : workspace
       )
     }))
   }
 
   function replacePositions(
-    productAccountId: string,
+    workspaceId: string,
     assetAccountId: string,
     positions: PositionInput[],
     lastSyncedAt?: string
   ): void {
     setData((current) => ({
       ...current,
-      productAccounts: current.productAccounts.map((account) => {
-        if (account.id !== productAccountId) return account
-        const targetAccount = account.assetAccounts.find(
+      workspaces: current.workspaces.map((workspace) => {
+        if (workspace.id !== workspaceId) return workspace
+        const targetAccount = workspace.assetAccounts.find(
           (assetAccount) => assetAccount.id === assetAccountId
         )
-        if (!targetAccount) return account
+        if (!targetAccount) return workspace
 
         const usedPositionIds = new Set<string>()
         const normalizedPositions = positions.map((input) => {
@@ -1653,8 +1653,8 @@ function createPortfolioOperations(
         )
 
         return {
-          ...account,
-          assetAccounts: account.assetAccounts.map((assetAccount) =>
+          ...workspace,
+          assetAccounts: workspace.assetAccounts.map((assetAccount) =>
             assetAccount.id === assetAccountId
               ? {
                   ...assetAccount,
@@ -1672,7 +1672,7 @@ function createPortfolioOperations(
                 }
               : assetAccount
           ),
-          positionGroups: account.positionGroups.map((group) => ({
+          positionGroups: workspace.positionGroups.map((group) => ({
             ...group,
             positionIds: group.positionIds.filter(
               (positionId) =>
@@ -1684,14 +1684,14 @@ function createPortfolioOperations(
     }))
   }
 
-  function exportAccount(): string {
-    if (!activeProductAccount) throw new Error('没有可导出的账户')
-    return createAccountBackup(activeProductAccount, activeSnapshots)
+  function exportWorkspace(): string {
+    if (!activeWorkspace) throw new Error('没有可导出的工作区')
+    return createWorkspaceBackup(activeWorkspace, activeSnapshots)
   }
 
-  function importAccount(
-    input: ProductAccount,
-    snapshots: PortfolioSnapshot[] = []
+  function importWorkspace(
+    input: Workspace,
+    snapshots: WorkspaceSnapshot[] = []
   ): string {
     const accountGroupIdMap = new Map(
       input.accountGroups.map(
@@ -1708,7 +1708,7 @@ function createPortfolioOperations(
         assetAccount.positions.map((position) => [position.id, createId()] as const)
       )
     )
-    const account: ProductAccount = {
+    const workspace: Workspace = {
       ...input,
       id: createId(),
       accountGroups: input.accountGroups.map((accountGroup) => ({
@@ -1740,31 +1740,31 @@ function createPortfolioOperations(
     const importedSnapshots = snapshots.map((snapshot) => ({
       ...snapshot,
       id: createId(),
-      productAccountId: account.id,
-      account: {
-        ...structuredClone(snapshot.account),
-        id: account.id
+      workspaceId: workspace.id,
+      workspace: {
+        ...structuredClone(snapshot.workspace),
+        id: workspace.id
       }
     }))
     setData((current) => ({
       ...current,
-      activeProductAccountId: account.id,
-      productAccounts: [...current.productAccounts, account],
+      activeWorkspaceId: workspace.id,
+      workspaces: [...current.workspaces, workspace],
       snapshots: [...importedSnapshots, ...current.snapshots]
     }))
-    return account.id
+    return workspace.id
   }
 
   return {
-    productAccounts: data.productAccounts,
-    activeProductAccount,
+    workspaces: data.workspaces,
+    activeWorkspace,
     activeSnapshots,
-    setActiveProductAccount,
+    setActiveWorkspace,
     createSnapshot,
     deleteSnapshot,
-    createProductAccount,
-    updateProductAccount,
-    deleteProductAccount,
+    createWorkspace,
+    updateWorkspace,
+    deleteWorkspace,
     createAccountGroup,
     updateAccountGroup,
     deleteAccountGroup,
@@ -1781,16 +1781,16 @@ function createPortfolioOperations(
     savePosition,
     deletePosition,
     replacePositions,
-    exportAccount,
-    importAccount
+    exportWorkspace,
+    importWorkspace
   }
 }
 
 export interface PortfolioOperations {
   load(): Promise<PortfolioLoadResponse>
   execute(command: PortfolioCommand): Promise<PortfolioCommandResponse>
-  inspectBackup(content: unknown): AccountBackup | null
-  exportActiveAccount(): Promise<string>
+  inspectBackup(content: unknown): WorkspaceBackup | null
+  exportActiveWorkspace(): Promise<string>
   subscribe(listener: PortfolioChangeListener): () => void
 }
 
@@ -1859,109 +1859,109 @@ export class PortfolioService implements PortfolioOperations {
       let result: string | null | undefined
 
       switch (command.type) {
-        case 'set-active-product-account':
-          operations.setActiveProductAccount(command.id)
+        case 'set-active-workspace':
+          operations.setActiveWorkspace(command.id)
           break
         case 'create-snapshot':
           result = operations.createSnapshot(
-            command.productAccountId,
+            command.workspaceId,
             command.exchangeRates
           )
           break
         case 'delete-snapshot':
           operations.deleteSnapshot(command.snapshotId)
           break
-        case 'create-product-account':
-          result = operations.createProductAccount(command.input)
+        case 'create-workspace':
+          result = operations.createWorkspace(command.input)
           break
-        case 'update-product-account':
-          operations.updateProductAccount(command.id, command.input)
+        case 'update-workspace':
+          operations.updateWorkspace(command.id, command.input)
           break
-        case 'delete-product-account':
-          operations.deleteProductAccount(command.id)
+        case 'delete-workspace':
+          operations.deleteWorkspace(command.id)
           break
         case 'create-account-group':
           result = operations.createAccountGroup(
-            command.productAccountId,
+            command.workspaceId,
             command.input
           )
           break
         case 'update-account-group':
           operations.updateAccountGroup(
-            command.productAccountId,
+            command.workspaceId,
             command.groupId,
             command.input
           )
           break
         case 'delete-account-group':
-          operations.deleteAccountGroup(command.productAccountId, command.groupId)
+          operations.deleteAccountGroup(command.workspaceId, command.groupId)
           break
         case 'set-account-group-accounts':
           result = operations.setAccountGroupAccounts(
-            command.productAccountId,
+            command.workspaceId,
             command.groupId,
             command.assetAccountIds
           )
           break
         case 'remove-account-from-group':
           operations.removeAccountFromGroup(
-            command.productAccountId,
+            command.workspaceId,
             command.groupId,
             command.assetAccountId
           )
           break
         case 'create-position-group':
           result = operations.createPositionGroup(
-            command.productAccountId,
+            command.workspaceId,
             command.input
           )
           break
         case 'update-position-group':
           operations.updatePositionGroup(
-            command.productAccountId,
+            command.workspaceId,
             command.groupId,
             command.input
           )
           break
         case 'delete-position-group':
-          operations.deletePositionGroup(command.productAccountId, command.groupId)
+          operations.deletePositionGroup(command.workspaceId, command.groupId)
           break
         case 'set-position-group-positions':
           result = operations.setPositionGroupPositions(
-            command.productAccountId,
+            command.workspaceId,
             command.groupId,
             command.positionIds
           )
           break
         case 'remove-position-from-group':
           operations.removePositionFromGroup(
-            command.productAccountId,
+            command.workspaceId,
             command.groupId,
             command.positionId
           )
           break
         case 'create-asset-account':
           result = operations.createAssetAccount(
-            command.productAccountId,
+            command.workspaceId,
             command.input
           )
           break
         case 'update-asset-account':
           operations.updateAssetAccount(
-            command.productAccountId,
+            command.workspaceId,
             command.assetAccountId,
             command.input
           )
           break
         case 'delete-asset-account':
           operations.deleteAssetAccount(
-            command.productAccountId,
+            command.workspaceId,
             command.assetAccountId
           )
           break
         case 'save-position':
           result = operations.savePosition(
-            command.productAccountId,
+            command.workspaceId,
             command.assetAccountId,
             command.input,
             command.positionId
@@ -1969,21 +1969,21 @@ export class PortfolioService implements PortfolioOperations {
           break
         case 'delete-position':
           operations.deletePosition(
-            command.productAccountId,
+            command.workspaceId,
             command.assetAccountId,
             command.positionId
           )
           break
         case 'replace-positions':
           operations.replacePositions(
-            command.productAccountId,
+            command.workspaceId,
             command.assetAccountId,
             command.positions,
             command.lastSyncedAt
           )
           break
-        case 'import-account':
-          result = operations.importAccount(command.account, command.snapshots)
+        case 'import-workspace':
+          result = operations.importWorkspace(command.workspace, command.snapshots)
           break
         default:
           throw new Error('不支持的资产命令')
@@ -2020,21 +2020,21 @@ export class PortfolioService implements PortfolioOperations {
     })
   }
 
-  inspectBackup(content: unknown): AccountBackup | null {
-    return typeof content === 'string' ? parseAccountBackup(content) : null
+  inspectBackup(content: unknown): WorkspaceBackup | null {
+    return typeof content === 'string' ? parseWorkspaceBackup(content) : null
   }
 
-  async exportActiveAccount(): Promise<string> {
+  async exportActiveWorkspace(): Promise<string> {
     return this.runExclusive(async () => {
       await this.initialize()
-      const account = this.data.productAccounts.find(
-        (item) => item.id === this.data.activeProductAccountId
+      const workspace = this.data.workspaces.find(
+        (item) => item.id === this.data.activeWorkspaceId
       )
-      if (!account) throw new Error('没有可导出的账户')
-      return createAccountBackup(
-        account,
+      if (!workspace) throw new Error('没有可导出的工作区')
+      return createWorkspaceBackup(
+        workspace,
         this.data.snapshots.filter(
-          (snapshot) => snapshot.productAccountId === account.id
+          (snapshot) => snapshot.workspaceId === workspace.id
         )
       )
     })

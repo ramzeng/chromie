@@ -16,7 +16,7 @@ import type {
 } from './integrations'
 
 export type Market = 'CN' | 'HK' | 'US' | 'CC'
-export type AnchorCurrency = 'CNY' | 'HKD' | 'USD'
+export type BaseCurrency = 'CNY' | 'HKD' | 'USD'
 export type AssetAccountType =
   | 'Futu'
   | 'Boci'
@@ -63,10 +63,10 @@ export type PositionGroup = {
   positionIds: string[]
 }
 
-export type ProductAccount = {
+export type Workspace = {
   id: string
   name: string
-  anchorCurrency: AnchorCurrency
+  baseCurrency: BaseCurrency
   exchangeRateProvider: ExchangeRateProvider
   exchangeRateRefreshIntervalMinutes: number
   accountGroups: AccountGroup[]
@@ -74,31 +74,31 @@ export type ProductAccount = {
   positionGroups: PositionGroup[]
 }
 
-export type PortfolioSnapshot = {
+export type WorkspaceSnapshot = {
   id: string
-  productAccountId: string
+  workspaceId: string
   createdAt: string
-  account: ProductAccount
+  workspace: Workspace
   exchangeRates?: ExchangeRateSnapshot
 }
 
 export type AppData = {
   version: 1
-  activeProductAccountId: string | null
-  productAccounts: ProductAccount[]
-  snapshots: PortfolioSnapshot[]
+  activeWorkspaceId: string | null
+  workspaces: Workspace[]
+  snapshots: WorkspaceSnapshot[]
 }
 
-export type AccountBackup = {
-  account: ProductAccount
-  snapshots: PortfolioSnapshot[]
+export type WorkspaceBackup = {
+  workspace: Workspace
+  snapshots: WorkspaceSnapshot[]
 }
 
-export type ProductAccountInput = Pick<ProductAccount, 'name' | 'anchorCurrency'>
-export type ProductAccountSettingsInput = Pick<
-  ProductAccount,
+export type WorkspaceInput = Pick<Workspace, 'name' | 'baseCurrency'>
+export type WorkspaceSettingsInput = Pick<
+  Workspace,
   | 'name'
-  | 'anchorCurrency'
+  | 'baseCurrency'
   | 'exchangeRateProvider'
   | 'exchangeRateRefreshIntervalMinutes'
 >
@@ -113,108 +113,108 @@ export type AccountGroupInput = Pick<AccountGroup, 'name'>
 export type PositionGroupInput = Pick<PositionGroup, 'name'>
 
 export type PortfolioCommand =
-  | { type: 'set-active-product-account'; id: string }
+  | { type: 'set-active-workspace'; id: string }
   | {
       type: 'create-snapshot'
-      productAccountId: string
+      workspaceId: string
       exchangeRates?: ExchangeRateSnapshot | null
     }
   | { type: 'delete-snapshot'; snapshotId: string }
-  | { type: 'create-product-account'; input: ProductAccountInput }
+  | { type: 'create-workspace'; input: WorkspaceInput }
   | {
-      type: 'update-product-account'
+      type: 'update-workspace'
       id: string
-      input: ProductAccountSettingsInput
+      input: WorkspaceSettingsInput
     }
-  | { type: 'delete-product-account'; id: string }
+  | { type: 'delete-workspace'; id: string }
   | {
       type: 'create-account-group'
-      productAccountId: string
+      workspaceId: string
       input: AccountGroupInput
     }
   | {
       type: 'update-account-group'
-      productAccountId: string
+      workspaceId: string
       groupId: string
       input: AccountGroupInput
     }
-  | { type: 'delete-account-group'; productAccountId: string; groupId: string }
+  | { type: 'delete-account-group'; workspaceId: string; groupId: string }
   | {
       type: 'set-account-group-accounts'
-      productAccountId: string
+      workspaceId: string
       groupId: string
       assetAccountIds: string[]
     }
   | {
       type: 'remove-account-from-group'
-      productAccountId: string
+      workspaceId: string
       groupId: string
       assetAccountId: string
     }
   | {
       type: 'create-position-group'
-      productAccountId: string
+      workspaceId: string
       input: PositionGroupInput
     }
   | {
       type: 'update-position-group'
-      productAccountId: string
+      workspaceId: string
       groupId: string
       input: PositionGroupInput
     }
-  | { type: 'delete-position-group'; productAccountId: string; groupId: string }
+  | { type: 'delete-position-group'; workspaceId: string; groupId: string }
   | {
       type: 'set-position-group-positions'
-      productAccountId: string
+      workspaceId: string
       groupId: string
       positionIds: string[]
     }
   | {
       type: 'remove-position-from-group'
-      productAccountId: string
+      workspaceId: string
       groupId: string
       positionId: string
     }
   | {
       type: 'create-asset-account'
-      productAccountId: string
+      workspaceId: string
       input: AssetAccountInput
     }
   | {
       type: 'update-asset-account'
-      productAccountId: string
+      workspaceId: string
       assetAccountId: string
       input: AssetAccountInput
     }
   | {
       type: 'delete-asset-account'
-      productAccountId: string
+      workspaceId: string
       assetAccountId: string
     }
   | {
       type: 'save-position'
-      productAccountId: string
+      workspaceId: string
       assetAccountId: string
       input: PositionInput
       positionId?: string
     }
   | {
       type: 'delete-position'
-      productAccountId: string
+      workspaceId: string
       assetAccountId: string
       positionId: string
     }
   | {
       type: 'replace-positions'
-      productAccountId: string
+      workspaceId: string
       assetAccountId: string
       positions: PositionInput[]
       lastSyncedAt?: string
     }
   | {
-      type: 'import-account'
-      account: ProductAccount
-      snapshots?: PortfolioSnapshot[]
+      type: 'import-workspace'
+      workspace: Workspace
+      snapshots?: WorkspaceSnapshot[]
     }
 
 export type PortfolioCommandResponse = {
@@ -249,14 +249,14 @@ export type PortfolioSyncResponse = {
 
 export const EMPTY_PORTFOLIO_DATA: AppData = {
   version: 1,
-  activeProductAccountId: null,
-  productAccounts: [],
+  activeWorkspaceId: null,
+  workspaces: [],
   snapshots: []
 }
 
 export const DEFAULT_SYNC_INTERVAL = 30
-export const ANCHOR_CURRENCIES: readonly AnchorCurrency[] = ['CNY', 'HKD', 'USD']
-export const DEFAULT_ANCHOR_CURRENCY: AnchorCurrency = 'CNY'
+export const BASE_CURRENCIES: readonly BaseCurrency[] = ['CNY', 'HKD', 'USD']
+export const DEFAULT_BASE_CURRENCY: BaseCurrency = 'CNY'
 export {
   DEFAULT_EXCHANGE_RATE_PROVIDER,
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,

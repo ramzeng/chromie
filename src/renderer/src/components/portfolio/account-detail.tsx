@@ -12,6 +12,11 @@ import {
   Wrench
 } from 'lucide-react'
 
+import {
+  AssetDistributionCharts,
+  createAccountAllocationItems,
+  createPositionAllocationItems
+} from '@/components/portfolio/asset-allocation-chart'
 import { ValueSummaryCard } from '@/components/portfolio/overview'
 import {
   AccountTypeIcon,
@@ -56,7 +61,7 @@ import {
   type AssetAccount,
   type Position,
   type PositionGroup,
-  type ProductAccount
+  type Workspace
 } from '@/lib/portfolio'
 import { valuePositions } from '@/lib/valuation'
 
@@ -67,47 +72,47 @@ export type AccountSyncState = {
 function PositionTable({
   positions,
   readOnly,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates,
   onEditPosition,
   onDeletePosition
 }: {
   positions: Position[]
   readOnly: boolean
-  anchorCurrency: string
+  baseCurrency: string
   exchangeRates: ExchangeRateView
   onEditPosition: (position: Position) => void
   onDeletePosition: (position: Position) => void
 }) {
   const valuation = valuePositions(
     positions,
-    anchorCurrency,
+    baseCurrency,
     exchangeRates.snapshot?.rates
   )
   const canCalculatePercentage =
     valuation.isComplete &&
-    valuation.totalAnchoredMarketValue !== undefined &&
-    valuation.totalAnchoredMarketValue !== 0
+    valuation.totalConvertedMarketValue !== undefined &&
+    valuation.totalConvertedMarketValue !== 0
   const sortedPositions = [...positions].sort((left, right) =>
     compareOptionalValuesDescending(
-      valuation.byPositionId.get(left.id)?.anchoredMarketValue,
-      valuation.byPositionId.get(right.id)?.anchoredMarketValue
+      valuation.byPositionId.get(left.id)?.convertedMarketValue,
+      valuation.byPositionId.get(right.id)?.convertedMarketValue
     )
   )
 
   return (
-    <section>
-      <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
+    <div>
       <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
         <Table className="min-w-[900px] table-fixed">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[25%]">名称代码</TableHead>
+              <TableHead className="w-[11%]">代码</TableHead>
+              <TableHead className="w-[14%]">名称</TableHead>
               <TableHead className="w-[12%] text-right">数量</TableHead>
               <TableHead className="w-[14%] text-right">当前价格</TableHead>
               <TableHead className="w-[19%] text-right">市值</TableHead>
-              <TableHead className="w-[19%] text-right">锚定市值</TableHead>
-              <TableHead className="w-[7%] text-right">占比</TableHead>
+              <TableHead className="w-[19%] text-right">折算市值</TableHead>
+              <TableHead className="w-[7%] text-right">市值占比</TableHead>
               {!readOnly && <TableHead className="w-16" />}
             </TableRow>
           </TableHeader>
@@ -118,10 +123,12 @@ function PositionTable({
                 return (
                   <TableRow key={position.id}>
                     <TableCell className="min-w-0">
-                      <p className="truncate font-semibold">
+                      <span className="block truncate font-semibold">
                         {marketMeta[position.market].shortLabel}.{position.symbol}
-                      </p>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">{position.name}</p>
+                      </span>
+                    </TableCell>
+                    <TableCell className="truncate text-muted-foreground">
+                      {position.name}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       <MaskedAssetValue>{formatNumber(position.quantity)}</MaskedAssetValue>
@@ -139,19 +146,19 @@ function PositionTable({
                           </MaskedAssetValue>}
                     </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
-                      {positionValuation?.anchoredMarketValue === undefined
+                      {positionValuation?.convertedMarketValue === undefined
                         ? '-'
                         : <MaskedAssetValue>
-                            {formatMoney(positionValuation.anchoredMarketValue, anchorCurrency)}
+                            {formatMoney(positionValuation.convertedMarketValue, baseCurrency)}
                           </MaskedAssetValue>}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {!canCalculatePercentage ||
-                      positionValuation?.anchoredMarketValue === undefined
+                      positionValuation?.convertedMarketValue === undefined
                         ? '-'
                         : `${formatAmount(
-                            positionValuation.anchoredMarketValue /
-                              valuation.totalAnchoredMarketValue! *
+                            positionValuation.convertedMarketValue /
+                              valuation.totalConvertedMarketValue! *
                               100
                           )}%`}
                     </TableCell>
@@ -193,7 +200,7 @@ function PositionTable({
               })
             ) : (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={readOnly ? 6 : 7} className="p-0">
+                <TableCell colSpan={readOnly ? 7 : 8} className="p-0">
                   <Empty className="min-h-32 gap-2 border-0 p-3 md:p-3">
                     <EmptyHeader className="gap-1">
                       <EmptyTitle className="text-sm">暂无持仓</EmptyTitle>
@@ -206,14 +213,14 @@ function PositionTable({
           </TableBody>
         </Table>
       </div>
-    </section>
+    </div>
   )
 }
 
 export function AssetAccountDetail({
   account,
   readOnly,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates,
   imageExporting,
   onExportImage,
@@ -225,7 +232,7 @@ export function AssetAccountDetail({
 }: {
   account: AssetAccount
   readOnly: boolean
-  anchorCurrency: string
+  baseCurrency: string
   exchangeRates: ExchangeRateView
   imageExporting: boolean
   onExportImage: () => Promise<void>
@@ -257,9 +264,9 @@ export function AssetAccountDetail({
                   aria-hidden="true"
                   className="size-3.5 shrink-0 text-muted-foreground"
                 />
-                <dt className="shrink-0 text-muted-foreground">维护模式</dt>
+                <dt className="shrink-0 text-muted-foreground">更新方式</dt>
                 <dd className="ml-0.5 font-medium text-foreground">
-                  {account.sync ? '自动' : '手动'}
+                  {account.sync ? '自动同步' : '手动维护'}
                 </dd>
               </div>
             </dl>
@@ -313,18 +320,28 @@ export function AssetAccountDetail({
       <div className="mt-6 grid gap-6">
         <ValueSummaryCard
           positions={account.positions}
-          anchorCurrency={anchorCurrency}
+          baseCurrency={baseCurrency}
           exchangeRates={exchangeRates}
         />
         {account.positions.length ? (
-          <PositionTable
-            positions={account.positions}
-            readOnly={readOnly || Boolean(account.sync)}
-            anchorCurrency={anchorCurrency}
-            exchangeRates={exchangeRates}
-            onEditPosition={onEditPosition}
-            onDeletePosition={onDeletePosition}
-          />
+          <>
+            <AssetDistributionCharts
+              positions={account.positions}
+              breakdownItems={createPositionAllocationItems(account.positions)}
+              breakdownTitle="持仓市值分布"
+              breakdownDimensionLabel="持仓"
+              baseCurrency={baseCurrency}
+              rates={exchangeRates.snapshot?.rates}
+            />
+            <PositionTable
+              positions={account.positions}
+              readOnly={readOnly || Boolean(account.sync)}
+              baseCurrency={baseCurrency}
+              exchangeRates={exchangeRates}
+              onEditPosition={onEditPosition}
+              onDeletePosition={onDeletePosition}
+            />
+          </>
         ) : (
           <Empty className="min-h-64 border bg-card">
             <EmptyHeader>
@@ -333,7 +350,7 @@ export function AssetAccountDetail({
               </EmptyMedia>
               <EmptyTitle>{account.sync ? '同步资产账户' : '为资产账户添加持仓'}</EmptyTitle>
               <EmptyDescription>
-                {account.sync ? '同步后，可以查看币种、市值和持仓分布' : '添加持仓后，可以查看币种、市值和持仓分布'}
+                {account.sync ? '同步后，可以查看币种、市值和持仓市值分布' : '添加持仓后，可以查看币种、市值和持仓市值分布'}
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
@@ -370,14 +387,14 @@ export function AssetAccountDetail({
 function AccountGroupAccountTable({
   accounts,
   readOnly,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates,
   onRemove,
   removingAccountIds
 }: {
   accounts: AssetAccount[]
   readOnly: boolean
-  anchorCurrency: string
+  baseCurrency: string
   exchangeRates: ExchangeRateView
   onRemove: (assetAccountId: string) => Promise<void>
   removingAccountIds: ReadonlySet<string>
@@ -387,29 +404,28 @@ function AccountGroupAccountTable({
       account,
       valuation: valuePositions(
         account.positions,
-        anchorCurrency,
+        baseCurrency,
         exchangeRates.snapshot?.rates
       )
     }))
     .sort((left, right) =>
       compareOptionalValuesDescending(
-        left.valuation.totalAnchoredMarketValue,
-        right.valuation.totalAnchoredMarketValue
+        left.valuation.totalConvertedMarketValue,
+        right.valuation.totalConvertedMarketValue
       )
     )
 
   return (
-    <section>
-      <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">资产账户分布</h2>
+    <div>
       <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
         <Table className="min-w-[1080px] table-fixed">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[30%]">资产账户</TableHead>
               <TableHead className="w-[18%]">账户类型</TableHead>
-              <TableHead className="w-[18%]">维护模式</TableHead>
-              <TableHead className="w-[12%] text-right">持仓</TableHead>
-              <TableHead className="w-[20%] text-right">锚定市值</TableHead>
+              <TableHead className="w-[18%]">更新方式</TableHead>
+              <TableHead className="w-[12%] text-right">持仓数</TableHead>
+              <TableHead className="w-[20%] text-right">折算市值</TableHead>
               {!readOnly && <TableHead className="w-16" />}
             </TableRow>
           </TableHeader>
@@ -430,17 +446,17 @@ function AccountGroupAccountTable({
                     {assetAccountTypeLabels[account.type]}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {account.sync ? '自动' : '手动'}
+                    {account.sync ? '自动同步' : '手动维护'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums text-muted-foreground">
                     {account.positions.length}
                   </TableCell>
                   <TableCell className="text-right font-semibold tabular-nums">
-                    {valuation.totalAnchoredMarketValue === undefined
+                    {valuation.totalConvertedMarketValue === undefined
                       ? '-'
                       : (
                           <MaskedAssetValue>
-                            {formatMoney(valuation.totalAnchoredMarketValue, anchorCurrency)}
+                            {formatMoney(valuation.totalConvertedMarketValue, baseCurrency)}
                           </MaskedAssetValue>
                         )}
                   </TableCell>
@@ -453,8 +469,8 @@ function AccountGroupAccountTable({
                         aria-busy={removing}
                         aria-label={
                           removing
-                            ? `正在将 ${account.name} 移出资产分组`
-                            : `将 ${account.name} 移出资产分组`
+                            ? `正在将 ${account.name} 移出账户分组`
+                            : `将 ${account.name} 移出账户分组`
                         }
                         onClick={() => void onRemove(account.id)}
                       >
@@ -468,7 +484,7 @@ function AccountGroupAccountTable({
           </TableBody>
         </Table>
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -476,7 +492,7 @@ export function AccountGroupDetail({
   group,
   assetAccounts,
   readOnly,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates,
   onManageAccounts,
   onRemoveAccount,
@@ -485,7 +501,7 @@ export function AccountGroupDetail({
   group: AccountGroup
   assetAccounts: AssetAccount[]
   readOnly: boolean
-  anchorCurrency: string
+  baseCurrency: string
   exchangeRates: ExchangeRateView
   onManageAccounts: () => void
   onRemoveAccount: (assetAccountId: string) => Promise<void>
@@ -513,7 +529,7 @@ export function AccountGroupDetail({
         {!readOnly && (
           <Button onClick={onManageAccounts}>
             <ListPlus data-icon="inline-start" />
-            管理账户
+            管理资产账户
           </Button>
         )}
       </header>
@@ -521,17 +537,25 @@ export function AccountGroupDetail({
       <div className="mt-6">
         <ValueSummaryCard
           positions={positions}
-          anchorCurrency={anchorCurrency}
+          baseCurrency={baseCurrency}
           exchangeRates={exchangeRates}
         />
       </div>
 
       {accounts.length ? (
         <div className="mt-6 grid gap-6">
+          <AssetDistributionCharts
+            positions={positions}
+            breakdownItems={createAccountAllocationItems(accounts)}
+            breakdownTitle="资产账户市值分布"
+            breakdownDimensionLabel="资产账户"
+            baseCurrency={baseCurrency}
+            rates={exchangeRates.snapshot?.rates}
+          />
           <AccountGroupAccountTable
             accounts={accounts}
             readOnly={readOnly}
-            anchorCurrency={anchorCurrency}
+            baseCurrency={baseCurrency}
             exchangeRates={exchangeRates}
             onRemove={onRemoveAccount}
             removingAccountIds={removingAccountIds}
@@ -543,16 +567,16 @@ export function AccountGroupDetail({
             <EmptyMedia variant="icon">
               <Layers2 data-icon="inline-start" />
             </EmptyMedia>
-            <EmptyTitle>为资产分组添加资产账户</EmptyTitle>
+            <EmptyTitle>为账户分组添加资产账户</EmptyTitle>
             <EmptyDescription>
-              可选择多个资产账户统一查看，账户和持仓仍在原位置独立维护
+              可选择多个资产账户统一查看，资产账户和持仓仍在原位置独立维护
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             {!readOnly && (
               <Button onClick={onManageAccounts}>
                 <ListPlus data-icon="inline-start" />
-                选择账户
+                选择资产账户
               </Button>
             )}
           </EmptyContent>
@@ -572,15 +596,15 @@ function GroupPositionTable({
   items,
   accountGroups,
   readOnly,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates,
   onRemove,
   removingPositionIds
 }: {
   items: GroupPositionItem[]
-  accountGroups: ProductAccount['accountGroups']
+  accountGroups: Workspace['accountGroups']
   readOnly: boolean
-  anchorCurrency: string
+  baseCurrency: string
   exchangeRates: ExchangeRateView
   onRemove: (positionId: string) => Promise<void>
   removingPositionIds: ReadonlySet<string>
@@ -588,35 +612,35 @@ function GroupPositionTable({
   const positions = items.map((item) => item.position)
   const valuation = valuePositions(
     positions,
-    anchorCurrency,
+    baseCurrency,
     exchangeRates.snapshot?.rates
   )
   const canCalculatePercentage =
     valuation.isComplete &&
-    valuation.totalAnchoredMarketValue !== undefined &&
-    valuation.totalAnchoredMarketValue !== 0
+    valuation.totalConvertedMarketValue !== undefined &&
+    valuation.totalConvertedMarketValue !== 0
   const sortedItems = [...items].sort((left, right) =>
     compareOptionalValuesDescending(
-      valuation.byPositionId.get(left.position.id)?.anchoredMarketValue,
-      valuation.byPositionId.get(right.position.id)?.anchoredMarketValue
+      valuation.byPositionId.get(left.position.id)?.convertedMarketValue,
+      valuation.byPositionId.get(right.position.id)?.convertedMarketValue
     )
   )
 
   return (
-    <section>
-      <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
+    <div>
       <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
         <Table className="min-w-[1080px] table-fixed">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[13%]">资产账户</TableHead>
-              <TableHead className="w-[10%]">资产分组</TableHead>
-              <TableHead className="w-[18%]">名称代码</TableHead>
+              <TableHead className="w-[10%]">账户分组</TableHead>
+              <TableHead className="w-[9%]">代码</TableHead>
+              <TableHead className="w-[9%]">名称</TableHead>
               <TableHead className="w-[8%] text-right">数量</TableHead>
               <TableHead className="w-[11%] text-right">当前价格</TableHead>
               <TableHead className="w-[15%] text-right">市值</TableHead>
-              <TableHead className="w-[15%] text-right">锚定市值</TableHead>
-              <TableHead className="w-[6%] text-right">占比</TableHead>
+              <TableHead className="w-[15%] text-right">折算市值</TableHead>
+              <TableHead className="w-[6%] text-right">市值占比</TableHead>
               {!readOnly && <TableHead className="w-16" />}
             </TableRow>
           </TableHeader>
@@ -639,10 +663,12 @@ function GroupPositionTable({
                       )?.name ?? '-'}
                     </TableCell>
                     <TableCell className="min-w-0">
-                      <p className="truncate font-semibold">
+                      <span className="block truncate font-semibold">
                         {marketMeta[position.market].shortLabel}.{position.symbol}
-                      </p>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">{position.name}</p>
+                      </span>
+                    </TableCell>
+                    <TableCell className="truncate text-muted-foreground">
+                      {position.name}
                     </TableCell>
                     <TableCell className="text-right font-medium tabular-nums">
                       <MaskedAssetValue>{formatNumber(position.quantity)}</MaskedAssetValue>
@@ -660,19 +686,19 @@ function GroupPositionTable({
                           </MaskedAssetValue>}
                     </TableCell>
                     <TableCell className="text-right font-semibold tabular-nums">
-                      {positionValuation?.anchoredMarketValue === undefined
+                      {positionValuation?.convertedMarketValue === undefined
                         ? '-'
                         : <MaskedAssetValue>
-                            {formatMoney(positionValuation.anchoredMarketValue, anchorCurrency)}
+                            {formatMoney(positionValuation.convertedMarketValue, baseCurrency)}
                           </MaskedAssetValue>}
                     </TableCell>
                     <TableCell className="text-right tabular-nums text-muted-foreground">
                       {!canCalculatePercentage ||
-                      positionValuation?.anchoredMarketValue === undefined
+                      positionValuation?.convertedMarketValue === undefined
                         ? '-'
                         : `${formatAmount(
-                            positionValuation.anchoredMarketValue /
-                              valuation.totalAnchoredMarketValue! *
+                            positionValuation.convertedMarketValue /
+                              valuation.totalConvertedMarketValue! *
                               100
                           )}%`}
                     </TableCell>
@@ -699,7 +725,7 @@ function GroupPositionTable({
               })
             ) : (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={readOnly ? 8 : 9} className="p-0">
+                <TableCell colSpan={readOnly ? 9 : 10} className="p-0">
                   <Empty className="min-h-32 gap-2 border-0 p-3 md:p-3">
                     <EmptyHeader className="gap-1">
                       <EmptyTitle className="text-sm">暂无持仓</EmptyTitle>
@@ -712,7 +738,7 @@ function GroupPositionTable({
           </TableBody>
         </Table>
       </div>
-    </section>
+    </div>
   )
 }
 
@@ -721,7 +747,7 @@ export function PositionGroupDetail({
   assetAccounts,
   accountGroups,
   readOnly,
-  anchorCurrency,
+  baseCurrency,
   exchangeRates,
   imageExporting,
   onExportImage,
@@ -731,9 +757,9 @@ export function PositionGroupDetail({
 }: {
   group: PositionGroup
   assetAccounts: AssetAccount[]
-  accountGroups: ProductAccount['accountGroups']
+  accountGroups: Workspace['accountGroups']
   readOnly: boolean
-  anchorCurrency: string
+  baseCurrency: string
   exchangeRates: ExchangeRateView
   imageExporting: boolean
   onExportImage: () => Promise<void>
@@ -748,6 +774,7 @@ export function PositionGroupDetail({
     const position = account?.positions.find((item) => item.id === positionId)
     return account && position ? [{ positionId, account, position }] : []
   })
+  const positions = items.map((item) => item.position)
 
   return (
     <div className="mx-auto w-[calc(50%+36rem)] max-w-full px-4 pb-8 pt-4">
@@ -785,19 +812,27 @@ export function PositionGroupDetail({
 
       <div className="mt-6">
         <ValueSummaryCard
-          positions={items.map((item) => item.position)}
-          anchorCurrency={anchorCurrency}
+          positions={positions}
+          baseCurrency={baseCurrency}
           exchangeRates={exchangeRates}
         />
       </div>
 
       {items.length ? (
         <div className="mt-6 grid gap-6">
+          <AssetDistributionCharts
+            positions={positions}
+            breakdownItems={createPositionAllocationItems(positions)}
+            breakdownTitle="持仓市值分布"
+            breakdownDimensionLabel="持仓"
+            baseCurrency={baseCurrency}
+            rates={exchangeRates.snapshot?.rates}
+          />
           <GroupPositionTable
             items={items}
             accountGroups={accountGroups}
             readOnly={readOnly}
-            anchorCurrency={anchorCurrency}
+            baseCurrency={baseCurrency}
             exchangeRates={exchangeRates}
             onRemove={onRemovePosition}
             removingPositionIds={removingPositionIds}
@@ -810,7 +845,7 @@ export function PositionGroupDetail({
               <Folder data-icon="inline-start" />
             </EmptyMedia>
             <EmptyTitle>为持仓分组添加持仓</EmptyTitle>
-            <EmptyDescription>可混合选择不同资产账户中的持仓，数据会跟随原账户更新</EmptyDescription>
+            <EmptyDescription>可混合选择不同资产账户中的持仓，数据会跟随原资产账户更新</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             {!readOnly && (

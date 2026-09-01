@@ -12,7 +12,7 @@ createRoot(document.getElementById('root')!).render(
     <Toaster
       closeButton
       position="top-center"
-      offset={{ top: 64 }}
+      offset={{ top: 32 }}
       visibleToasts={3}
     />
   </StrictMode>
