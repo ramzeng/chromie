@@ -1,11 +1,11 @@
 import { Buffer } from 'node:buffer'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash } from 'node:crypto'
 
 import {
   DEFAULT_MCP_ACCESS_SETTINGS,
   createAccountInputSchema,
   createAssetAccountInputSchema,
-  createHolderInputSchema,
+  createAccountGroupInputSchema,
   createPositionGroupInputSchema,
   createPositionInputSchema,
   createSnapshotInputSchema,
@@ -16,12 +16,13 @@ import {
   listSnapshotsInputSchema,
   mcpToolInputSchemas,
   refreshExchangeRatesInputSchema,
+  replaceAccountGroupMembersInputSchema,
   replacePositionGroupMembersInputSchema,
   searchPositionsInputSchema,
   syncAssetAccountInputSchema,
   updateAccountInputSchema,
   updateAssetAccountInputSchema,
-  updateHolderInputSchema,
+  updateAccountGroupInputSchema,
   updatePositionGroupInputSchema,
   updatePositionInputSchema,
   type McpAccessSettings,
@@ -103,8 +104,9 @@ type AccountView = {
 const WRITE_TOOLS = new Set<McpToolName>([
   'chromie_create_account',
   'chromie_update_account',
-  'chromie_create_holder',
-  'chromie_update_holder',
+  'chromie_create_account_group',
+  'chromie_update_account_group',
+  'chromie_replace_account_group_members',
   'chromie_create_asset_account',
   'chromie_update_asset_account',
   'chromie_create_position',
@@ -158,7 +160,7 @@ function positionCursorScope(
       market: input.market ?? null,
       currency: input.currency ?? null,
       asset_account_id: input.asset_account_id ?? null,
-      holder_id: input.holder_id ?? null,
+      account_group_id: input.account_group_id ?? null,
       group_id: input.group_id ?? null
     }))
     .digest('base64url')
@@ -243,12 +245,15 @@ function safeAccount(
     exchange_rate_provider: account.exchangeRateProvider,
     exchange_rate_refresh_interval_minutes:
       account.exchangeRateRefreshIntervalMinutes,
-    holders: account.holders.map((holder) => ({ ...holder })),
+    account_groups: account.accountGroups.map((accountGroup) => ({
+      id: accountGroup.id,
+      name: accountGroup.name,
+      asset_account_ids: [...accountGroup.assetAccountIds]
+    })),
     asset_accounts: account.assetAccounts.map((assetAccount) => ({
       id: assetAccount.id,
       name: assetAccount.name,
       type: assetAccount.type,
-      holder_id: assetAccount.holderId,
       sync: safeIntegrationStatus(
         assetAccount,
         integrations.find((item) => item.assetAccountId === assetAccount.id)
@@ -380,10 +385,18 @@ export class PortfolioModule implements PortfolioModuleOperations {
           return await this.createAccount(createAccountInputSchema.parse(parsed.data))
         case 'chromie_update_account':
           return await this.updateAccount(updateAccountInputSchema.parse(parsed.data))
-        case 'chromie_create_holder':
-          return await this.createHolder(createHolderInputSchema.parse(parsed.data))
-        case 'chromie_update_holder':
-          return await this.updateHolder(updateHolderInputSchema.parse(parsed.data))
+        case 'chromie_create_account_group':
+          return await this.createAccountGroup(
+            createAccountGroupInputSchema.parse(parsed.data)
+          )
+        case 'chromie_update_account_group':
+          return await this.updateAccountGroup(
+            updateAccountGroupInputSchema.parse(parsed.data)
+          )
+        case 'chromie_replace_account_group_members':
+          return await this.replaceAccountGroupMembers(
+            replaceAccountGroupMembersInputSchema.parse(parsed.data)
+          )
         case 'chromie_create_asset_account':
           return await this.createAssetAccount(
             createAssetAccountInputSchema.parse(parsed.data)
@@ -553,7 +566,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         id: account.id,
         name: account.name,
         anchor_currency: account.anchorCurrency,
-        holder_count: account.holders.length,
+        account_group_count: account.accountGroups.length,
         asset_account_count: account.assetAccounts.length,
         position_group_count: account.positionGroups.length,
         position_count: positions.length,
@@ -610,6 +623,17 @@ export class PortfolioModule implements PortfolioModuleOperations {
         id: item.id,
         name: item.name,
         positions: item.positions
+      }))
+    } else if (input.group_by === 'account_group') {
+      const assetAccountById = new Map(
+        account.assetAccounts.map((assetAccount) => [assetAccount.id, assetAccount] as const)
+      )
+      rawRows = account.accountGroups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        positions: group.assetAccountIds.flatMap(
+          (assetAccountId) => assetAccountById.get(assetAccountId)?.positions ?? []
+        )
       }))
     } else if (input.group_by === 'position_group') {
       rawRows = account.positionGroups.map((group) => ({
@@ -706,7 +730,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const state = await this.portfolio.load()
     const resolved = await this.resolveView(state, input.account_id, input.view)
     const account = resolved.account
-    const holderById = new Map(account.holders.map((holder) => [holder.id, holder]))
+    const accountGroupByAssetAccountId = new Map(
+      account.accountGroups.flatMap((accountGroup) =>
+        accountGroup.assetAccountIds.map(
+          (assetAccountId) => [assetAccountId, accountGroup] as const
+        )
+      )
+    )
     const groupsByPositionId = new Map(
       account.positionGroups.flatMap((group) =>
         group.positionIds.map((positionId) => [positionId, group] as const)
@@ -715,7 +745,12 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const normalizedQuery = input.query?.toLocaleLowerCase()
     const rows = account.assetAccounts.flatMap((assetAccount) => {
       if (input.asset_account_id && input.asset_account_id !== assetAccount.id) return []
-      if (input.holder_id && input.holder_id !== assetAccount.holderId) return []
+      if (
+        input.account_group_id &&
+        input.account_group_id !== accountGroupByAssetAccountId.get(assetAccount.id)?.id
+      ) {
+        return []
+      }
       return assetAccount.positions.flatMap((position) => {
         const group = groupsByPositionId.get(position.id)
         if (input.group_id && group?.id !== input.group_id) return []
@@ -732,7 +767,16 @@ export class PortfolioModule implements PortfolioModuleOperations {
           value: {
             ...position,
             asset_account: { id: assetAccount.id, name: assetAccount.name },
-            holder: holderById.get(assetAccount.holderId) ?? null,
+            account_group: (() => {
+              const accountGroup = accountGroupByAssetAccountId.get(assetAccount.id)
+              return accountGroup
+                ? {
+                    id: accountGroup.id,
+                    name: accountGroup.name,
+                    asset_account_ids: [...accountGroup.assetAccountIds]
+                  }
+                : null
+            })(),
             group: group ? { id: group.id, name: group.name } : null,
             valuation: positionValue(
               position,
@@ -814,8 +858,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         input.exchange_rate_provider ?? account.exchangeRateProvider,
       exchangeRateRefreshIntervalMinutes:
         input.exchange_rate_refresh_interval_minutes ??
-        account.exchangeRateRefreshIntervalMinutes,
-      holders: account.holders
+        account.exchangeRateRefreshIntervalMinutes
     }
     await this.portfolio.execute({
       type: 'update-product-account',
@@ -827,71 +870,73 @@ export class PortfolioModule implements PortfolioModuleOperations {
     })
   }
 
-  private async createHolder(
-    input: McpToolArguments['chromie_create_holder']
+  private async createAccountGroup(
+    input: McpToolArguments['chromie_create_account_group']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
-    const account = requireAccount(state.data, input.account_id)
-    if (
-      account.holders.some(
-        (holder) =>
-          holder.name.trim().toLocaleLowerCase() ===
-            input.name.trim().toLocaleLowerCase()
-      )
-    ) {
-      throw new McpOperationError('VALIDATION_ERROR', '持有人名称不能重复')
+    requireAccount(state.data, input.account_id)
+    const response = await this.portfolio.execute({
+      type: 'create-account-group',
+      productAccountId: input.account_id,
+      input: { name: input.name }
+    })
+    if (typeof response.result !== 'string') {
+      throw new Error('创建账户分组后无法读取结果')
     }
-    const holder = { id: randomUUID(), name: input.name }
-    await this.portfolio.execute({
-      type: 'update-product-account',
-      id: account.id,
-      input: {
-        name: account.name,
-        anchorCurrency: account.anchorCurrency,
-        exchangeRateProvider: account.exchangeRateProvider,
-        exchangeRateRefreshIntervalMinutes:
-          account.exchangeRateRefreshIntervalMinutes,
-        holders: [...account.holders, holder]
+    return success(`已创建账户分组“${input.name}”`, {
+      account_group: {
+        id: response.result,
+        name: input.name,
+        asset_account_ids: []
       }
     })
-    return success(`已创建持有人“${holder.name}”`, { holder })
   }
 
-  private async updateHolder(
-    input: McpToolArguments['chromie_update_holder']
+  private async updateAccountGroup(
+    input: McpToolArguments['chromie_update_account_group']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const account = requireAccount(state.data, input.account_id)
-    const existing = account.holders.find((holder) => holder.id === input.holder_id)
+    const existing = account.accountGroups.find(
+      (accountGroup) => accountGroup.id === input.account_group_id
+    )
     if (!existing) {
-      throw new McpOperationError('NOT_FOUND', '没有找到对应的持有人')
+      throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
     }
-    if (
-      account.holders.some(
-        (holder) =>
-          holder.id !== existing.id &&
-          holder.name.trim().toLocaleLowerCase() ===
-            input.name.trim().toLocaleLowerCase()
-      )
-    ) {
-      throw new McpOperationError('VALIDATION_ERROR', '持有人名称不能重复')
-    }
-    const holder = { ...existing, name: input.name }
     await this.portfolio.execute({
-      type: 'update-product-account',
-      id: account.id,
-      input: {
-        name: account.name,
-        anchorCurrency: account.anchorCurrency,
-        exchangeRateProvider: account.exchangeRateProvider,
-        exchangeRateRefreshIntervalMinutes:
-          account.exchangeRateRefreshIntervalMinutes,
-        holders: account.holders.map((item) =>
-          item.id === holder.id ? holder : item
-        )
+      type: 'update-account-group',
+      productAccountId: account.id,
+      groupId: existing.id,
+      input: { name: input.name }
+    })
+    return success(`已更新账户分组“${input.name}”`, {
+      account_group: {
+        id: existing.id,
+        name: input.name,
+        asset_account_ids: [...existing.assetAccountIds]
       }
     })
-    return success(`已更新持有人“${holder.name}”`, { holder })
+  }
+
+  private async replaceAccountGroupMembers(
+    input: McpToolArguments['chromie_replace_account_group_members']
+  ): Promise<McpToolSuccess> {
+    const state = await this.portfolio.load()
+    const account = requireAccount(state.data, input.account_id)
+    if (!account.accountGroups.some((group) => group.id === input.account_group_id)) {
+      throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
+    }
+    const response = await this.portfolio.execute({
+      type: 'set-account-group-accounts',
+      productAccountId: account.id,
+      groupId: input.account_group_id,
+      assetAccountIds: input.asset_account_ids
+    })
+    assertCommandResult(response)
+    return success(`账户分组现包含 ${input.asset_account_ids.length} 个资产账户`, {
+      account_group_id: input.account_group_id,
+      asset_account_ids: input.asset_account_ids
+    })
   }
 
   private async createAssetAccount(
@@ -902,8 +947,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
       productAccountId: input.account_id,
       input: {
         name: input.name,
-        type: input.type,
-        holderId: input.holder_id
+        type: input.type
       }
     })
     return success(`已创建资产账户“${input.name}”`, {
@@ -934,7 +978,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
       input: {
         name: input.name ?? assetAccount.name,
         type: nextType,
-        holderId: input.holder_id ?? assetAccount.holderId,
         sync: assetAccount.sync,
         ...(integration ? { integration: integrationInput(integration) } : {})
       }
@@ -1149,26 +1192,17 @@ export class PortfolioModule implements PortfolioModuleOperations {
 
     if (target.kind === 'account') {
       command = { type: 'delete-product-account', id: account.id }
-    } else if (target.kind === 'holder') {
-      const holder = account.holders.find((item) => item.id === target.holder_id)
-      if (!holder) throw new McpOperationError('NOT_FOUND', '没有找到对应的持有人')
-      if (account.assetAccounts.some((item) => item.holderId === holder.id)) {
-        throw new McpOperationError(
-          'VALIDATION_ERROR',
-          '请先为该持有人名下的资产账户重新指定持有人'
-        )
+    } else if (target.kind === 'account_group') {
+      const accountGroup = account.accountGroups.find(
+        (item) => item.id === target.account_group_id
+      )
+      if (!accountGroup) {
+        throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
       }
       command = {
-        type: 'update-product-account',
-        id: account.id,
-        input: {
-          name: account.name,
-          anchorCurrency: account.anchorCurrency,
-          exchangeRateProvider: account.exchangeRateProvider,
-          exchangeRateRefreshIntervalMinutes:
-            account.exchangeRateRefreshIntervalMinutes,
-          holders: account.holders.filter((item) => item.id !== holder.id)
-        }
+        type: 'delete-account-group',
+        productAccountId: account.id,
+        groupId: accountGroup.id
       }
     } else if (target.kind === 'asset_account') {
       requireAssetAccount(account, target.asset_account_id)
@@ -1228,20 +1262,19 @@ export class PortfolioModule implements PortfolioModuleOperations {
       ).length
       return {
         title: `删除账户“${account.name}”`,
-        description: `将同时删除 ${account.holders.length} 个持有人、${account.assetAccounts.length} 个资产账户、${account.positionGroups.length} 个持仓分组、${positionCount} 项持仓和 ${snapshotCount} 个历史快照。此操作无法撤销。`
+        description: `将同时删除 ${account.accountGroups.length} 个账户分组、${account.assetAccounts.length} 个资产账户、${account.positionGroups.length} 个持仓分组、${positionCount} 项持仓和 ${snapshotCount} 个历史快照。此操作无法撤销。`
       }
     }
-    if (target.kind === 'holder') {
-      const holder = account.holders.find((item) => item.id === target.holder_id)
-      if (!holder) throw new McpOperationError('NOT_FOUND', '没有找到对应的持有人')
-      const assetAccountCount = account.assetAccounts.filter(
-        (item) => item.holderId === holder.id
-      ).length
+    if (target.kind === 'account_group') {
+      const accountGroup = account.accountGroups.find(
+        (item) => item.id === target.account_group_id
+      )
+      if (!accountGroup) {
+        throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
+      }
       return {
-        title: `删除持有人“${holder.name}”`,
-        description: assetAccountCount
-          ? `该持有人仍有 ${assetAccountCount} 个资产账户，当前无法删除。`
-          : '将删除这个持有人。此操作无法撤销。'
+        title: `删除账户分组“${accountGroup.name}”`,
+        description: `只会删除分组及其 ${accountGroup.assetAccountIds.length} 个引用，不会删除原资产账户。此操作无法撤销。`
       }
     }
     if (target.kind === 'asset_account') {

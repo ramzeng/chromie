@@ -14,8 +14,14 @@ import {
   formatLastSyncedAt,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card'
 import {
   Empty,
   EmptyDescription,
@@ -41,7 +47,7 @@ import {
   type PositionGroup,
   type ProductAccount
 } from '@/lib/portfolio'
-import { convertToAnchorCurrency, valuePositions } from '@/lib/valuation'
+import { valuePositions } from '@/lib/valuation'
 
 export type OverviewMode = 'accounts' | 'groups'
 
@@ -77,7 +83,7 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
 
   return (
     <div
-      className="mt-3 flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border/70 bg-muted/25 px-4 py-2 text-xs"
+      className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border/70 bg-muted/25 px-4 py-2 text-xs"
       role="status"
     >
       <span className="font-medium text-foreground">参考汇率</span>
@@ -122,65 +128,85 @@ function ExchangeRateBanner({ exchangeRates }: { exchangeRates: ExchangeRateView
 
 export function ValueSummaryCard({
   positions,
+  anchorCurrency,
   exchangeRates
 }: {
   positions: Position[]
+  anchorCurrency: string
   exchangeRates: ExchangeRateView
 }) {
-  const summaries = accountViewCurrencies.map((currency) => {
-    const valuation = valuePositions(
-      positions,
-      currency,
-      exchangeRates.snapshot?.rates
-    )
-    const hint = valuation.missingCurrencies.length
-      ? `缺少 ${valuation.missingCurrencies.join('、')} 汇率`
-      : ''
-
-    return {
-      currency,
-      valuation,
-      hint,
-      hasCompleteTotal:
-        valuation.isComplete && valuation.totalAnchoredMarketValue !== undefined
-    }
+  const anchoredValuation = valuePositions(
+    positions,
+    anchorCurrency,
+    exchangeRates.snapshot?.rates
+  )
+  const hasCompleteAnchoredTotal =
+    anchoredValuation.isComplete &&
+    anchoredValuation.totalAnchoredMarketValue !== undefined
+  const marketValueSummaries = accountViewCurrencies.map((currency) => {
+    let value = 0
+    let hasValue = false
+    positions.forEach((position) => {
+      if (position.currency !== currency || position.price === undefined) return
+      value += position.quantity * position.price
+      hasValue = true
+    })
+    return { currency, value, hasValue }
   })
 
   return (
     <div>
-      <div className="grid gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-3">
-        {summaries.map(({ currency, valuation, hint, hasCompleteTotal }) => (
-          <Card key={currency} className="border-border/70 shadow-none">
-            <CardContent className="min-h-[112px] p-5">
-              <div className="min-w-0">
-                <p className="text-sm text-muted-foreground">{currency} 市值</p>
-                <p className="mt-2 truncate text-2xl font-semibold tracking-[-0.03em] tabular-nums">
-                  {hasCompleteTotal
-                    ? <MaskedAssetValue>
-                        {formatMoney(valuation.totalAnchoredMarketValue!, currency)}
-                      </MaskedAssetValue>
-                    : '-'}
-                </p>
-                {hint && <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p>}
-              </div>
-            </CardContent>
+      <ExchangeRateBanner exchangeRates={exchangeRates} />
+      <div className="mt-3 grid gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-4">
+        <Card className="min-h-[112px] border-border/70 shadow-none">
+          <CardHeader>
+            <CardDescription>锚定市值 · {anchorCurrency}</CardDescription>
+            <CardTitle className="truncate text-2xl tracking-[-0.03em] tabular-nums">
+              {hasCompleteAnchoredTotal
+                ? <MaskedAssetValue>
+                    {formatMoney(
+                      anchoredValuation.totalAnchoredMarketValue!,
+                      anchorCurrency
+                    )}
+                  </MaskedAssetValue>
+                : '-'}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        {marketValueSummaries.map(({ currency, value, hasValue }) => (
+          <Card
+            key={currency}
+            className="min-h-[112px] border-border/70 shadow-none"
+          >
+            <CardHeader>
+              <CardDescription>{currency} 市值</CardDescription>
+              <CardTitle className="truncate text-2xl tracking-[-0.03em] tabular-nums">
+                {hasValue
+                  ? <MaskedAssetValue>{formatMoney(value, currency)}</MaskedAssetValue>
+                  : '-'}
+              </CardTitle>
+            </CardHeader>
           </Card>
         ))}
       </div>
-      <ExchangeRateBanner exchangeRates={exchangeRates} />
+      <Alert role="note" className="mt-3 bg-muted/25 py-2">
+        <AlertDescription className="text-xs text-muted-foreground">
+          锚定市值 = USD 市值 + HKD 市值 + CNY 市值（汇率折算后）
+        </AlertDescription>
+      </Alert>
     </div>
   )
 }
 
 function AssetAccountTable({
   accounts,
-  holders,
+  accountGroups,
   anchorCurrency,
   exchangeRates,
   onOpen
 }: {
   accounts: AssetAccount[]
-  holders: ProductAccount['holders']
+  accountGroups: ProductAccount['accountGroups']
   anchorCurrency: string
   exchangeRates: ExchangeRateView
   onOpen: (id: string) => void
@@ -199,7 +225,9 @@ function AssetAccountTable({
       })
       return {
         account,
-        holderName: holders.find((holder) => holder.id === account.holderId)?.name,
+        accountGroupName: accountGroups.find((accountGroup) =>
+          accountGroup.assetAccountIds.includes(account.id)
+        )?.name,
         marketValues,
         valuation: valuePositions(
           account.positions,
@@ -230,7 +258,7 @@ function AssetAccountTable({
         <TableHeader className="bg-muted/15">
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-[19%]">资产账户</TableHead>
-            <TableHead className="w-[13%]">持有人</TableHead>
+            <TableHead className="w-[13%]">资产分组</TableHead>
             {accountViewCurrencies.map((currency) => (
               <TableHead key={currency} className="w-[12%] text-right">
                 {currency}
@@ -241,7 +269,7 @@ function AssetAccountTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map(({ account, holderName, marketValues, valuation }) => (
+          {rows.map(({ account, accountGroupName, marketValues, valuation }) => (
             <TableRow
               key={account.id}
               role="button"
@@ -261,7 +289,7 @@ function AssetAccountTable({
                 </div>
               </TableCell>
               <TableCell className="truncate text-muted-foreground">
-                {holderName ?? '-'}
+                {accountGroupName ?? '-'}
               </TableCell>
               {accountViewCurrencies.map((currency) => {
                 const marketValue = marketValues.get(currency)!
@@ -298,14 +326,14 @@ function AssetAccountTable({
 function PositionGroupOverviewTable({
   items,
   assetAccounts,
-  holders,
+  accountGroups,
   anchorCurrency,
   exchangeRates,
   onOpen
 }: {
   items: Array<{ group: PositionGroup; positions: Position[] }>
   assetAccounts: AssetAccount[]
-  holders: ProductAccount['holders']
+  accountGroups: ProductAccount['accountGroups']
   anchorCurrency: string
   exchangeRates: ExchangeRateView
   onOpen: (id: string) => void
@@ -313,7 +341,7 @@ function PositionGroupOverviewTable({
   const rows = items
     .map(({ group, positions }) => {
       const positionIds = new Set(positions.map((position) => position.id))
-      const holderNames = [
+      const accountGroupNames = [
         ...new Set(
           assetAccounts
             .filter((account) =>
@@ -321,7 +349,9 @@ function PositionGroupOverviewTable({
             )
             .map(
               (account) =>
-                holders.find((holder) => holder.id === account.holderId)?.name ?? '-'
+                accountGroups.find((accountGroup) =>
+                  accountGroup.assetAccountIds.includes(account.id)
+                )?.name ?? '-'
             )
         )
       ]
@@ -337,7 +367,7 @@ function PositionGroupOverviewTable({
       })
       return {
         group,
-        holderLabel: holderNames.join('、'),
+        accountGroupLabel: accountGroupNames.join('、'),
         marketValues,
         valuation: valuePositions(
           positions,
@@ -368,7 +398,7 @@ function PositionGroupOverviewTable({
         <TableHeader className="bg-muted/15">
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-[19%]">持仓分组</TableHead>
-            <TableHead className="w-[14%]">持有人</TableHead>
+            <TableHead className="w-[14%]">资产分组</TableHead>
             {accountViewCurrencies.map((currency) => (
               <TableHead key={currency} className="w-[11%] text-right">
                 {currency}
@@ -379,7 +409,7 @@ function PositionGroupOverviewTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map(({ group, holderLabel, marketValues, valuation }) => (
+          {rows.map(({ group, accountGroupLabel, marketValues, valuation }) => (
             <TableRow
               key={group.id}
               role="button"
@@ -399,7 +429,7 @@ function PositionGroupOverviewTable({
                 </div>
               </TableCell>
               <TableCell className="truncate text-muted-foreground">
-                {holderLabel || '-'}
+                {accountGroupLabel || '-'}
               </TableCell>
               {accountViewCurrencies.map((currency) => {
                 const marketValue = marketValues.get(currency)!
@@ -503,19 +533,10 @@ export function Overview({
       <section className="mt-6">
         <ValueSummaryCard
           positions={positions}
+          anchorCurrency={account.anchorCurrency}
           exchangeRates={exchangeRates}
         />
       </section>
-
-      {positions.length > 0 && (
-        <div className="mt-6">
-          <CurrencySummaryTable
-            positions={positions}
-            anchorCurrency={account.anchorCurrency}
-            exchangeRates={exchangeRates}
-          />
-        </div>
-      )}
 
       <section className="mt-6">
         <TabsContent value="accounts" className="mt-0">
@@ -524,7 +545,7 @@ export function Overview({
               <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">持仓分布</h2>
               <AssetAccountTable
                 accounts={account.assetAccounts}
-                holders={account.holders}
+                accountGroups={account.accountGroups}
                 anchorCurrency={account.anchorCurrency}
                 exchangeRates={exchangeRates}
                 onOpen={onOpenAssetAccount}
@@ -549,7 +570,7 @@ export function Overview({
               <PositionGroupOverviewTable
                 items={groupItems}
                 assetAccounts={account.assetAccounts}
-                holders={account.holders}
+                accountGroups={account.accountGroups}
                 anchorCurrency={account.anchorCurrency}
                 exchangeRates={exchangeRates}
                 onOpen={onOpenPositionGroup}
@@ -569,127 +590,5 @@ export function Overview({
         </TabsContent>
       </section>
     </Tabs>
-  )
-}
-
-export function CurrencySummaryTable({
-  positions,
-  anchorCurrency,
-  exchangeRates
-}: {
-  positions: Position[]
-  anchorCurrency: string
-  exchangeRates: ExchangeRateView
-}) {
-  const summaries = new Map<
-    string,
-    {
-      currency: string
-      positionCount: number
-      value: number
-      hasValue: boolean
-    }
-  >()
-  positions.forEach((position) => {
-    const current = summaries.get(position.currency) ?? {
-      currency: position.currency,
-      positionCount: 0,
-      value: 0,
-      hasValue: false
-    }
-    current.positionCount += 1
-    if (position.price !== undefined) {
-      current.value += position.quantity * position.price
-      current.hasValue = true
-    }
-    summaries.set(position.currency, current)
-  })
-  const summaryRows = [...summaries.values()]
-    .map((summary) => ({
-      ...summary,
-      anchoredMarketValue: summary.hasValue
-        ? convertToAnchorCurrency(
-            summary.value,
-            summary.currency,
-            anchorCurrency,
-            exchangeRates.snapshot?.rates
-          )
-        : undefined
-    }))
-    .sort((left, right) =>
-      compareOptionalValuesDescending(left.anchoredMarketValue, right.anchoredMarketValue)
-    )
-  const hasMissingRate = summaryRows.some(
-    (summary) => summary.hasValue && summary.anchoredMarketValue === undefined
-  )
-  const totalAnchoredMarketValue = summaryRows.reduce(
-    (total, summary) => total + (summary.anchoredMarketValue ?? 0),
-    0
-  )
-  const canCalculatePercentage = !hasMissingRate && totalAnchoredMarketValue !== 0
-
-  return (
-    <section>
-      <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">币种分布</h2>
-      <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
-        <Table>
-          <TableHeader className="bg-muted/15">
-            <TableRow className="hover:bg-transparent">
-              <TableHead>币种</TableHead>
-              <TableHead className="text-right">持仓</TableHead>
-              <TableHead className="text-right">市值</TableHead>
-              <TableHead className="text-right">锚定市值</TableHead>
-              <TableHead className="text-right">占比</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {summaries.size ? (
-              summaryRows.map((summary) => {
-                return (
-                  <TableRow key={summary.currency}>
-                    <TableCell className="font-semibold">{summary.currency}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {summary.positionCount}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">
-                      {summary.hasValue
-                        ? <MaskedAssetValue>
-                            {formatMoney(summary.value, summary.currency)}
-                          </MaskedAssetValue>
-                        : '-'}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">
-                      {summary.anchoredMarketValue === undefined
-                        ? '-'
-                        : <MaskedAssetValue>
-                            {formatMoney(summary.anchoredMarketValue, anchorCurrency)}
-                          </MaskedAssetValue>}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground">
-                      {!canCalculatePercentage || summary.anchoredMarketValue === undefined
-                        ? '-'
-                        : `${formatAmount(
-                            summary.anchoredMarketValue / totalAnchoredMarketValue * 100
-                          )}%`}
-                    </TableCell>
-                  </TableRow>
-                )
-              })
-            ) : (
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={5} className="p-0">
-                  <Empty className="min-h-24 gap-2 border-0 p-3 md:p-3">
-                    <EmptyHeader className="gap-1">
-                      <EmptyTitle className="text-sm">暂无币种</EmptyTitle>
-                      <EmptyDescription>添加持仓后将在这里汇总</EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-    </section>
   )
 }

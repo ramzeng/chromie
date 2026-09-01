@@ -34,20 +34,14 @@ async function createOkxPortfolio() {
     }
   )
   const accountId = createdAccount.result as string
-  const holderId = crypto.randomUUID()
-  await portfolio.execute(
+  const createdAccountGroup = await portfolio.execute(
     {
-      type: 'update-product-account',
-      id: accountId,
-      input: {
-        name: '家庭资产',
-        anchorCurrency: 'CNY',
-        exchangeRateProvider: 'coinbase',
-        exchangeRateRefreshIntervalMinutes: 15,
-        holders: [{ id: holderId, name: 'Moon' }]
-      }
+      type: 'create-account-group',
+      productAccountId: accountId,
+      input: { name: 'Moon' }
     }
   )
+  const accountGroupId = createdAccountGroup.result as string
   const createdAssetAccount = await portfolio.execute(
     {
       type: 'create-asset-account',
@@ -55,7 +49,6 @@ async function createOkxPortfolio() {
       input: {
         name: 'OKX',
         type: 'Okx',
-        holderId,
         sync: { interval: 30 },
         integration: {
           provider: 'Okx',
@@ -73,12 +66,19 @@ async function createOkxPortfolio() {
       }
     }
   )
+  const assetAccountId = createdAssetAccount.result as string
+  await portfolio.execute({
+    type: 'set-account-group-accounts',
+    productAccountId: accountId,
+    groupId: accountGroupId,
+    assetAccountIds: [assetAccountId]
+  })
 
   return {
     portfolio,
     integrationRepository,
     accountId,
-    assetAccountId: createdAssetAccount.result as string
+    assetAccountId
   }
 }
 
@@ -112,7 +112,6 @@ test('client portfolio responses redact credentials and preserve them on edit', 
     input: {
       name: 'OKX 长期账户',
       type: 'Okx',
-      holderId: assetAccount.holderId,
       sync: assetAccount.sync,
       integration: {
         provider: 'Okx',
@@ -125,4 +124,49 @@ test('client portfolio responses redact credentials and preserve them on edit', 
   assert.match(integrationRepository.content ?? '', /api-key-secret/)
   assert.match(integrationRepository.content ?? '', /secret-key-secret/)
   assert.match(integrationRepository.content ?? '', /passphrase-secret/)
+})
+
+test('legacy holder backups are rejected after the one-time migration boundary', async () => {
+  const portfolioRepository = new MemoryRepository()
+  const integrationRepository = new MemoryRepository()
+  const legacyAccount = {
+    id: 'account-1',
+    name: '家庭资产',
+    anchorCurrency: 'CNY',
+    exchangeRateProvider: 'coinbase',
+    exchangeRateRefreshIntervalMinutes: 15,
+    holders: [{ id: 'holder-1', name: '家庭' }],
+    assetAccounts: [
+      {
+        id: 'asset-account-1',
+        name: '银行卡',
+        type: 'General',
+        holderId: 'holder-1',
+        positions: []
+      }
+    ],
+    positionGroups: []
+  }
+  const portfolio = new PortfolioService(
+    portfolioRepository,
+    integrationRepository
+  )
+  portfolioRepository.content = JSON.stringify({
+    version: 1,
+    activeProductAccountId: legacyAccount.id,
+    productAccounts: [legacyAccount],
+    snapshots: []
+  })
+  const loaded = await portfolio.load()
+  assert.deepEqual(loaded.data.productAccounts, [])
+  assert.match(portfolioRepository.content, /"holders"/)
+
+  const inspectedBackup = portfolio.inspectBackup(JSON.stringify({
+    format: 'chromie-account',
+    version: 1,
+    exportedAt: '2026-09-01T00:00:00.000Z',
+    account: legacyAccount,
+    snapshots: []
+  }))
+  assert.equal(inspectedBackup, null)
 })

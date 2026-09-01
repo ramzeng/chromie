@@ -112,42 +112,54 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   const accountId = dataOf<{ account_id: string }>(createdAccount).account_id
   assert.ok(accountId)
 
-  const holderResult = await module.callMcpTool(
-    'chromie_create_holder',
+  const accountGroupResult = await module.callMcpTool(
+    'chromie_create_account_group',
     {
       account_id: accountId,
       name: 'Moon'
     },
     fullAccess
   )
-  const holderId = dataOf<{ holder: { id: string } }>(holderResult).holder.id
-  const updatedHolder = await module.callMcpTool(
-    'chromie_update_holder',
+  const accountGroupId = dataOf<{ account_group: { id: string } }>(
+    accountGroupResult
+  ).account_group.id
+  const updatedAccountGroup = await module.callMcpTool(
+    'chromie_update_account_group',
     {
       account_id: accountId,
-      holder_id: holderId,
+      account_group_id: accountGroupId,
       name: 'Moon Updated'
     },
     fullAccess
   )
   assert.equal(
-    dataOf<{ holder: { name: string } }>(updatedHolder).holder.name,
+    dataOf<{ account_group: { name: string } }>(updatedAccountGroup)
+      .account_group.name,
     'Moon Updated'
   )
-  assertValidOutput('chromie_update_holder', updatedHolder)
+  assertValidOutput('chromie_update_account_group', updatedAccountGroup)
 
   const assetResult = await module.callMcpTool(
     'chromie_create_asset_account',
     {
       account_id: accountId,
       name: '券商账户',
-      type: 'General',
-      holder_id: holderId
+      type: 'General'
     },
     fullAccess
   )
   const assetAccountId = dataOf<{ asset_account_id: string }>(assetResult)
     .asset_account_id
+  const accountGroupMembers = await module.callMcpTool(
+    'chromie_replace_account_group_members',
+    {
+      account_id: accountId,
+      account_group_id: accountGroupId,
+      asset_account_ids: [assetAccountId]
+    },
+    fullAccess
+  )
+  assertValidOutput('chromie_replace_account_group_members', accountGroupMembers)
   const positionResult = await module.callMcpTool(
     'chromie_create_position',
     {
@@ -177,6 +189,11 @@ test('MCP CRUD reads and writes portfolio data', async () => {
       .exchange_rates.rates,
     { CNY: 7, HKD: 7.8, USD: 1 }
   )
+  assert.equal(
+    dataOf<{ accounts: Array<{ account_group_count: number }> }>(listed)
+      .accounts[0].account_group_count,
+    1
+  )
   assertValidOutput('chromie_list_accounts', listed)
 
   const overview = await module.callMcpTool(
@@ -197,6 +214,19 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   )
   assertValidOutput('chromie_get_overview', overview)
 
+  const accountGroupOverview = await module.callMcpTool(
+    'chromie_get_overview',
+    { account_id: accountId, group_by: 'account_group' },
+    readAccess
+  )
+  assert.equal(
+    dataOf<{ rows: Array<{ id: string; anchored_market_value: number }> }>(
+      accountGroupOverview
+    ).rows.find((row) => row.id === accountGroupId)?.anchored_market_value,
+    1400
+  )
+  assertValidOutput('chromie_get_overview', accountGroupOverview)
+
   const refreshedRates = await module.callMcpTool(
     'chromie_refresh_exchange_rates',
     { account_id: accountId },
@@ -216,12 +246,24 @@ test('MCP CRUD reads and writes portfolio data', async () => {
   )
   const accountData = dataOf<{
     account: {
+      account_groups: Array<{
+        id: string
+        name: string
+        asset_account_ids: string[]
+      }>
       asset_accounts: Array<{
         sync: Record<string, unknown>
         positions?: Array<{ id: string }>
       }>
     }
   }>(account)
+  assert.deepEqual(accountData.account.account_groups, [
+    {
+      id: accountGroupId,
+      name: 'Moon Updated',
+      asset_account_ids: [assetAccountId]
+    }
+  ])
   assert.equal(accountData.account.asset_accounts[0].positions, undefined)
   assert.deepEqual(accountData.account.asset_accounts[0].sync, {
     capable: false,
@@ -283,24 +325,34 @@ test('position pagination uses a query-bound stable cursor', async () => {
     fullAccess
   )
   const accountId = dataOf<{ account_id: string }>(createdAccount).account_id
-  const createdHolder = await module.callMcpTool(
-    'chromie_create_holder',
+  const createdAccountGroup = await module.callMcpTool(
+    'chromie_create_account_group',
     { account_id: accountId, name: 'Tester' },
     fullAccess
   )
-  const holderId = dataOf<{ holder: { id: string } }>(createdHolder).holder.id
+  const accountGroupId = dataOf<{ account_group: { id: string } }>(
+    createdAccountGroup
+  ).account_group.id
   const createdAssetAccount = await module.callMcpTool(
     'chromie_create_asset_account',
     {
       account_id: accountId,
       name: 'Manual',
-      type: 'General',
-      holder_id: holderId
+      type: 'General'
     },
     fullAccess
   )
   const assetAccountId = dataOf<{ asset_account_id: string }>(createdAssetAccount)
     .asset_account_id
+  await module.callMcpTool(
+    'chromie_replace_account_group_members',
+    {
+      account_id: accountId,
+      account_group_id: accountGroupId,
+      asset_account_ids: [assetAccountId]
+    },
+    fullAccess
+  )
 
   for (const symbol of ['AAA', 'BBB', 'CCC']) {
     await module.callMcpTool(

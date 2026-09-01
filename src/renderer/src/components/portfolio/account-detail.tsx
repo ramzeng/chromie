@@ -2,20 +2,17 @@ import {
   Download,
   Ellipsis,
   Folder,
+  Layers2,
   ListPlus,
   Pencil,
   Plus,
   RefreshCw,
   Trash2,
-  UsersRound,
   WalletCards,
   Wrench
 } from 'lucide-react'
 
-import {
-  CurrencySummaryTable,
-  ValueSummaryCard
-} from '@/components/portfolio/overview'
+import { ValueSummaryCard } from '@/components/portfolio/overview'
 import {
   AccountTypeIcon,
   MaskedAssetValue,
@@ -51,9 +48,11 @@ import {
   TableRow
 } from '@/components/ui/table'
 import {
+  assetAccountTypeLabels,
   formatMoney,
   formatNumber,
   marketMeta,
+  type AccountGroup,
   type AssetAccount,
   type Position,
   type PositionGroup,
@@ -213,7 +212,6 @@ function PositionTable({
 
 export function AssetAccountDetail({
   account,
-  holderName,
   readOnly,
   anchorCurrency,
   exchangeRates,
@@ -226,7 +224,6 @@ export function AssetAccountDetail({
   onDeletePosition
 }: {
   account: AssetAccount
-  holderName?: string
   readOnly: boolean
   anchorCurrency: string
   exchangeRates: ExchangeRateView
@@ -255,16 +252,6 @@ export function AssetAccountDetail({
               {account.name}
             </h1>
             <dl className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <UsersRound
-                  aria-hidden="true"
-                  className="size-3.5 shrink-0 text-muted-foreground"
-                />
-                <dt className="shrink-0 text-muted-foreground">持有人</dt>
-                <dd className="ml-0.5 truncate font-medium text-foreground">
-                  {holderName ?? '-'}
-                </dd>
-              </div>
               <div className="flex items-center gap-1.5">
                 <Wrench
                   aria-hidden="true"
@@ -326,24 +313,18 @@ export function AssetAccountDetail({
       <div className="mt-6 grid gap-6">
         <ValueSummaryCard
           positions={account.positions}
+          anchorCurrency={anchorCurrency}
           exchangeRates={exchangeRates}
         />
         {account.positions.length ? (
-          <>
-            <CurrencySummaryTable
-              positions={account.positions}
-              anchorCurrency={anchorCurrency}
-              exchangeRates={exchangeRates}
-            />
-            <PositionTable
-              positions={account.positions}
-              readOnly={readOnly || Boolean(account.sync)}
-              anchorCurrency={anchorCurrency}
-              exchangeRates={exchangeRates}
-              onEditPosition={onEditPosition}
-              onDeletePosition={onDeletePosition}
-            />
-          </>
+          <PositionTable
+            positions={account.positions}
+            readOnly={readOnly || Boolean(account.sync)}
+            anchorCurrency={anchorCurrency}
+            exchangeRates={exchangeRates}
+            onEditPosition={onEditPosition}
+            onDeletePosition={onDeletePosition}
+          />
         ) : (
           <Empty className="min-h-64 border bg-card">
             <EmptyHeader>
@@ -386,6 +367,201 @@ export function AssetAccountDetail({
   )
 }
 
+function AccountGroupAccountTable({
+  accounts,
+  readOnly,
+  anchorCurrency,
+  exchangeRates,
+  onRemove,
+  removingAccountIds
+}: {
+  accounts: AssetAccount[]
+  readOnly: boolean
+  anchorCurrency: string
+  exchangeRates: ExchangeRateView
+  onRemove: (assetAccountId: string) => Promise<void>
+  removingAccountIds: ReadonlySet<string>
+}) {
+  const valuedAccounts = accounts
+    .map((account) => ({
+      account,
+      valuation: valuePositions(
+        account.positions,
+        anchorCurrency,
+        exchangeRates.snapshot?.rates
+      )
+    }))
+    .sort((left, right) =>
+      compareOptionalValuesDescending(
+        left.valuation.totalAnchoredMarketValue,
+        right.valuation.totalAnchoredMarketValue
+      )
+    )
+
+  return (
+    <section>
+      <h2 className="mb-3 text-base font-semibold tracking-[-0.02em]">资产账户分布</h2>
+      <div className="overflow-hidden rounded-lg border border-border/70 bg-card">
+        <Table className="min-w-[1080px] table-fixed">
+          <TableHeader className="bg-muted/15">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-[30%]">资产账户</TableHead>
+              <TableHead className="w-[18%]">账户类型</TableHead>
+              <TableHead className="w-[18%]">维护模式</TableHead>
+              <TableHead className="w-[12%] text-right">持仓</TableHead>
+              <TableHead className="w-[20%] text-right">锚定市值</TableHead>
+              {!readOnly && <TableHead className="w-16" />}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {valuedAccounts.map(({ account, valuation }) => {
+              const removing = removingAccountIds.has(account.id)
+              return (
+                <TableRow key={account.id}>
+                  <TableCell>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <AccountTypeIcon type={account.type} className="size-4" />
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {account.name}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {assetAccountTypeLabels[account.type]}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {account.sync ? '自动' : '手动'}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums text-muted-foreground">
+                    {account.positions.length}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold tabular-nums">
+                    {valuation.totalAnchoredMarketValue === undefined
+                      ? '-'
+                      : (
+                          <MaskedAssetValue>
+                            {formatMoney(valuation.totalAnchoredMarketValue, anchorCurrency)}
+                          </MaskedAssetValue>
+                        )}
+                  </TableCell>
+                  {!readOnly && (
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled={removing}
+                        aria-busy={removing}
+                        aria-label={
+                          removing
+                            ? `正在将 ${account.name} 移出资产分组`
+                            : `将 ${account.name} 移出资产分组`
+                        }
+                        onClick={() => void onRemove(account.id)}
+                      >
+                        {removing ? <Spinner data-icon="icon-only" /> : <Trash2 />}
+                      </Button>
+                    </TableCell>
+                  )}
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </section>
+  )
+}
+
+export function AccountGroupDetail({
+  group,
+  assetAccounts,
+  readOnly,
+  anchorCurrency,
+  exchangeRates,
+  onManageAccounts,
+  onRemoveAccount,
+  removingAccountIds
+}: {
+  group: AccountGroup
+  assetAccounts: AssetAccount[]
+  readOnly: boolean
+  anchorCurrency: string
+  exchangeRates: ExchangeRateView
+  onManageAccounts: () => void
+  onRemoveAccount: (assetAccountId: string) => Promise<void>
+  removingAccountIds: ReadonlySet<string>
+}) {
+  const accounts = group.assetAccountIds.flatMap((assetAccountId) => {
+    const account = assetAccounts.find((item) => item.id === assetAccountId)
+    return account ? [account] : []
+  })
+  const positions = accounts.flatMap((account) => account.positions)
+
+  return (
+    <div className="mx-auto w-[calc(50%+36rem)] max-w-full px-4 pb-8 pt-4">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 flex-[1_1_20rem] items-center gap-4">
+          <span className="grid size-12 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+            <Layers2 className="size-5" />
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-3xl font-semibold tracking-[-0.04em]">
+              {group.name}
+            </h1>
+          </div>
+        </div>
+        {!readOnly && (
+          <Button onClick={onManageAccounts}>
+            <ListPlus data-icon="inline-start" />
+            管理账户
+          </Button>
+        )}
+      </header>
+
+      <div className="mt-6">
+        <ValueSummaryCard
+          positions={positions}
+          anchorCurrency={anchorCurrency}
+          exchangeRates={exchangeRates}
+        />
+      </div>
+
+      {accounts.length ? (
+        <div className="mt-6 grid gap-6">
+          <AccountGroupAccountTable
+            accounts={accounts}
+            readOnly={readOnly}
+            anchorCurrency={anchorCurrency}
+            exchangeRates={exchangeRates}
+            onRemove={onRemoveAccount}
+            removingAccountIds={removingAccountIds}
+          />
+        </div>
+      ) : (
+        <Empty className="mt-6 min-h-64 border bg-card">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Layers2 data-icon="inline-start" />
+            </EmptyMedia>
+            <EmptyTitle>为资产分组添加资产账户</EmptyTitle>
+            <EmptyDescription>
+              可选择多个资产账户统一查看，账户和持仓仍在原位置独立维护
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            {!readOnly && (
+              <Button onClick={onManageAccounts}>
+                <ListPlus data-icon="inline-start" />
+                选择账户
+              </Button>
+            )}
+          </EmptyContent>
+        </Empty>
+      )}
+    </div>
+  )
+}
+
 type GroupPositionItem = {
   positionId: string
   account: AssetAccount
@@ -394,7 +570,7 @@ type GroupPositionItem = {
 
 function GroupPositionTable({
   items,
-  holders,
+  accountGroups,
   readOnly,
   anchorCurrency,
   exchangeRates,
@@ -402,7 +578,7 @@ function GroupPositionTable({
   removingPositionIds
 }: {
   items: GroupPositionItem[]
-  holders: ProductAccount['holders']
+  accountGroups: ProductAccount['accountGroups']
   readOnly: boolean
   anchorCurrency: string
   exchangeRates: ExchangeRateView
@@ -434,7 +610,7 @@ function GroupPositionTable({
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[13%]">资产账户</TableHead>
-              <TableHead className="w-[10%]">持有人</TableHead>
+              <TableHead className="w-[10%]">资产分组</TableHead>
               <TableHead className="w-[18%]">名称代码</TableHead>
               <TableHead className="w-[8%] text-right">数量</TableHead>
               <TableHead className="w-[11%] text-right">当前价格</TableHead>
@@ -458,7 +634,9 @@ function GroupPositionTable({
                       </div>
                     </TableCell>
                     <TableCell className="truncate text-muted-foreground">
-                      {holders.find((holder) => holder.id === account.holderId)?.name ?? '-'}
+                      {accountGroups.find((accountGroup) =>
+                        accountGroup.assetAccountIds.includes(account.id)
+                      )?.name ?? '-'}
                     </TableCell>
                     <TableCell className="min-w-0">
                       <p className="truncate font-semibold">
@@ -541,7 +719,7 @@ function GroupPositionTable({
 export function PositionGroupDetail({
   group,
   assetAccounts,
-  holders,
+  accountGroups,
   readOnly,
   anchorCurrency,
   exchangeRates,
@@ -553,7 +731,7 @@ export function PositionGroupDetail({
 }: {
   group: PositionGroup
   assetAccounts: AssetAccount[]
-  holders: ProductAccount['holders']
+  accountGroups: ProductAccount['accountGroups']
   readOnly: boolean
   anchorCurrency: string
   exchangeRates: ExchangeRateView
@@ -608,20 +786,16 @@ export function PositionGroupDetail({
       <div className="mt-6">
         <ValueSummaryCard
           positions={items.map((item) => item.position)}
+          anchorCurrency={anchorCurrency}
           exchangeRates={exchangeRates}
         />
       </div>
 
       {items.length ? (
         <div className="mt-6 grid gap-6">
-          <CurrencySummaryTable
-            positions={items.map((item) => item.position)}
-            anchorCurrency={anchorCurrency}
-            exchangeRates={exchangeRates}
-          />
           <GroupPositionTable
             items={items}
-            holders={holders}
+            accountGroups={accountGroups}
             readOnly={readOnly}
             anchorCurrency={anchorCurrency}
             exchangeRates={exchangeRates}

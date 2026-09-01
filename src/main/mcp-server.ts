@@ -50,17 +50,17 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_get_account: {
     title: '读取 Chromie 账户',
-    description: '读取账户最新版或指定历史快照。返回持有人、资产账户、持仓分组、可选持仓和脱敏同步状态；默认不内嵌持仓，汇率只返回 CNY、HKD 和 USD。',
+    description: '读取账户最新版或指定历史快照。返回账户分组、资产账户、持仓分组、可选持仓和脱敏同步状态；默认不内嵌持仓，汇率只返回 CNY、HKD 和 USD。',
     annotations: readOnlyAnnotations
   },
   chromie_get_overview: {
     title: '读取资产透视',
-    description: '按照资产账户、持仓分组或币种汇总市值、锚定市值、占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率，响应只包含 CNY、HKD 和 USD 汇率。',
+    description: '按照资产账户、账户分组、持仓分组或币种汇总市值、锚定市值、占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率，响应只包含 CNY、HKD 和 USD 汇率。',
     annotations: readOnlyAnnotations
   },
   chromie_search_positions: {
     title: '搜索持仓',
-    description: '按关键词、市场、币种、资产账户、持有人或分组检索持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
+    description: '按关键词、市场、币种、资产账户、账户分组或分组检索持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
     annotations: readOnlyAnnotations
   },
   chromie_list_snapshots: {
@@ -75,17 +75,22 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_update_account: {
     title: '更新 Chromie 账户',
-    description: '局部修改账户名称、锚定币种或汇率设置，不会覆盖持有人。',
+    description: '局部修改账户名称、锚定币种或汇率设置，不会覆盖账户分组。',
     annotations: updateAnnotations
   },
-  chromie_create_holder: {
-    title: '创建持有人',
-    description: '在指定 Chromie 账户中创建持有人。',
+  chromie_create_account_group: {
+    title: '创建账户分组',
+    description: '在指定 Chromie 账户中创建账户分组。',
     annotations: additiveAnnotations
   },
-  chromie_update_holder: {
-    title: '更新持有人',
-    description: '修改已有持有人的名称。',
+  chromie_update_account_group: {
+    title: '更新账户分组',
+    description: '修改已有账户分组的名称。',
+    annotations: updateAnnotations
+  },
+  chromie_replace_account_group_members: {
+    title: '替换账户分组成员',
+    description: '完整替换一个账户分组中的资产账户；一个资产账户最多属于一个账户分组。',
     annotations: updateAnnotations
   },
   chromie_create_asset_account: {
@@ -95,7 +100,7 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_update_asset_account: {
     title: '更新资产账户',
-    description: '局部修改资产账户名称、类型或持有人。不会返回或修改同步凭据；已同步账户不能通过 MCP 改类型。',
+    description: '局部修改资产账户名称或类型。不会返回或修改同步凭据；已同步账户不能通过 MCP 改类型。',
     annotations: updateAnnotations
   },
   chromie_create_position: {
@@ -150,7 +155,7 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_delete_portfolio_item: {
     title: '删除 Chromie 数据',
-    description: '删除账户、持有人、资产账户、持仓、持仓分组或快照。此操作无法撤销，Agent 应在调用前向用户确认。',
+    description: '删除账户、账户分组、资产账户、持仓、持仓分组或快照。此操作无法撤销，Agent 应在调用前向用户确认。',
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,

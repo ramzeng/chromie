@@ -5,6 +5,7 @@ import type { AssetAccountIntegrationView } from '../../../shared/integrations'
 import {
   EMPTY_PORTFOLIO_DATA,
   type AccountBackup,
+  type AccountGroupInput,
   type AppData,
   type AssetAccountInput,
   type PortfolioCommand,
@@ -125,6 +126,47 @@ export function usePortfolio() {
       execute({ type: 'update-product-account', id, input }).then(() => undefined),
     deleteProductAccount: (id: string) =>
       execute({ type: 'delete-product-account', id }).then(() => undefined),
+    createAccountGroup: (productAccountId: string, input: AccountGroupInput) =>
+      execute({ type: 'create-account-group', productAccountId, input }).then(
+        (result) => {
+          if (typeof result !== 'string') throw new Error('创建资产分组失败')
+          return result
+        }
+      ),
+    updateAccountGroup: (
+      productAccountId: string,
+      groupId: string,
+      input: AccountGroupInput
+    ) =>
+      execute({ type: 'update-account-group', productAccountId, groupId, input }).then(
+        () => undefined
+      ),
+    deleteAccountGroup: (productAccountId: string, groupId: string) =>
+      execute({ type: 'delete-account-group', productAccountId, groupId }).then(
+        () => undefined
+      ),
+    setAccountGroupAccounts: (
+      productAccountId: string,
+      groupId: string,
+      assetAccountIds: string[]
+    ) =>
+      execute({
+        type: 'set-account-group-accounts',
+        productAccountId,
+        groupId,
+        assetAccountIds
+      }).then((result) => result ?? null),
+    removeAccountFromGroup: (
+      productAccountId: string,
+      groupId: string,
+      assetAccountId: string
+    ) =>
+      execute({
+        type: 'remove-account-from-group',
+        productAccountId,
+        groupId,
+        assetAccountId
+      }).then(() => undefined),
     createPositionGroup: (productAccountId: string, input: PositionGroupInput) =>
       execute({ type: 'create-position-group', productAccountId, input }).then(
         (result) => {

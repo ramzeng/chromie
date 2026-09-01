@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  ArrowLeftRight,
   ChartSpline,
-  Check,
   ChevronDown,
   ChevronUp,
   Download,
@@ -10,28 +10,32 @@ import {
   EyeOff,
   Folder,
   History,
+  Layers2,
   Layers3,
   Pencil,
   Plus,
   Trash2,
-  Upload,
-  UsersRound
+  Upload
 } from 'lucide-react'
 
 import {
+  AccountGroupDetail,
   AssetAccountDetail,
   PositionGroupDetail,
   type AccountSyncState
 } from '@/components/portfolio/account-detail'
 import {
+  AccountGroupDialog,
   AssetAccountDialog,
   DeleteConfirmDialog,
   ExportBackupDialog,
+  GroupAccountsDialog,
   ImportBackupDialog,
   GroupPositionsDialog,
   PositionDialog,
   PositionGroupDialog,
   ProductAccountDialog,
+  ProductAccountSwitcherDialog,
   ProductAccountSettingsDialog
 } from '@/components/portfolio/dialogs'
 import {
@@ -65,7 +69,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
@@ -78,6 +81,8 @@ import {
 } from '@/lib/exchange-rates'
 import { cn } from '@/lib/utils'
 import {
+  type AccountGroup,
+  type AccountGroupInput,
   type AssetAccount,
   type AssetAccountInput,
   type Position,
@@ -93,13 +98,15 @@ import {
 import { toast } from 'sonner'
 
 type ProductDialogState = { open: boolean }
-type AssetDialogState = { open: boolean; account?: AssetAccount }
+type AssetDialogState = { open: boolean; account?: AssetAccount; groupId?: string }
 type PositionDialogState = { open: boolean; accountId?: string; position?: Position }
+type AccountGroupDialogState = { open: boolean; group?: AccountGroup }
 type PositionGroupDialogState = { open: boolean; group?: PositionGroup }
 type DeleteTarget =
   | { kind: 'product'; account: ProductAccount }
   | { kind: 'asset'; account: AssetAccount }
-  | { kind: 'group'; group: PositionGroup }
+  | { kind: 'account-group'; group: AccountGroup }
+  | { kind: 'position-group'; group: PositionGroup }
   | { kind: 'position'; account: AssetAccount; position: Position }
   | { kind: 'snapshot'; snapshot: PortfolioSnapshot }
   | null
@@ -117,41 +124,54 @@ const SELECTED_NAVIGATION_CLASS_NAME = 'bg-sidebar-accent text-sidebar-accent-fo
 
 function AssetAccountNavigation({
   accounts,
-  holders,
+  accountGroups,
   readOnly,
   selectedAccountId,
+  selectedAccountGroupId,
   onSelect,
+  onSelectGroup,
   onEdit,
-  onDelete
+  onDelete,
+  onCreateAccount,
+  onEditGroup,
+  onDeleteGroup
 }: {
   accounts: AssetAccount[]
-  holders: ProductAccount['holders']
+  accountGroups: ProductAccount['accountGroups']
   readOnly: boolean
   selectedAccountId: string | null
+  selectedAccountGroupId: string | null
   onSelect: (account: AssetAccount) => void
+  onSelectGroup: (group: AccountGroup) => void
   onEdit: (account: AssetAccount) => void
   onDelete: (account: AssetAccount) => void
+  onCreateAccount: (group: AccountGroup) => void
+  onEditGroup: (group: AccountGroup) => void
+  onDeleteGroup: (group: AccountGroup) => void
 }) {
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(
     () => new Set()
   )
-  const holderIds = new Set(holders.map((holder) => holder.id))
+  const groupedAssetAccountIds = new Set(
+    accountGroups.flatMap((group) => group.assetAccountIds)
+  )
   const groups = [
-    ...holders.map((holder) => ({
-      id: holder.id,
-      label: holder.name,
-      accessibilityLabel: holder.name,
-      accounts: accounts.filter((account) => account.holderId === holder.id)
+    ...accountGroups.map((group) => ({
+      group,
+      id: group.id,
+      label: group.name,
+      accounts: group.assetAccountIds.flatMap((assetAccountId) => {
+        const account = accounts.find((item) => item.id === assetAccountId)
+        return account ? [account] : []
+      })
     })),
     {
+      group: null,
       id: 'unassigned',
       label: '-',
-      accessibilityLabel: '未指定持有人',
-      accounts: accounts.filter(
-        (account) => !account.holderId || !holderIds.has(account.holderId)
-      )
+      accounts: accounts.filter((account) => !groupedAssetAccountIds.has(account.id))
     }
-  ].filter((group) => group.accounts.length > 0)
+  ].filter(({ group, accounts: groupAccounts }) => group || groupAccounts.length > 0)
 
   function toggleGroup(groupId: string): void {
     setCollapsedGroupIds((current) => {
@@ -164,36 +184,85 @@ function AssetAccountNavigation({
 
   return (
     <div className="grid min-w-0 gap-3">
-      {groups.map((group) => {
-        const collapsed = collapsedGroupIds.has(group.id)
+      {groups.map(({ group, id, label, accounts: groupAccounts }) => {
+        const groupSelected = group?.id === selectedAccountGroupId
+        const collapsed = collapsedGroupIds.has(id)
+        const accessibilityLabel = group?.name ?? '未分组账户'
         return (
-          <div key={group.id} className="min-w-0">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 w-full justify-start gap-1.5 px-2 text-left text-xs text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-              aria-expanded={!collapsed}
-              aria-label={`${collapsed ? '展开' : '收起'}${group.accessibilityLabel}分组`}
-              onClick={() => toggleGroup(group.id)}
+          <div key={id} className="min-w-0 pl-2">
+            <div
+              className={cn(
+                'group flex min-w-0 items-center rounded-md pr-1 transition-colors hover:bg-muted/70',
+                groupSelected && SELECTED_NAVIGATION_CLASS_NAME
+              )}
             >
-              <ChevronDown
-                aria-hidden="true"
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 shrink-0 hover:bg-transparent"
+                aria-expanded={!collapsed}
+                aria-label={`${collapsed ? '展开' : '收起'}${accessibilityLabel}`}
+                onClick={() => toggleGroup(id)}
+              >
+                <ChevronDown
+                  data-icon="inline-start"
+                  className={cn('transition-transform', collapsed && '-rotate-90')}
+                />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 className={cn(
-                  'size-3.5 shrink-0 transition-transform',
-                  collapsed && '-rotate-90'
+                  'h-7 min-w-0 flex-1 justify-start px-1 text-left text-xs text-muted-foreground hover:bg-transparent',
+                  groupSelected && 'font-medium text-foreground'
                 )}
-              />
-              <UsersRound aria-hidden="true" className="size-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{group.label}</span>
-              <span className="shrink-0 tabular-nums text-muted-foreground/75">
-                {group.accounts.length}
-              </span>
-            </Button>
-
+                disabled={!group}
+                onClick={() => group && onSelectGroup(group)}
+              >
+                <Layers2 data-icon="inline-start" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+              </Button>
+              {!readOnly && group && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        'size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100',
+                        groupSelected && 'opacity-100'
+                      )}
+                      aria-label={`${group.name}操作`}
+                    >
+                      <Ellipsis className="size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-20">
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem onSelect={() => onEditGroup(group)}>
+                        <Pencil className="size-4" />
+                        编辑
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuGroup>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => onDeleteGroup(group)}
+                      >
+                        <Trash2 className="size-4" />
+                        删除
+                      </DropdownMenuItem>
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
             {!collapsed && (
-              <div className="mt-1 grid min-w-0 gap-1 pl-3">
-                {group.accounts.map((account) => {
+              <div className="mt-1 grid min-w-0 gap-1 pl-5">
+                {groupAccounts.map((account) => {
                   const selected = selectedAccountId === account.id
                   return (
                     <div
@@ -211,10 +280,7 @@ function AssetAccountNavigation({
                         )}
                         onClick={() => onSelect(account)}
                       >
-                        <AccountTypeIcon
-                          type={account.type}
-                          className="size-4 shrink-0"
-                        />
+                        <AccountTypeIcon type={account.type} className="size-4 shrink-0" />
                         <span className="min-w-0 flex-1 truncate text-left">
                           {account.name}
                         </span>
@@ -257,6 +323,18 @@ function AssetAccountNavigation({
                     </div>
                   )
                 })}
+                {!readOnly && group && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-full justify-start px-3 text-muted-foreground"
+                    onClick={() => onCreateAccount(group)}
+                  >
+                    <Plus data-icon="inline-start" />
+                    新建资产账户
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -292,19 +370,25 @@ export function App(): React.JSX.Element {
       }
     : liveExchangeRateView
   const [selectedAssetAccountId, setSelectedAssetAccountId] = useState<string | null>(null)
+  const [selectedAccountGroupId, setSelectedAccountGroupId] = useState<string | null>(null)
   const [selectedPositionGroupId, setSelectedPositionGroupId] = useState<string | null>(null)
   const [overviewMode, setOverviewMode] = useState<OverviewMode>('accounts')
   const [showTimeMachine, setShowTimeMachine] = useState(false)
   const [productDialog, setProductDialog] = useState<ProductDialogState>({ open: false })
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false)
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false)
-  const [accountSettingsSection, setAccountSettingsSection] = useState<
-    'basic' | 'currency' | 'holders'
-  >('basic')
+  const [accountSettingsSection, setAccountSettingsSection] = useState<'basic' | 'currency'>(
+    'basic'
+  )
   const [assetDialog, setAssetDialog] = useState<AssetDialogState>({ open: false })
   const [positionDialog, setPositionDialog] = useState<PositionDialogState>({ open: false })
+  const [accountGroupDialog, setAccountGroupDialog] = useState<AccountGroupDialogState>({
+    open: false
+  })
   const [positionGroupDialog, setPositionGroupDialog] = useState<PositionGroupDialogState>({
     open: false
   })
+  const [groupAccountsDialogOpen, setGroupAccountsDialogOpen] = useState(false)
   const [groupPositionsDialogOpen, setGroupPositionsDialogOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [syncStates, setSyncStates] = useState<Record<string, AccountSyncState>>({})
@@ -316,12 +400,16 @@ export function App(): React.JSX.Element {
   const [removingGroupPositionIds, setRemovingGroupPositionIds] = useState<Set<string>>(
     () => new Set()
   )
+  const [removingGroupAccountIds, setRemovingGroupAccountIds] = useState<Set<string>>(
+    () => new Set()
+  )
   const [assetValuesMasked, setAssetValuesMasked] = useState(loadAssetValueMask)
   const syncingAccountIds = useRef(new Set<string>())
   const imageExportingRef = useRef(false)
   const choosingImportRef = useRef(false)
   const creatingSnapshotRef = useRef(false)
   const removingGroupPositionIdsRef = useRef(new Set<string>())
+  const removingGroupAccountIdsRef = useRef(new Set<string>())
 
   useEffect(() => {
     if (!portfolio.refreshError) return
@@ -344,6 +432,10 @@ export function App(): React.JSX.Element {
     activeProductAccount?.assetAccounts.find(
       (account) => account.id === selectedAssetAccountId
     ) ?? null
+  const selectedAccountGroup =
+    activeProductAccount?.accountGroups.find(
+      (group) => group.id === selectedAccountGroupId
+    ) ?? null
   const selectedPositionGroup =
     activeProductAccount?.positionGroups.find(
       (group) => group.id === selectedPositionGroupId
@@ -352,6 +444,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     setSelectedSnapshotId(null)
     setSelectedAssetAccountId(null)
+    setSelectedAccountGroupId(null)
     setSelectedPositionGroupId(null)
   }, [latestProductAccount?.id])
 
@@ -506,6 +599,7 @@ export function App(): React.JSX.Element {
     if (!pendingImport) return
     try {
       setSelectedAssetAccountId(null)
+      setSelectedAccountGroupId(null)
       setSelectedPositionGroupId(null)
       await portfolio.importAccount(pendingImport.account, pendingImport.snapshots)
       setPendingImport(null)
@@ -593,6 +687,28 @@ export function App(): React.JSX.Element {
     }
   }
 
+  async function removeAccountFromGroup(
+    groupId: string,
+    assetAccountId: string
+  ): Promise<void> {
+    if (!activeProductAccount || removingGroupAccountIdsRef.current.has(assetAccountId)) return
+    removingGroupAccountIdsRef.current.add(assetAccountId)
+    setRemovingGroupAccountIds(new Set(removingGroupAccountIdsRef.current))
+    try {
+      await portfolio.removeAccountFromGroup(
+        activeProductAccount.id,
+        groupId,
+        assetAccountId
+      )
+      toast.success('已移出资产分组')
+    } catch (error) {
+      reportPortfolioError(error, '移出资产分组失败')
+    } finally {
+      removingGroupAccountIdsRef.current.delete(assetAccountId)
+      setRemovingGroupAccountIds(new Set(removingGroupAccountIdsRef.current))
+    }
+  }
+
   async function submitProductAccountSettings(
     input: ProductAccountSettingsInput
   ): Promise<void> {
@@ -609,9 +725,53 @@ export function App(): React.JSX.Element {
       return
     }
     const id = await portfolio.createAssetAccount(activeProductAccount.id, input)
+    if (assetDialog.groupId) {
+      const group = activeProductAccount.accountGroups.find(
+        (item) => item.id === assetDialog.groupId
+      )
+      if (!group) throw new Error('没有找到对应的资产分组')
+      const membershipError = await portfolio.setAccountGroupAccounts(
+        activeProductAccount.id,
+        group.id,
+        [...group.assetAccountIds, id]
+      )
+      if (membershipError) throw new Error(membershipError)
+    }
+    setSelectedAccountGroupId(null)
     setSelectedPositionGroupId(null)
     setSelectedAssetAccountId(id)
     toast.success('资产账户已添加')
+  }
+
+  async function submitAccountGroup(input: AccountGroupInput): Promise<void> {
+    if (!activeProductAccount) return
+    if (accountGroupDialog.group) {
+      await portfolio.updateAccountGroup(
+        activeProductAccount.id,
+        accountGroupDialog.group.id,
+        input
+      )
+      toast.success('资产分组已更新')
+      return
+    }
+    const id = await portfolio.createAccountGroup(activeProductAccount.id, input)
+    setSelectedAssetAccountId(null)
+    setSelectedPositionGroupId(null)
+    setSelectedAccountGroupId(id)
+    toast.success('资产分组已创建')
+  }
+
+  async function submitGroupAccounts(assetAccountIds: string[]): Promise<string | null> {
+    if (!activeProductAccount || !selectedAccountGroup) {
+      return '没有找到对应的资产分组'
+    }
+    const result = await portfolio.setAccountGroupAccounts(
+      activeProductAccount.id,
+      selectedAccountGroup.id,
+      assetAccountIds
+    )
+    if (!result) toast.success('分组账户已保存')
+    return result
   }
 
   async function submitPositionGroup(input: PositionGroupInput): Promise<void> {
@@ -627,6 +787,7 @@ export function App(): React.JSX.Element {
     }
     const id = await portfolio.createPositionGroup(activeProductAccount.id, input)
     setSelectedAssetAccountId(null)
+    setSelectedAccountGroupId(null)
     setSelectedPositionGroupId(id)
     toast.success('持仓分组已创建')
   }
@@ -669,7 +830,9 @@ export function App(): React.JSX.Element {
           ? '快照已删除'
           : deleteTarget.kind === 'asset'
             ? '资产账户已删除'
-            : deleteTarget.kind === 'group'
+            : deleteTarget.kind === 'account-group'
+              ? '资产分组已删除'
+              : deleteTarget.kind === 'position-group'
               ? '持仓分组已删除'
               : '持仓已删除'
     try {
@@ -685,7 +848,10 @@ export function App(): React.JSX.Element {
       } else if (deleteTarget.kind === 'asset') {
         await portfolio.deleteAssetAccount(latestProductAccount.id, deleteTarget.account.id)
         setSelectedAssetAccountId(null)
-      } else if (deleteTarget.kind === 'group') {
+      } else if (deleteTarget.kind === 'account-group') {
+        await portfolio.deleteAccountGroup(latestProductAccount.id, deleteTarget.group.id)
+        setSelectedAccountGroupId(null)
+      } else if (deleteTarget.kind === 'position-group') {
         await portfolio.deletePositionGroup(latestProductAccount.id, deleteTarget.group.id)
         setSelectedPositionGroupId(null)
       } else {
@@ -725,7 +891,7 @@ export function App(): React.JSX.Element {
     if (deleteTarget.kind === 'product') {
       return {
         title: `注销账户“${deleteTarget.account.name}”？`,
-        description: `将同时删除 ${deleteTarget.account.holders.length} 个持有人、${deleteTarget.account.assetAccounts.length} 个资产账户、${deleteTarget.account.positionGroups.length} 个持仓分组和全部持仓。此操作无法撤销`
+        description: `将同时删除 ${deleteTarget.account.accountGroups.length} 个资产分组、${deleteTarget.account.assetAccounts.length} 个资产账户、${deleteTarget.account.positionGroups.length} 个持仓分组和全部持仓。此操作无法撤销`
       }
     }
     if (deleteTarget.kind === 'asset') {
@@ -734,7 +900,13 @@ export function App(): React.JSX.Element {
         description: `将同时删除 ${deleteTarget.account.positions.length} 项持仓。此操作无法撤销`
       }
     }
-    if (deleteTarget.kind === 'group') {
+    if (deleteTarget.kind === 'account-group') {
+      return {
+        title: `删除资产分组“${deleteTarget.group.name}”？`,
+        description: '只会删除资产分组，不会影响其中的资产账户及持仓。此操作无法撤销'
+      }
+    }
+    if (deleteTarget.kind === 'position-group') {
       return {
         title: `删除持仓分组“${deleteTarget.group.name}”？`,
         description: '只会删除持仓分组，不会影响原资产账户及其中的持仓。此操作无法撤销'
@@ -767,27 +939,6 @@ export function App(): React.JSX.Element {
         side="top"
         align="start"
       >
-        <DropdownMenuLabel>切换账户</DropdownMenuLabel>
-        <DropdownMenuGroup>
-          {portfolio.productAccounts.map((account) => (
-            <DropdownMenuItem
-              key={account.id}
-              onSelect={() => {
-                setSelectedSnapshotId(null)
-                void portfolio
-                  .setActiveProductAccount(account.id)
-                  .catch(reportPortfolioError)
-              }}
-            >
-              <span className="grid size-7 place-items-center rounded-sm bg-secondary text-xs font-semibold">
-                {account.name.trim().slice(0, 1).toUpperCase()}
-              </span>
-              <span className="min-w-0 flex-1 truncate">{account.name}</span>
-              {account.id === activeProductAccount.id && <Check />}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
         <DropdownMenuGroup>
           {!selectedSnapshot && (
             <DropdownMenuItem
@@ -818,6 +969,10 @@ export function App(): React.JSX.Element {
           <DropdownMenuItem onSelect={() => setProductDialog({ open: true })}>
             <Plus />
             新建账户
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setAccountSwitcherOpen(true)}>
+            <ArrowLeftRight />
+            切换账户
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
@@ -862,6 +1017,7 @@ export function App(): React.JSX.Element {
               className={cn(
                 'w-full justify-start px-3 font-normal',
                 !selectedAssetAccountId &&
+                  !selectedAccountGroupId &&
                   !selectedPositionGroupId &&
                   !showTimeMachine &&
                   cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
@@ -869,6 +1025,7 @@ export function App(): React.JSX.Element {
               onClick={() => {
                 setShowTimeMachine(false)
                 setSelectedAssetAccountId(null)
+                setSelectedAccountGroupId(null)
                 setSelectedPositionGroupId(null)
               }}
             >
@@ -884,6 +1041,7 @@ export function App(): React.JSX.Element {
               onClick={() => {
                 setShowTimeMachine(true)
                 setSelectedAssetAccountId(null)
+                setSelectedAccountGroupId(null)
                 setSelectedPositionGroupId(null)
               }}
             >
@@ -899,15 +1057,15 @@ export function App(): React.JSX.Element {
 
           <div className="mb-2 flex items-center justify-between pl-3 pr-0">
             <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              资产账户
+              资产分组
             </p>
             {!selectedSnapshot && (
               <Button
                 variant="ghost"
                 size="icon"
                 className="size-6"
-                aria-label="添加资产账户"
-                onClick={() => setAssetDialog({ open: true })}
+                aria-label="新建资产分组"
+                onClick={() => setAccountGroupDialog({ open: true })}
               >
                 <Plus className="size-3.5" />
               </Button>
@@ -917,16 +1075,31 @@ export function App(): React.JSX.Element {
             <AssetAccountNavigation
               key={activeProductAccount.id}
               accounts={activeProductAccount.assetAccounts}
-              holders={activeProductAccount.holders}
+              accountGroups={activeProductAccount.accountGroups}
               readOnly={Boolean(selectedSnapshot)}
               selectedAccountId={selectedAssetAccountId}
+              selectedAccountGroupId={selectedAccountGroupId}
               onSelect={(account) => {
                 setShowTimeMachine(false)
+                setSelectedAccountGroupId(null)
                 setSelectedPositionGroupId(null)
                 setSelectedAssetAccountId(account.id)
               }}
+              onSelectGroup={(group) => {
+                setShowTimeMachine(false)
+                setSelectedAssetAccountId(null)
+                setSelectedPositionGroupId(null)
+                setSelectedAccountGroupId(group.id)
+              }}
               onEdit={(account) => setAssetDialog({ open: true, account })}
               onDelete={(account) => setDeleteTarget({ kind: 'asset', account })}
+              onCreateAccount={(group) =>
+                setAssetDialog({ open: true, groupId: group.id })
+              }
+              onEditGroup={(group) => setAccountGroupDialog({ open: true, group })}
+              onDeleteGroup={(group) =>
+                setDeleteTarget({ kind: 'account-group', group })
+              }
             />
             {!activeProductAccount.assetAccounts.length && (
               <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">还没有资产账户</p>
@@ -969,6 +1142,7 @@ export function App(): React.JSX.Element {
                     onClick={() => {
                       setShowTimeMachine(false)
                       setSelectedAssetAccountId(null)
+                      setSelectedAccountGroupId(null)
                       setSelectedPositionGroupId(group.id)
                     }}
                   >
@@ -1002,7 +1176,7 @@ export function App(): React.JSX.Element {
                       <DropdownMenuGroup>
                         <DropdownMenuItem
                           variant="destructive"
-                          onSelect={() => setDeleteTarget({ kind: 'group', group })}
+                          onSelect={() => setDeleteTarget({ kind: 'position-group', group })}
                         >
                           <Trash2 className="size-4" />
                           删除
@@ -1054,11 +1228,24 @@ export function App(): React.JSX.Element {
               setDeleteTarget({ kind: 'snapshot', snapshot })
             }
           />
+        ) : selectedAccountGroup ? (
+          <AccountGroupDetail
+            group={selectedAccountGroup}
+            assetAccounts={activeProductAccount.assetAccounts}
+            readOnly={Boolean(selectedSnapshot)}
+            anchorCurrency={activeProductAccount.anchorCurrency}
+            exchangeRates={exchangeRates}
+            onManageAccounts={() => setGroupAccountsDialogOpen(true)}
+            onRemoveAccount={(assetAccountId) =>
+              removeAccountFromGroup(selectedAccountGroup.id, assetAccountId)
+            }
+            removingAccountIds={removingGroupAccountIds}
+          />
         ) : selectedPositionGroup ? (
           <PositionGroupDetail
             group={selectedPositionGroup}
             assetAccounts={activeProductAccount.assetAccounts}
-            holders={activeProductAccount.holders}
+            accountGroups={activeProductAccount.accountGroups}
             readOnly={Boolean(selectedSnapshot)}
             anchorCurrency={activeProductAccount.anchorCurrency}
             exchangeRates={exchangeRates}
@@ -1075,9 +1262,6 @@ export function App(): React.JSX.Element {
         ) : selectedAssetAccount ? (
           <AssetAccountDetail
             account={selectedAssetAccount}
-            holderName={activeProductAccount.holders.find(
-              (holder) => holder.id === selectedAssetAccount.holderId
-            )?.name}
             readOnly={Boolean(selectedSnapshot)}
             anchorCurrency={activeProductAccount.anchorCurrency}
             exchangeRates={exchangeRates}
@@ -1112,11 +1296,13 @@ export function App(): React.JSX.Element {
               exportImage({ kind: 'overview', mode: overviewMode })
             }
             onOpenAssetAccount={(id) => {
+              setSelectedAccountGroupId(null)
               setSelectedPositionGroupId(null)
               setSelectedAssetAccountId(id)
             }}
             onOpenPositionGroup={(id) => {
               setSelectedAssetAccountId(null)
+              setSelectedAccountGroupId(null)
               setSelectedPositionGroupId(id)
             }}
           />
@@ -1129,6 +1315,16 @@ export function App(): React.JSX.Element {
         open={productDialog.open}
         onOpenChange={(open) => setProductDialog((current) => ({ ...current, open }))}
         onSubmit={submitProductAccount}
+      />
+      <ProductAccountSwitcherDialog
+        open={accountSwitcherOpen}
+        onOpenChange={setAccountSwitcherOpen}
+        accounts={portfolio.productAccounts}
+        activeAccountId={latestProductAccount?.id ?? activeProductAccount.id}
+        onSelect={async (accountId) => {
+          setSelectedSnapshotId(null)
+          await portfolio.setActiveProductAccount(accountId)
+        }}
       />
       <ProductAccountSettingsDialog
         open={accountSettingsOpen}
@@ -1143,19 +1339,24 @@ export function App(): React.JSX.Element {
       />
       <AssetAccountDialog
         open={assetDialog.open}
-        onOpenChange={(open) => setAssetDialog((current) => ({ ...current, open }))}
+        onOpenChange={(open) =>
+          setAssetDialog((current) => (open ? { ...current, open } : { open: false }))
+        }
         account={assetDialog.account}
         integration={
           assetDialog.account
             ? portfolio.getAssetAccountIntegration(assetDialog.account.id)
             : undefined
         }
-        holders={activeProductAccount.holders}
-        onManageHolders={() => {
-          setAccountSettingsSection('holders')
-          setAccountSettingsOpen(true)
-        }}
         onSubmit={submitAssetAccount}
+      />
+      <AccountGroupDialog
+        open={accountGroupDialog.open}
+        onOpenChange={(open) =>
+          setAccountGroupDialog((current) => ({ ...current, open }))
+        }
+        group={accountGroupDialog.group}
+        onSubmit={submitAccountGroup}
       />
       <PositionDialog
         open={positionDialog.open}
@@ -1179,6 +1380,16 @@ export function App(): React.JSX.Element {
           assetAccounts={activeProductAccount.assetAccounts}
           positionGroups={activeProductAccount.positionGroups}
           onSubmit={submitGroupPositions}
+        />
+      )}
+      {selectedAccountGroup && (
+        <GroupAccountsDialog
+          open={groupAccountsDialogOpen}
+          onOpenChange={setGroupAccountsDialogOpen}
+          group={selectedAccountGroup}
+          assetAccounts={activeProductAccount.assetAccounts}
+          accountGroups={activeProductAccount.accountGroups}
+          onSubmit={submitGroupAccounts}
         />
       )}
       <DeleteConfirmDialog

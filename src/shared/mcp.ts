@@ -8,8 +8,9 @@ export const MCP_TOOL_NAMES = [
   'chromie_list_snapshots',
   'chromie_create_account',
   'chromie_update_account',
-  'chromie_create_holder',
-  'chromie_update_holder',
+  'chromie_create_account_group',
+  'chromie_update_account_group',
+  'chromie_replace_account_group_members',
   'chromie_create_asset_account',
   'chromie_update_asset_account',
   'chromie_create_position',
@@ -62,7 +63,7 @@ export const getAccountInputSchema = z.object({
 export const getOverviewInputSchema = z.object({
   account_id: id,
   view: mcpViewSchema.optional(),
-  group_by: z.enum(['asset_account', 'position_group', 'currency'])
+  group_by: z.enum(['asset_account', 'account_group', 'position_group', 'currency'])
 }).strict()
 
 export const searchPositionsInputSchema = z.object({
@@ -72,7 +73,7 @@ export const searchPositionsInputSchema = z.object({
   market: market.optional(),
   currency: currency.optional(),
   asset_account_id: id.optional(),
-  holder_id: id.optional(),
+  account_group_id: id.optional(),
   group_id: id.optional(),
   cursor: z.string()
     .regex(/^[A-Za-z0-9_-]{1,512}$/)
@@ -108,33 +109,36 @@ export const updateAccountInputSchema = z.object({
   { message: '至少提供一个要修改的字段' }
 )
 
-export const createHolderInputSchema = z.object({
+export const createAccountGroupInputSchema = z.object({
   account_id: id,
   name
 }).strict()
 
-export const updateHolderInputSchema = z.object({
+export const updateAccountGroupInputSchema = z.object({
   account_id: id,
-  holder_id: id,
+  account_group_id: id,
   name
+}).strict()
+
+export const replaceAccountGroupMembersInputSchema = z.object({
+  account_id: id,
+  account_group_id: id,
+  asset_account_ids: z.array(id).max(10000)
 }).strict()
 
 export const createAssetAccountInputSchema = z.object({
   account_id: id,
   name,
-  type: assetAccountType,
-  holder_id: id
+  type: assetAccountType
 }).strict()
 
 export const updateAssetAccountInputSchema = z.object({
   account_id: id,
   asset_account_id: id,
   name: name.optional(),
-  type: assetAccountType.optional(),
-  holder_id: id.optional()
+  type: assetAccountType.optional()
 }).strict().refine(
-  ({ name: accountName, type, holder_id }) =>
-    accountName !== undefined || type !== undefined || holder_id !== undefined,
+  ({ name: accountName, type }) => accountName !== undefined || type !== undefined,
   { message: '至少提供一个要修改的字段' }
 )
 
@@ -206,7 +210,11 @@ export const refreshExchangeRatesInputSchema = z.object({
 
 export const deleteTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('account'), account_id: id }).strict(),
-  z.object({ kind: z.literal('holder'), account_id: id, holder_id: id }).strict(),
+  z.object({
+    kind: z.literal('account_group'),
+    account_id: id,
+    account_group_id: id
+  }).strict(),
   z.object({
     kind: z.literal('asset_account'),
     account_id: id,
@@ -234,8 +242,9 @@ export const mcpToolInputSchemas = {
   chromie_list_snapshots: listSnapshotsInputSchema,
   chromie_create_account: createAccountInputSchema,
   chromie_update_account: updateAccountInputSchema,
-  chromie_create_holder: createHolderInputSchema,
-  chromie_update_holder: updateHolderInputSchema,
+  chromie_create_account_group: createAccountGroupInputSchema,
+  chromie_update_account_group: updateAccountGroupInputSchema,
+  chromie_replace_account_group_members: replaceAccountGroupMembersInputSchema,
   chromie_create_asset_account: createAssetAccountInputSchema,
   chromie_update_asset_account: updateAssetAccountInputSchema,
   chromie_create_position: createPositionInputSchema,
@@ -254,7 +263,11 @@ export type McpToolArguments = {
 }
 
 const count = z.number().int().nonnegative()
-const holderOutputSchema = z.object({ id, name }).strict()
+const accountGroupOutputSchema = z.object({
+  id,
+  name,
+  asset_account_ids: z.array(id)
+}).strict()
 const positionOutputSchema = z.object({
   id,
   market,
@@ -295,12 +308,11 @@ const accountOutputSchema = z.object({
   anchor_currency: anchorCurrency,
   exchange_rate_provider: z.literal('coinbase'),
   exchange_rate_refresh_interval_minutes: z.number().int(),
-  holders: z.array(holderOutputSchema),
+  account_groups: z.array(accountGroupOutputSchema),
   asset_accounts: z.array(z.object({
     id,
     name: z.string(),
     type: assetAccountType,
-    holder_id: id,
     sync: syncStatusOutputSchema,
     position_count: count,
     positions: z.array(positionOutputSchema).optional()
@@ -350,7 +362,7 @@ export const mcpToolOutputSchemas = {
       id,
       name: z.string(),
       anchor_currency: anchorCurrency,
-      holder_count: count,
+      account_group_count: count,
       asset_account_count: count,
       position_group_count: count,
       position_count: count,
@@ -366,7 +378,7 @@ export const mcpToolOutputSchemas = {
   }).strict()),
   chromie_get_overview: toolOutputSchema(z.object({
     view: viewOutputSchema,
-    group_by: z.enum(['asset_account', 'position_group', 'currency']),
+    group_by: z.enum(['asset_account', 'account_group', 'position_group', 'currency']),
     anchor_currency: anchorCurrency,
     exchange_rates: exchangeRatesOutputSchema.nullable(),
     total: z.object({
@@ -391,7 +403,7 @@ export const mcpToolOutputSchemas = {
     total: count,
     positions: z.array(positionOutputSchema.extend({
       asset_account: z.object({ id, name: z.string() }).strict(),
-      holder: holderOutputSchema.nullable(),
+      account_group: accountGroupOutputSchema.nullable(),
       group: z.object({ id, name: z.string() }).strict().nullable(),
       valuation: valuationOutputSchema
     }).strict()),
@@ -410,8 +422,16 @@ export const mcpToolOutputSchemas = {
   }).strict()),
   chromie_create_account: toolOutputSchema(accountIdOutputSchema),
   chromie_update_account: toolOutputSchema(accountIdOutputSchema),
-  chromie_create_holder: toolOutputSchema(z.object({ holder: holderOutputSchema }).strict()),
-  chromie_update_holder: toolOutputSchema(z.object({ holder: holderOutputSchema }).strict()),
+  chromie_create_account_group: toolOutputSchema(
+    z.object({ account_group: accountGroupOutputSchema }).strict()
+  ),
+  chromie_update_account_group: toolOutputSchema(
+    z.object({ account_group: accountGroupOutputSchema }).strict()
+  ),
+  chromie_replace_account_group_members: toolOutputSchema(z.object({
+    account_group_id: id,
+    asset_account_ids: z.array(id)
+  }).strict()),
   chromie_create_asset_account: toolOutputSchema(assetAccountIdOutputSchema),
   chromie_update_asset_account: toolOutputSchema(assetAccountIdOutputSchema),
   chromie_create_position: toolOutputSchema(z.object({

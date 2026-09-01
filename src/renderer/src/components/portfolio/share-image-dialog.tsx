@@ -20,7 +20,7 @@ export type ShareImageScope =
 type DistributionRow = {
   id: string
   name: string
-  holder: string
+  accountGroup: string
   marketValues: Record<string, number | undefined>
   anchoredValue?: number
   percentage?: number
@@ -29,7 +29,7 @@ type DistributionRow = {
 type PositionRow = {
   position: Position
   accountName: string
-  holder: string
+  accountGroup: string
   marketValue?: number
   anchoredValue?: number
   percentage?: number
@@ -244,8 +244,10 @@ function distributionRows(
     ? account.assetAccounts.map((assetAccount) => ({
         id: assetAccount.id,
         name: assetAccount.name,
-        holder:
-          account.holders.find((holder) => holder.id === assetAccount.holderId)?.name ?? '-',
+        accountGroup:
+          account.accountGroups.find((accountGroup) =>
+            accountGroup.assetAccountIds.includes(assetAccount.id)
+          )?.name ?? '-',
         positions: assetAccount.positions
       }))
     : account.positionGroups.map((group) => {
@@ -256,18 +258,20 @@ function distributionRows(
         const positions = ownerAccounts.flatMap((assetAccount) =>
           assetAccount.positions.filter((position) => positionIds.has(position.id))
         )
-        const holders = [
+        const accountGroups = [
           ...new Set(
             ownerAccounts.map(
               (assetAccount) =>
-                account.holders.find((holder) => holder.id === assetAccount.holderId)?.name ?? '-'
+                account.accountGroups.find((accountGroup) =>
+                  accountGroup.assetAccountIds.includes(assetAccount.id)
+                )?.name ?? '-'
             )
           )
         ]
         return {
           id: group.id,
           name: group.name,
-          holder: holders.join('、') || '-',
+          accountGroup: accountGroups.join('、') || '-',
           positions
         }
       })
@@ -287,7 +291,7 @@ function distributionRows(
     .map((row) => ({
       id: row.id,
       name: row.name,
-      holder: row.holder,
+      accountGroup: row.accountGroup,
       marketValues: marketValuesFor(row.positions),
       anchoredValue: row.valuation.isComplete
         ? row.valuation.totalAnchoredMarketValue
@@ -348,8 +352,10 @@ function positionRows(
       return {
         position,
         accountName: assetAccount.name,
-        holder:
-          account.holders.find((holder) => holder.id === assetAccount.holderId)?.name ?? '-',
+        accountGroup:
+          account.accountGroups.find((accountGroup) =>
+            accountGroup.assetAccountIds.includes(assetAccount.id)
+          )?.name ?? '-',
         marketValue: positionValuation?.marketValue,
         anchoredValue: positionValuation?.anchoredMarketValue,
         percentage:
@@ -457,41 +463,75 @@ function renderShareImage(
 
   drawSectionTitle(context, palette, '01', '市值 & 汇率', 194)
 
-  const cardTop = 230
-  const cardHeight = 170
-  const cardGap = 16
-  const cardWidth = (CONTENT_WIDTH - cardGap * 2) / 3
-  DISPLAY_CURRENCIES.forEach((currency, index) => {
-    const x = PAGE_PADDING + index * (cardWidth + cardGap)
-    fillRoundedRect(context, x, cardTop, cardWidth, cardHeight, CANVAS_RADIUS.large, palette.card)
-    strokeRoundedRect(context, x, cardTop, cardWidth, cardHeight, CANVAS_RADIUS.large, palette.border)
+  const cardTop = 332
+  const cardHeight = 150
+  const anchoredValuation = valuePositions(
+    positions,
+    account.anchorCurrency,
+    exchangeRates.snapshot?.rates
+  )
+  const hasCompleteAnchoredValue =
+    anchoredValuation.isComplete &&
+    anchoredValuation.totalAnchoredMarketValue !== undefined
+  const anchoredValue = hasCompleteAnchoredValue
+    ? masked
+      ? '••••••'
+      : formatMoney(
+          anchoredValuation.totalAnchoredMarketValue!,
+          account.anchorCurrency
+        )
+    : '-'
 
-    const valuation = valuePositions(positions, currency, exchangeRates.snapshot?.rates)
-    const hasCompleteValue =
-      valuation.isComplete && valuation.totalAnchoredMarketValue !== undefined
-    setFont(context, 19, 500)
-    drawText(context, `${currency} 市值`, x + 28, cardTop + 38, palette.mutedForeground)
-    setFont(context, masked && hasCompleteValue ? 38 : 35, 600)
-    const value = hasCompleteValue
-      ? masked
-        ? '••••••'
-        : formatMoney(valuation.totalAnchoredMarketValue!, currency)
-      : '-'
+  const marketValues = marketValuesFor(positions)
+  const summaryItems = [
+    {
+      label: `锚定市值 · ${account.anchorCurrency}`,
+      value: hasCompleteAnchoredValue ? anchoredValue : undefined
+    },
+    ...DISPLAY_CURRENCIES.map((currency) => ({
+      label: `${currency} 市值`,
+      value: marketValues[currency] === undefined
+        ? undefined
+        : masked
+          ? '••••••'
+          : formatMoney(marketValues[currency]!, currency)
+    }))
+  ]
+  const cardGap = 16
+  const summaryCardWidth = (CONTENT_WIDTH - cardGap * 3) / summaryItems.length
+  summaryItems.forEach((item, index) => {
+    const cardX = PAGE_PADDING + index * (summaryCardWidth + cardGap)
+    fillRoundedRect(
+      context,
+      cardX,
+      cardTop,
+      summaryCardWidth,
+      cardHeight,
+      CANVAS_RADIUS.large,
+      palette.card
+    )
+    strokeRoundedRect(
+      context,
+      cardX,
+      cardTop,
+      summaryCardWidth,
+      cardHeight,
+      CANVAS_RADIUS.large,
+      palette.border
+    )
+    setFont(context, 17, 500)
+    drawText(context, item.label, cardX + 24, cardTop + 42, palette.mutedForeground)
+    setFont(context, masked && item.value !== undefined ? 29 : 27, 600)
     drawText(
       context,
-      truncateText(context, value, cardWidth - 56),
-      x + 28,
+      truncateText(context, item.value ?? '-', summaryCardWidth - 48),
+      cardX + 24,
       cardTop + 96,
-      palette.foreground
+      item.value === undefined ? palette.subtle : palette.foreground
     )
-    if (!hasCompleteValue && valuation.missingCurrencies.length) {
-      setFont(context, 15, 400)
-      const hint = `缺少 ${valuation.missingCurrencies.join('、')} 汇率`
-      drawText(context, hint, x + 28, cardTop + 137, palette.subtle)
-    }
   })
 
-  const rateTop = 420
+  const rateTop = 230
   fillRoundedRect(context, PAGE_PADDING, rateTop, CONTENT_WIDTH, 82, CANVAS_RADIUS.medium, palette.muted)
   setFont(context, 17, 600)
   drawText(context, '参考汇率', PAGE_PADDING + 26, rateTop + 41, palette.foreground)
@@ -534,6 +574,25 @@ function renderShareImage(
     'right'
   )
 
+  const formulaTop = 502
+  fillRoundedRect(
+    context,
+    PAGE_PADDING,
+    formulaTop,
+    CONTENT_WIDTH,
+    60,
+    CANVAS_RADIUS.medium,
+    palette.muted
+  )
+  setFont(context, 15, 400)
+  drawText(
+    context,
+    '锚定市值 = USD 市值 + HKD 市值 + CNY 市值（汇率折算后）',
+    PAGE_PADDING + 26,
+    formulaTop + 30,
+    palette.mutedForeground
+  )
+
   drawSectionTitle(context, palette, '02', '持仓分布', 584)
   setFont(context, 16, 400)
   drawText(
@@ -563,7 +622,7 @@ function renderShareImage(
   const columnLabels = scope.kind === 'overview'
     ? [
         scope.mode === 'accounts' ? '资产账户' : '持仓分组',
-        '持有人',
+        '资产分组',
         'USD',
         'HKD',
         'CNY',
@@ -582,7 +641,7 @@ function renderShareImage(
         ]
       : [
           '资产账户',
-          '持有人',
+          '资产分组',
           '名称代码',
           '数量',
           '当前价格',
@@ -646,7 +705,7 @@ function renderShareImage(
     setFont(context, 16, 400)
     drawText(
       context,
-      truncateText(context, row.holder, columnWidths[1] - 24),
+      truncateText(context, row.accountGroup, columnWidths[1] - 24),
       x,
       rowY + tableRowHeight / 2,
       palette.mutedForeground
@@ -729,7 +788,7 @@ function renderShareImage(
       setFont(context, 15, 400)
       drawText(
         context,
-        truncateText(context, row.holder, columnWidths[1] - 18),
+        truncateText(context, row.accountGroup, columnWidths[1] - 18),
         x,
         centerY,
         palette.mutedForeground

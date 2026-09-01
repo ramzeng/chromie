@@ -9,6 +9,12 @@ import './styles/globals.css'
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
-    <Toaster closeButton position="bottom-right" />
+    <Toaster
+      closeButton
+      position="top-center"
+      offset={{ top: 64 }}
+      visibleToasts={3}
+      style={{ left: 'calc(50% + 8rem)' }}
+    />
   </StrictMode>
 )

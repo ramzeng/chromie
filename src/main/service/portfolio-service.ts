@@ -17,6 +17,8 @@ import {
   EMPTY_PORTFOLIO_DATA,
   marketMeta,
   type AccountBackup,
+  type AccountGroup,
+  type AccountGroupInput,
   type AnchorCurrency,
   type AppData,
   type AssetAccount,
@@ -433,35 +435,19 @@ function normalizeStoredData(input: unknown): AppData | null {
         anchorCurrency?: unknown
         exchangeRateProvider?: unknown
         exchangeRateRefreshIntervalMinutes?: unknown
-        holders?: unknown
+        accountGroups?: unknown
         assetAccounts?: unknown
         positionGroups?: unknown
       }
       if (
         typeof storedAccount.id !== 'string' ||
         typeof storedAccount.name !== 'string' ||
-        !Array.isArray(storedAccount.assetAccounts)
+        !Array.isArray(storedAccount.accountGroups) ||
+        !Array.isArray(storedAccount.assetAccounts) ||
+        !Array.isArray(storedAccount.positionGroups)
       ) {
         return []
       }
-      const usedHolderIds = new Set<string>()
-      const holders = Array.isArray(storedAccount.holders)
-        ? storedAccount.holders.flatMap((holder) => {
-            if (!holder || typeof holder !== 'object') return []
-            const storedHolder = holder as { id?: unknown; name?: unknown }
-            if (
-              typeof storedHolder.id !== 'string' ||
-              !storedHolder.id.trim() ||
-              usedHolderIds.has(storedHolder.id) ||
-              typeof storedHolder.name !== 'string' ||
-              !storedHolder.name.trim()
-            ) {
-              return []
-            }
-            usedHolderIds.add(storedHolder.id)
-            return [{ id: storedHolder.id, name: storedHolder.name.trim() }]
-          })
-        : []
       const usedPositionIds = new Set<string>()
       const assetAccounts = storedAccount.assetAccounts.flatMap((assetAccount) => {
         if (!assetAccount || typeof assetAccount !== 'object') return []
@@ -469,7 +455,6 @@ function normalizeStoredData(input: unknown): AppData | null {
           id?: unknown
           name?: unknown
           type?: unknown
-          holderId?: unknown
           sync?: unknown
           positions?: unknown
         }
@@ -478,8 +463,6 @@ function normalizeStoredData(input: unknown): AppData | null {
           typeof storedAssetAccount.id !== 'string' ||
           typeof storedAssetAccount.name !== 'string' ||
           !type ||
-          typeof storedAssetAccount.holderId !== 'string' ||
-          !usedHolderIds.has(storedAssetAccount.holderId) ||
           !Array.isArray(storedAssetAccount.positions)
         ) {
           return []
@@ -490,7 +473,6 @@ function normalizeStoredData(input: unknown): AppData | null {
             id: storedAssetAccount.id,
             name: normalizeAssetAccountName(storedAssetAccount.name),
             type,
-            holderId: storedAssetAccount.holderId,
             ...(sync ? { sync } : {}),
             positions: storedAssetAccount.positions.flatMap((position) => {
               const normalized = normalizeStoredPosition(position)
@@ -504,14 +486,76 @@ function normalizeStoredData(input: unknown): AppData | null {
           }
         ]
       })
+      const availableAssetAccountIds = new Set(
+        assetAccounts.map((assetAccount) => assetAccount.id)
+      )
+      const usedAccountGroupIds = new Set<string>()
+      const assignedAssetAccountIds = new Set<string>()
+      const accountGroups = storedAccount.accountGroups.flatMap((accountGroup) => {
+            if (!accountGroup || typeof accountGroup !== 'object') return []
+            const storedAccountGroup = accountGroup as {
+              id?: unknown
+              name?: unknown
+              assetAccountIds?: unknown
+            }
+            if (
+              typeof storedAccountGroup.id !== 'string' ||
+              !storedAccountGroup.id.trim() ||
+              usedAccountGroupIds.has(storedAccountGroup.id) ||
+              typeof storedAccountGroup.name !== 'string' ||
+              !storedAccountGroup.name.trim() ||
+              !Array.isArray(storedAccountGroup.assetAccountIds)
+            ) {
+              return []
+            }
+            const seenAssetAccountIds = new Set<string>()
+            const assetAccountIds = storedAccountGroup.assetAccountIds.flatMap(
+              (assetAccountId) => {
+                if (
+                  typeof assetAccountId !== 'string' ||
+                  !availableAssetAccountIds.has(assetAccountId) ||
+                  assignedAssetAccountIds.has(assetAccountId) ||
+                  seenAssetAccountIds.has(assetAccountId)
+                ) {
+                  return []
+                }
+                seenAssetAccountIds.add(assetAccountId)
+                assignedAssetAccountIds.add(assetAccountId)
+                return [assetAccountId]
+              }
+            )
+            usedAccountGroupIds.add(storedAccountGroup.id)
+            return [{
+              id: storedAccountGroup.id,
+              name: storedAccountGroup.name.trim(),
+              assetAccountIds
+            }]
+          })
+      const accountGroupsAreStrict =
+        accountGroups.length === storedAccount.accountGroups.length &&
+        storedAccount.accountGroups.every((accountGroup) => {
+          if (!accountGroup || typeof accountGroup !== 'object') return false
+          const storedAccountGroup = accountGroup as {
+            id?: unknown
+            assetAccountIds?: unknown
+          }
+          if (
+            typeof storedAccountGroup.id !== 'string' ||
+            !Array.isArray(storedAccountGroup.assetAccountIds)
+          ) {
+            return false
+          }
+          return accountGroups.find((group) => group.id === storedAccountGroup.id)
+            ?.assetAccountIds.length === storedAccountGroup.assetAccountIds.length
+        })
+      if (!accountGroupsAreStrict) return []
       const availablePositionIds = new Set(
         assetAccounts.flatMap((assetAccount) =>
           assetAccount.positions.map((position) => position.id)
         )
       )
       const assignedPositionIds = new Set<string>()
-      const positionGroups = Array.isArray(storedAccount.positionGroups)
-        ? storedAccount.positionGroups.flatMap((group) => {
+      const positionGroups = storedAccount.positionGroups.flatMap((group) => {
             if (!group || typeof group !== 'object') return []
             const storedGroup = group as {
               id?: unknown
@@ -547,7 +591,6 @@ function normalizeStoredData(input: unknown): AppData | null {
               }
             ]
           })
-        : []
       return [
         {
           id: storedAccount.id,
@@ -559,7 +602,7 @@ function normalizeStoredData(input: unknown): AppData | null {
           exchangeRateRefreshIntervalMinutes: normalizeExchangeRateRefreshInterval(
             storedAccount.exchangeRateRefreshIntervalMinutes
           ),
-          holders,
+          accountGroups,
           assetAccounts,
           positionGroups
         }
@@ -679,7 +722,6 @@ function stripIntegrationFields(account: ProductAccount): ProductAccount {
       id: assetAccount.id,
       name: assetAccount.name,
       type: assetAccount.type,
-      holderId: assetAccount.holderId,
       ...(assetAccount.sync ? { sync: structuredClone(assetAccount.sync) } : {}),
       positions: structuredClone(assetAccount.positions)
     }))
@@ -763,28 +805,11 @@ function isValidBackupAccount(value: unknown): boolean {
           MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES ||
         account.exchangeRateRefreshIntervalMinutes >
           MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES)) ||
-    !Array.isArray(account.holders) ||
+    !Array.isArray(account.accountGroups) ||
     !Array.isArray(account.assetAccounts)
   ) {
     return false
   }
-
-  const holderIds = new Set<string>()
-  const validHolders = account.holders.every((holder) => {
-    if (
-      !holder ||
-      typeof holder.id !== 'string' ||
-      !holder.id.trim() ||
-      holderIds.has(holder.id) ||
-      typeof holder.name !== 'string' ||
-      !holder.name.trim()
-    ) {
-      return false
-    }
-    holderIds.add(holder.id)
-    return true
-  })
-  if (!validHolders) return false
 
   const assetAccountIds = new Set<string>()
   const positionIds = new Set<string>()
@@ -798,8 +823,6 @@ function isValidBackupAccount(value: unknown): boolean {
       typeof assetAccount.name !== 'string' ||
       !assetAccount.name.trim() ||
       !type ||
-      typeof assetAccount.holderId !== 'string' ||
-      !holderIds.has(assetAccount.holderId) ||
       !Array.isArray(assetAccount.positions) ||
       !assetAccount.positions.every((position) => {
         if (!isValidBackupPosition(position) || positionIds.has(position.id)) return false
@@ -814,6 +837,38 @@ function isValidBackupAccount(value: unknown): boolean {
     return true
   })
   if (!validAssetAccounts) return false
+
+  const accountGroupIds = new Set<string>()
+  const assignedAssetAccountIds = new Set<string>()
+  const validAccountGroups = account.accountGroups.every((accountGroup) => {
+    if (
+      !accountGroup ||
+      typeof accountGroup.id !== 'string' ||
+      !accountGroup.id.trim() ||
+      accountGroupIds.has(accountGroup.id) ||
+      typeof accountGroup.name !== 'string' ||
+      !accountGroup.name.trim() ||
+      !Array.isArray(accountGroup.assetAccountIds)
+    ) {
+      return false
+    }
+    accountGroupIds.add(accountGroup.id)
+    const seenAssetAccountIds = new Set<string>()
+    return accountGroup.assetAccountIds.every((assetAccountId) => {
+      if (
+        typeof assetAccountId !== 'string' ||
+        !assetAccountIds.has(assetAccountId) ||
+        assignedAssetAccountIds.has(assetAccountId) ||
+        seenAssetAccountIds.has(assetAccountId)
+      ) {
+        return false
+      }
+      seenAssetAccountIds.add(assetAccountId)
+      assignedAssetAccountIds.add(assetAccountId)
+      return true
+    })
+  })
+  if (!validAccountGroups) return false
 
   if (!Array.isArray(account.positionGroups)) return false
 
@@ -1015,7 +1070,7 @@ function createPortfolioOperations(
       exchangeRateProvider: DEFAULT_EXCHANGE_RATE_PROVIDER,
       exchangeRateRefreshIntervalMinutes:
         DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
-      holders: [],
+      accountGroups: [],
       assetAccounts: [],
       positionGroups: []
     }
@@ -1028,22 +1083,6 @@ function createPortfolioOperations(
   }
 
   function updateProductAccount(id: string, input: ProductAccountSettingsInput): void {
-    const usedHolderIds = new Set<string>()
-    const holders = input.holders.flatMap((holder) => {
-      const id = holder.id.trim()
-      const name = holder.name.trim()
-      if (!id || !name || usedHolderIds.has(id)) return []
-      usedHolderIds.add(id)
-      return [{ id, name }]
-    })
-    const account = data.productAccounts.find((item) => item.id === id)
-    if (
-      account?.assetAccounts.some(
-        (assetAccount) => !usedHolderIds.has(assetAccount.holderId)
-      )
-    ) {
-      throw new Error('仍有资产账户属于被删除的持有人')
-    }
     setData((current) => ({
       ...current,
       productAccounts: current.productAccounts.map((account) =>
@@ -1058,8 +1097,7 @@ function createPortfolioOperations(
               exchangeRateRefreshIntervalMinutes:
                 normalizeExchangeRateRefreshInterval(
                   input.exchangeRateRefreshIntervalMinutes
-                ),
-              holders
+                )
             }
           : account
       )
@@ -1090,6 +1128,148 @@ function createPortfolioOperations(
       ...current,
       integrations: current.integrations.filter(
         (integration) => !deletedAssetAccountIds.has(integration.assetAccountId)
+      )
+    }))
+  }
+
+  function createAccountGroup(
+    productAccountId: string,
+    input: AccountGroupInput
+  ): string {
+    const group: AccountGroup = {
+      id: createId(),
+      name: input.name.trim(),
+      assetAccountIds: []
+    }
+    setData((current) => ({
+      ...current,
+      productAccounts: current.productAccounts.map((account) =>
+        account.id === productAccountId
+          ? { ...account, accountGroups: [...account.accountGroups, group] }
+          : account
+      )
+    }))
+    return group.id
+  }
+
+  function updateAccountGroup(
+    productAccountId: string,
+    groupId: string,
+    input: AccountGroupInput
+  ): void {
+    setData((current) => ({
+      ...current,
+      productAccounts: current.productAccounts.map((account) =>
+        account.id === productAccountId
+          ? {
+              ...account,
+              accountGroups: account.accountGroups.map((group) =>
+                group.id === groupId ? { ...group, name: input.name.trim() } : group
+              )
+            }
+          : account
+      )
+    }))
+  }
+
+  function deleteAccountGroup(productAccountId: string, groupId: string): void {
+    setData((current) => ({
+      ...current,
+      productAccounts: current.productAccounts.map((account) =>
+        account.id === productAccountId
+          ? {
+              ...account,
+              accountGroups: account.accountGroups.filter(
+                (group) => group.id !== groupId
+              )
+            }
+          : account
+      )
+    }))
+  }
+
+  function setAccountGroupAccounts(
+    productAccountId: string,
+    groupId: string,
+    assetAccountIds: string[]
+  ): string | null {
+    const productAccount = data.productAccounts.find(
+      (account) => account.id === productAccountId
+    )
+    if (!productAccount) return '没有找到对应的账户'
+    if (!productAccount.accountGroups.some((group) => group.id === groupId)) {
+      return '没有找到对应的账户分组'
+    }
+    const availableAssetAccountIds = new Set(
+      productAccount.assetAccounts.map((account) => account.id)
+    )
+    const normalizedAssetAccountIds = [...new Set(assetAccountIds)]
+    if (
+      normalizedAssetAccountIds.some(
+        (assetAccountId) => !availableAssetAccountIds.has(assetAccountId)
+      )
+    ) {
+      return '部分资产账户已不存在，请重新选择'
+    }
+    const assignedGroupByAccountId = new Map(
+      productAccount.accountGroups.flatMap((group) =>
+        group.id === groupId
+          ? []
+          : group.assetAccountIds.map(
+              (assetAccountId) => [assetAccountId, group.name] as const
+            )
+      )
+    )
+    const conflictingAccountId = normalizedAssetAccountIds.find(
+      (assetAccountId) => assignedGroupByAccountId.has(assetAccountId)
+    )
+    if (conflictingAccountId) {
+      const account = productAccount.assetAccounts.find(
+        (item) => item.id === conflictingAccountId
+      )
+      return `${account?.name ?? '所选资产账户'} 已属于“${assignedGroupByAccountId.get(conflictingAccountId)}”，一个资产账户只能加入一个分组`
+    }
+    setData((current) => ({
+      ...current,
+      productAccounts: current.productAccounts.map((account) =>
+        account.id === productAccountId
+          ? {
+              ...account,
+              accountGroups: account.accountGroups.map((group) =>
+                group.id === groupId
+                  ? { ...group, assetAccountIds: normalizedAssetAccountIds }
+                  : group
+              )
+            }
+          : account
+      )
+    }))
+    return null
+  }
+
+  function removeAccountFromGroup(
+    productAccountId: string,
+    groupId: string,
+    assetAccountId: string
+  ): void {
+    setData((current) => ({
+      ...current,
+      productAccounts: current.productAccounts.map((account) =>
+        account.id === productAccountId
+          ? {
+              ...account,
+              accountGroups: account.accountGroups.map((group) =>
+                group.id === groupId
+                  ? {
+                      ...group,
+                      assetAccountIds: group.assetAccountIds.filter(
+                        (id) => id !== assetAccountId
+                      )
+                    }
+                  : group
+              )
+            }
+          : account
       )
     }))
   }
@@ -1236,9 +1416,6 @@ function createPortfolioOperations(
       (account) => account.id === productAccountId
     )
     if (!productAccount) throw new Error('没有找到对应的账户')
-    if (!productAccount.holders.some((holder) => holder.id === input.holderId)) {
-      throw new Error('请选择有效的持有人')
-    }
     const assetAccountId = createId()
     const integration = resolveIntegrationInput(
       input.integration,
@@ -1256,7 +1433,6 @@ function createPortfolioOperations(
       id: assetAccountId,
       name: normalizeAssetAccountName(input.name),
       type,
-      holderId: input.holderId,
       ...(sync ? { sync } : {}),
       positions: []
     }
@@ -1284,9 +1460,6 @@ function createPortfolioOperations(
     if (!productAccount) throw new Error('没有找到对应的账户')
     if (!productAccount.assetAccounts.some((account) => account.id === assetAccountId)) {
       throw new Error('没有找到对应的资产账户')
-    }
-    if (!productAccount.holders.some((holder) => holder.id === input.holderId)) {
-      throw new Error('请选择有效的持有人')
     }
     const existingIntegration = integrationData.integrations.find(
       (item) => item.assetAccountId === assetAccountId
@@ -1316,7 +1489,6 @@ function createPortfolioOperations(
                       ...assetAccount,
                       name: normalizeAssetAccountName(input.name),
                       type,
-                      holderId: input.holderId,
                       sync
                     }
                   : assetAccount
@@ -1343,6 +1515,12 @@ function createPortfolioOperations(
           assetAccounts: account.assetAccounts.filter(
             (assetAccount) => assetAccount.id !== assetAccountId
           ),
+          accountGroups: account.accountGroups.map((group) => ({
+            ...group,
+            assetAccountIds: group.assetAccountIds.filter(
+              (id) => id !== assetAccountId
+            )
+          })),
           positionGroups: account.positionGroups.map((group) => ({
             ...group,
             positionIds: group.positionIds.filter(
@@ -1515,8 +1693,15 @@ function createPortfolioOperations(
     input: ProductAccount,
     snapshots: PortfolioSnapshot[] = []
   ): string {
-    const holderIdMap = new Map(
-      input.holders.map((holder) => [holder.id, createId()] as const)
+    const accountGroupIdMap = new Map(
+      input.accountGroups.map(
+        (accountGroup) => [accountGroup.id, createId()] as const
+      )
+    )
+    const assetAccountIdMap = new Map(
+      input.assetAccounts.map(
+        (assetAccount) => [assetAccount.id, createId()] as const
+      )
     )
     const positionIdMap = new Map(
       input.assetAccounts.flatMap((assetAccount) =>
@@ -1526,14 +1711,17 @@ function createPortfolioOperations(
     const account: ProductAccount = {
       ...input,
       id: createId(),
-      holders: input.holders.map((holder) => ({
-        ...holder,
-        id: holderIdMap.get(holder.id)!
+      accountGroups: input.accountGroups.map((accountGroup) => ({
+        ...accountGroup,
+        id: accountGroupIdMap.get(accountGroup.id)!,
+        assetAccountIds: accountGroup.assetAccountIds.flatMap((assetAccountId) => {
+          const importedAssetAccountId = assetAccountIdMap.get(assetAccountId)
+          return importedAssetAccountId ? [importedAssetAccountId] : []
+        })
       })),
       assetAccounts: input.assetAccounts.map((assetAccount) => ({
         ...assetAccount,
-        id: createId(),
-        holderId: holderIdMap.get(assetAccount.holderId)!,
+        id: assetAccountIdMap.get(assetAccount.id)!,
         sync: undefined,
         positions: assetAccount.positions.map((position) => ({
           ...position,
@@ -1577,6 +1765,11 @@ function createPortfolioOperations(
     createProductAccount,
     updateProductAccount,
     deleteProductAccount,
+    createAccountGroup,
+    updateAccountGroup,
+    deleteAccountGroup,
+    setAccountGroupAccounts,
+    removeAccountFromGroup,
     createPositionGroup,
     updatePositionGroup,
     deletePositionGroup,
@@ -1687,6 +1880,36 @@ export class PortfolioService implements PortfolioOperations {
         case 'delete-product-account':
           operations.deleteProductAccount(command.id)
           break
+        case 'create-account-group':
+          result = operations.createAccountGroup(
+            command.productAccountId,
+            command.input
+          )
+          break
+        case 'update-account-group':
+          operations.updateAccountGroup(
+            command.productAccountId,
+            command.groupId,
+            command.input
+          )
+          break
+        case 'delete-account-group':
+          operations.deleteAccountGroup(command.productAccountId, command.groupId)
+          break
+        case 'set-account-group-accounts':
+          result = operations.setAccountGroupAccounts(
+            command.productAccountId,
+            command.groupId,
+            command.assetAccountIds
+          )
+          break
+        case 'remove-account-from-group':
+          operations.removeAccountFromGroup(
+            command.productAccountId,
+            command.groupId,
+            command.assetAccountId
+          )
+          break
         case 'create-position-group':
           result = operations.createPositionGroup(
             command.productAccountId,
@@ -1769,6 +1992,7 @@ export class PortfolioService implements PortfolioOperations {
       if (
         typeof result === 'string' &&
         (command.type === 'save-position' ||
+          command.type === 'set-account-group-accounts' ||
           command.type === 'set-position-group-positions')
       ) {
         return {
@@ -1827,18 +2051,13 @@ export class PortfolioService implements PortfolioOperations {
       this.repository.load(),
       this.integrationRepository.load()
     ])
+    const storedData = storedContent ? parseStoredData(storedContent) : null
+    const storedIntegrationData = storedIntegrationContent
+      ? parseStoredIntegrationData(storedIntegrationContent)
+      : null
     const reconciled = reconcileIntegrations(
-      structuredClone(
-        storedContent
-          ? (parseStoredData(storedContent) ?? EMPTY_PORTFOLIO_DATA)
-          : EMPTY_PORTFOLIO_DATA
-      ),
-      structuredClone(
-        storedIntegrationContent
-          ? (parseStoredIntegrationData(storedIntegrationContent) ??
-              EMPTY_INTEGRATION_DATA)
-          : EMPTY_INTEGRATION_DATA
-      )
+      structuredClone(storedData ?? EMPTY_PORTFOLIO_DATA),
+      structuredClone(storedIntegrationData ?? EMPTY_INTEGRATION_DATA)
     )
     this.data = reconciled.data
     this.integrationData = reconciled.integrationData

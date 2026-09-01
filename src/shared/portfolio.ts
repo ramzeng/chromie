@@ -43,16 +43,16 @@ export type AssetAccountSync = {
   lastSyncedAt?: string
 }
 
-export type Holder = {
+export type AccountGroup = {
   id: string
   name: string
+  assetAccountIds: string[]
 }
 
 export type AssetAccount = {
   id: string
   name: string
   type: AssetAccountType
-  holderId: string
   sync?: AssetAccountSync
   positions: Position[]
 }
@@ -69,7 +69,7 @@ export type ProductAccount = {
   anchorCurrency: AnchorCurrency
   exchangeRateProvider: ExchangeRateProvider
   exchangeRateRefreshIntervalMinutes: number
-  holders: Holder[]
+  accountGroups: AccountGroup[]
   assetAccounts: AssetAccount[]
   positionGroups: PositionGroup[]
 }
@@ -101,15 +101,15 @@ export type ProductAccountSettingsInput = Pick<
   | 'anchorCurrency'
   | 'exchangeRateProvider'
   | 'exchangeRateRefreshIntervalMinutes'
-  | 'holders'
 >
 export type AssetAccountInput = Pick<
   AssetAccount,
-  'name' | 'type' | 'holderId' | 'sync'
+  'name' | 'type' | 'sync'
 > & {
   integration?: AssetAccountIntegrationInput
 }
 export type PositionInput = Omit<Position, 'id'>
+export type AccountGroupInput = Pick<AccountGroup, 'name'>
 export type PositionGroupInput = Pick<PositionGroup, 'name'>
 
 export type PortfolioCommand =
@@ -127,6 +127,30 @@ export type PortfolioCommand =
       input: ProductAccountSettingsInput
     }
   | { type: 'delete-product-account'; id: string }
+  | {
+      type: 'create-account-group'
+      productAccountId: string
+      input: AccountGroupInput
+    }
+  | {
+      type: 'update-account-group'
+      productAccountId: string
+      groupId: string
+      input: AccountGroupInput
+    }
+  | { type: 'delete-account-group'; productAccountId: string; groupId: string }
+  | {
+      type: 'set-account-group-accounts'
+      productAccountId: string
+      groupId: string
+      assetAccountIds: string[]
+    }
+  | {
+      type: 'remove-account-from-group'
+      productAccountId: string
+      groupId: string
+      assetAccountId: string
+    }
   | {
       type: 'create-position-group'
       productAccountId: string

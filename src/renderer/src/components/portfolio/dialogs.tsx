@@ -8,12 +8,12 @@ import {
   type SetStateAction
 } from 'react'
 import {
+  Check,
   Coins,
   Copy,
-  Ellipsis,
+  FolderTree,
   Plus,
   SlidersHorizontal,
-  UsersRound,
   Wrench
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -78,6 +78,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { ExchangeRateState } from '@/lib/exchange-rates'
 import type { McpAccessSettings, McpConnectionSettings } from '@/lib/mcp'
+import { AccountTypeIcon } from './view-helpers'
 import {
   ANCHOR_CURRENCIES,
   assetAccountTypeLabels,
@@ -102,7 +103,8 @@ import {
   type AssetAccountType,
   type AnchorCurrency,
   type ExchangeRateProvider,
-  type Holder,
+  type AccountGroup,
+  type AccountGroupInput,
   type Market,
   type Position,
   type PositionGroup,
@@ -353,76 +355,95 @@ function ReferenceExchangeRates({ exchangeRates }: { exchangeRates: ExchangeRate
   )
 }
 
-function HolderDialog({
+export function AccountGroupDialog({
   open,
   onOpenChange,
-  holder,
-  holders,
+  group,
   onSubmit
 }: BaseDialogProps & {
-  holder?: Holder
-  holders: Holder[]
-  onSubmit: (holder: Holder) => void
+  group?: AccountGroup
+  onSubmit: (input: AccountGroupInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
+  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
+    useSubmissionGuard()
 
   useEffect(() => {
     if (!open) return
-    setName(holder?.name ?? '')
+    setName(group?.name ?? '')
     setError('')
-  }, [holder, open])
+  }, [group, open])
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    if (submissionInFlight.current) return
     const normalizedName = name.trim()
     if (!normalizedName) {
-      setError('请输入持有人名称')
+      setError('请输入资产分组名称')
       return
     }
-    const duplicate = holders.some(
-      (item) =>
-        item.id !== holder?.id &&
-        item.name.trim().toLocaleLowerCase() === normalizedName.toLocaleLowerCase()
-    )
-    if (duplicate) {
-      setError('持有人名称不能重复')
-      return
+    if (!beginSubmission()) return
+    try {
+      await onSubmit({ name: normalizedName })
+      onOpenChange(false)
+    } catch (submitError) {
+      reportOperationError(
+        group ? '更新资产分组失败' : '创建资产分组失败',
+        submitError
+      )
+    } finally {
+      endSubmission()
     }
-    onSubmit({ id: holder?.id ?? crypto.randomUUID(), name: normalizedName })
-    onOpenChange(false)
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>{holder ? '编辑持有人' : '新增持有人'}</DialogTitle>
-          <DialogDescription className="sr-only">
-            {holder ? '修改持有人名称' : '为当前账户新增持有人'}
-          </DialogDescription>
+          <DialogTitle>{group ? '编辑资产分组' : '新建资产分组'}</DialogTitle>
+          <DialogDescription>把多个资产账户汇总到一起查看</DialogDescription>
         </DialogHeader>
-        <form className="grid gap-4" onSubmit={handleSubmit}>
+        <form className="grid gap-5" onSubmit={handleSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="holder-name">持有人名称</Label>
+            <Label htmlFor="account-group-name">资产分组名称</Label>
             <Input
-              id="holder-name"
+              id="account-group-name"
               value={name}
               onChange={(event) => {
                 setName(event.target.value)
                 setError('')
               }}
-              placeholder="输入持有人名称"
+              placeholder="输入资产分组名称"
               autoFocus
               maxLength={40}
             />
           </div>
           {error && <FieldMessage>{error}</FieldMessage>}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
               取消
             </Button>
-            <Button type="submit">{holder ? '保存' : '新增'}</Button>
+            <Button type="submit" disabled={submitting} aria-busy={submitting}>
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting
+                ? group
+                  ? '保存中…'
+                  : '创建中…'
+                : group
+                  ? '保存修改'
+                  : '创建资产分组'}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -544,6 +565,86 @@ export function ProductAccountDialog({
   )
 }
 
+export function ProductAccountSwitcherDialog({
+  open,
+  onOpenChange,
+  accounts,
+  activeAccountId,
+  onSelect
+}: BaseDialogProps & {
+  accounts: ProductAccount[]
+  activeAccountId: string
+  onSelect: (accountId: string) => Promise<void>
+}) {
+  const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) setSwitchingAccountId(null)
+  }, [open])
+
+  async function handleSelect(accountId: string): Promise<void> {
+    if (switchingAccountId) return
+    if (accountId === activeAccountId) {
+      onOpenChange(false)
+      return
+    }
+    setSwitchingAccountId(accountId)
+    try {
+      await onSelect(accountId)
+      onOpenChange(false)
+    } catch (error) {
+      reportOperationError('切换账户失败', error)
+    } finally {
+      setSwitchingAccountId(null)
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!switchingAccountId) onOpenChange(nextOpen)
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>切换账户</DialogTitle>
+          <DialogDescription>选择要进入的账户</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2">
+          {accounts.map((account) => {
+            const active = account.id === activeAccountId
+            const switching = account.id === switchingAccountId
+            return (
+              <Button
+                key={account.id}
+                type="button"
+                variant={active ? 'secondary' : 'outline'}
+                className="h-auto w-full justify-start gap-3 p-3"
+                disabled={Boolean(switchingAccountId)}
+                aria-current={active ? 'true' : undefined}
+                onClick={() => void handleSelect(account.id)}
+              >
+                <span className="grid size-9 shrink-0 place-items-center rounded-sm bg-background text-sm font-semibold">
+                  {account.name.trim().slice(0, 1).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-left">
+                  {account.name}
+                </span>
+                {switching ? (
+                  <Spinner data-icon="inline-end" />
+                ) : active ? (
+                  <Check data-icon="inline-end" />
+                ) : null}
+              </Button>
+            )
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function ProductAccountSettingsDialog({
   open,
   onOpenChange,
@@ -555,7 +656,7 @@ export function ProductAccountSettingsDialog({
 }: BaseDialogProps & {
   account: ProductAccount
   exchangeRates: ExchangeRateView
-  initialSection?: 'basic' | 'currency' | 'holders' | 'mcp'
+  initialSection?: 'basic' | 'currency' | 'mcp'
   onSubmit: (input: ProductAccountSettingsInput) => Promise<void>
   onRequestDelete: () => void
 }) {
@@ -568,14 +669,7 @@ export function ProductAccountSettingsDialog({
   const [exchangeRateRefreshInterval, setExchangeRateRefreshInterval] = useState(
     String(DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES)
   )
-  const [holders, setHolders] = useState<Holder[]>([])
-  const [section, setSection] = useState<
-    'basic' | 'currency' | 'holders' | 'mcp'
-  >('basic')
-  const [holderDialog, setHolderDialog] = useState<{
-    open: boolean
-    holderId?: string
-  }>({ open: false })
+  const [section, setSection] = useState<'basic' | 'currency' | 'mcp'>('basic')
   const [mcpConnection, setMcpConnection] =
     useState<McpConnectionSettings | null>(null)
   const [mcpAccess, setMcpAccess] =
@@ -606,9 +700,7 @@ export function ProductAccountSettingsDialog({
           : DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
       )
     )
-    setHolders(account.holders.map((holder) => ({ ...holder })))
     setSection(initialSection)
-    setHolderDialog({ open: false })
     setError('')
   }, [account.id, initialSection, open])
 
@@ -694,28 +786,13 @@ export function ProductAccountSettingsDialog({
       )
       return
     }
-    const normalizedHolderNames = holders.map((holder) => holder.name.trim())
-    if (normalizedHolderNames.some((holderName) => !holderName)) {
-      setSection('holders')
-      setError('请填写持有人名称')
-      return
-    }
-    const uniqueHolderNames = new Set(
-      normalizedHolderNames.map((holderName) => holderName.toLocaleLowerCase())
-    )
-    if (uniqueHolderNames.size !== normalizedHolderNames.length) {
-      setSection('holders')
-      setError('持有人名称不能重复')
-      return
-    }
     if (!beginSubmission()) return
     try {
       await onSubmit({
         name,
         anchorCurrency,
         exchangeRateProvider,
-        exchangeRateRefreshIntervalMinutes: refreshInterval,
-        holders: holders.map((holder) => ({ ...holder, name: holder.name.trim() }))
+        exchangeRateRefreshIntervalMinutes: refreshInterval
       })
       onOpenChange(false)
     } catch (submitError) {
@@ -726,8 +803,7 @@ export function ProductAccountSettingsDialog({
   }
 
   return (
-    <>
-      <Dialog
+    <Dialog
         open={open}
         onOpenChange={(nextOpen) => {
           if (!submitting) onOpenChange(nextOpen)
@@ -737,7 +813,7 @@ export function ProductAccountSettingsDialog({
         <DialogHeader className="border-b px-6 py-5">
           <DialogTitle>账户设置</DialogTitle>
           <DialogDescription className="sr-only">
-            管理账户基础信息、币种与汇率、持有人、MCP 和账户状态
+            管理账户基础信息、币种与汇率、MCP 和账户状态
           </DialogDescription>
         </DialogHeader>
         <form
@@ -772,19 +848,6 @@ export function ProductAccountSettingsDialog({
                 >
                   <Coins className="size-4" />
                   币种与汇率
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className={cn(
-                    'h-9 justify-start gap-2.5 px-3 font-normal',
-                    section === 'holders' &&
-                      'bg-background font-medium shadow-xs hover:bg-background'
-                  )}
-                  onClick={() => setSection('holders')}
-                >
-                  <UsersRound className="size-4" />
-                  持有人
                 </Button>
                 <Button
                   type="button"
@@ -928,115 +991,6 @@ export function ProductAccountSettingsDialog({
                 </section>
               )}
 
-              {section === 'holders' && (
-                <section className="grid gap-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <h3 className="text-base font-semibold">持有人</h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setHolderDialog({ open: true })}
-                    >
-                      <Plus className="size-4" />
-                      新增
-                    </Button>
-                  </div>
-                  {holders.length ? (
-                    <div className="overflow-hidden rounded-md border">
-                      <Table className="table-fixed">
-                        <TableHeader className="bg-muted/20">
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead className="h-9 px-3">持有人</TableHead>
-                            <TableHead className="h-9 w-24 px-3 text-right">
-                              资产账户
-                            </TableHead>
-                            <TableHead className="h-9 w-14 px-3 text-right">操作</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {holders.map((holder) => {
-                            const assetAccountCount = account.assetAccounts.filter(
-                              (assetAccount) => assetAccount.holderId === holder.id
-                            ).length
-                            return (
-                              <TableRow key={holder.id}>
-                                <TableCell className="truncate px-3 py-2 font-medium">
-                                  {holder.name}
-                                </TableCell>
-                                <TableCell className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                                  {assetAccountCount}
-                                </TableCell>
-                                <TableCell className="px-3 py-2">
-                                  <div className="flex justify-end">
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon"
-                                          className="size-8 text-muted-foreground"
-                                          aria-label={`${holder.name}操作`}
-                                        >
-                                          <Ellipsis className="size-4" />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end" className="min-w-24">
-                                        <DropdownMenuGroup>
-                                          <DropdownMenuItem
-                                            onSelect={() =>
-                                              setHolderDialog({
-                                                open: true,
-                                                holderId: holder.id
-                                              })
-                                            }
-                                          >
-                                            编辑
-                                          </DropdownMenuItem>
-                                          <DropdownMenuItem
-                                            variant="destructive"
-                                            onSelect={() => {
-                                              if (assetAccountCount > 0) {
-                                                setError(
-                                                  '请先为该持有人名下的资产账户重新指定持有人'
-                                                )
-                                                return
-                                              }
-                                              setHolders((current) =>
-                                                current.filter((item) => item.id !== holder.id)
-                                              )
-                                              setError('')
-                                            }}
-                                          >
-                                            删除
-                                          </DropdownMenuItem>
-                                        </DropdownMenuGroup>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : (
-                    <Empty className="border py-8 md:p-8">
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <UsersRound data-icon="inline-start" />
-                        </EmptyMedia>
-                        <EmptyTitle>暂无持有人</EmptyTitle>
-                        <EmptyDescription>
-                          新增持有人后，才能为资产账户指定归属
-                        </EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  )}
-                </section>
-              )}
-
                 {section === 'mcp' && (
                 <div className="grid gap-4">
                   {mcpLoading ? (
@@ -1100,25 +1054,189 @@ export function ProductAccountSettingsDialog({
         </form>
         </DialogContent>
       </Dialog>
-      <HolderDialog
-        open={holderDialog.open}
-        onOpenChange={(dialogOpen) =>
-          setHolderDialog((current) => ({ ...current, open: dialogOpen }))
-        }
-        holder={holders.find((holder) => holder.id === holderDialog.holderId)}
-        holders={holders}
-        onSubmit={(nextHolder) => {
-          setHolders((current) =>
-            current.some((holder) => holder.id === nextHolder.id)
-              ? current.map((holder) =>
-                  holder.id === nextHolder.id ? nextHolder : holder
-                )
-              : [...current, nextHolder]
+  )
+}
+
+export function GroupAccountsDialog({
+  open,
+  onOpenChange,
+  group,
+  assetAccounts,
+  accountGroups,
+  onSubmit
+}: BaseDialogProps & {
+  group: AccountGroup
+  assetAccounts: AssetAccount[]
+  accountGroups: AccountGroup[]
+  onSubmit: (assetAccountIds: string[]) => Promise<string | null>
+}) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [query, setQuery] = useState('')
+  const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
+  const checkboxIdPrefix = useId()
+
+  useEffect(() => {
+    if (!open) return
+    setSelectedIds(group.assetAccountIds)
+    setQuery('')
+    // Background account syncs should not discard selections being edited.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [group.id, open])
+
+  const normalizedQuery = query.trim().toLowerCase()
+  const visibleAccounts = normalizedQuery
+    ? assetAccounts.filter((assetAccount) =>
+        [assetAccount.name, assetAccountTypeLabels[assetAccount.type]].some((value) =>
+          value.toLowerCase().includes(normalizedQuery)
+        )
+      )
+    : assetAccounts
+  const assignedGroupByAccountId = new Map(
+    accountGroups.flatMap((accountGroup) =>
+      accountGroup.id === group.id
+        ? []
+        : accountGroup.assetAccountIds.map(
+            (assetAccountId) => [assetAccountId, accountGroup.name] as const
           )
-          setError('')
-        }}
-      />
-    </>
+    )
+  )
+
+  function setAccountSelected(assetAccountId: string, selected: boolean): void {
+    if (assignedGroupByAccountId.has(assetAccountId)) return
+    setSelectedIds((current) =>
+      selected
+        ? current.includes(assetAccountId)
+          ? current
+          : [...current, assetAccountId]
+        : current.filter((item) => item !== assetAccountId)
+    )
+  }
+
+  async function handleSubmit(): Promise<void> {
+    if (!beginSubmission()) return
+    try {
+      const submitError = await onSubmit(selectedIds)
+      if (submitError) {
+        reportOperationError('保存分组账户失败', submitError)
+        return
+      }
+      onOpenChange(false)
+    } catch (submitError) {
+      reportOperationError('保存分组账户失败', submitError)
+    } finally {
+      endSubmission()
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
+      <DialogContent className="max-h-[88vh] max-w-xl">
+        <DialogHeader>
+          <DialogTitle>管理“{group.name}”的资产账户</DialogTitle>
+          <DialogDescription>
+            每个资产账户只能加入一个资产分组，已属于其他分组的账户不可选择
+          </DialogDescription>
+        </DialogHeader>
+        {assetAccounts.length > 0 && (
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索资产账户名称或类型"
+            autoFocus
+          />
+        )}
+        <div className="min-h-28 overflow-y-auto rounded-lg border bg-muted/10">
+          {visibleAccounts.length ? (
+            <div className="grid gap-1 p-3">
+              {visibleAccounts.map((assetAccount) => {
+                const selected = selectedIds.includes(assetAccount.id)
+                const assignedGroupName = assignedGroupByAccountId.get(assetAccount.id)
+                return (
+                  <Label
+                    key={assetAccount.id}
+                    htmlFor={`${checkboxIdPrefix}-${assetAccount.id}`}
+                    className={cn(
+                      'flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors',
+                      assignedGroupName
+                        ? 'cursor-not-allowed opacity-55'
+                        : 'cursor-pointer hover:bg-muted/70'
+                    )}
+                  >
+                    <Checkbox
+                      id={`${checkboxIdPrefix}-${assetAccount.id}`}
+                      checked={selected}
+                      disabled={Boolean(assignedGroupName)}
+                      onCheckedChange={(checked) => {
+                        if (checked !== 'indeterminate') {
+                          setAccountSelected(assetAccount.id, checked)
+                        }
+                      }}
+                    />
+                    <AccountTypeIcon type={assetAccount.type} className="size-7" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {assetAccount.name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {assetAccountTypeLabels[assetAccount.type]} · {assetAccount.positions.length} 项持仓
+                      </span>
+                    </span>
+                    {assignedGroupName && (
+                      <span className="max-w-40 shrink-0 truncate text-xs text-muted-foreground">
+                        已在 {assignedGroupName}
+                      </span>
+                    )}
+                  </Label>
+                )
+              })}
+            </div>
+          ) : (
+            <Empty className="min-h-32 px-6 py-8 md:p-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <FolderTree data-icon="inline-start" />
+                </EmptyMedia>
+                <EmptyTitle>
+                  {assetAccounts.length ? '没有匹配的资产账户' : '暂无可选资产账户'}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {assetAccounts.length ? '请尝试调整搜索关键词' : '请先添加资产账户'}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          )}
+        </div>
+        <DialogFooter className="items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            已选择 {selectedIds.length} 个资产账户
+          </p>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={submitting}
+              aria-busy={submitting}
+              onClick={() => void handleSubmit()}
+            >
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting ? '保存中…' : '保存'}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -1555,18 +1673,13 @@ export function AssetAccountDialog({
   onOpenChange,
   account,
   integration,
-  holders,
-  onManageHolders,
   onSubmit
 }: BaseDialogProps & {
   account?: AssetAccount
   integration?: AssetAccountIntegrationView
-  holders: Holder[]
-  onManageHolders: () => void
   onSubmit: (input: AssetAccountInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
-  const [holderId, setHolderId] = useState('unassigned')
   const [type, setType] = useState<AssetAccountType>('Futu')
   const [autoSync, setAutoSync] = useState(false)
   const [syncHost, setSyncHost] = useState(DEFAULT_FUTU_OPEND_HOST)
@@ -1591,7 +1704,6 @@ export function AssetAccountDialog({
   useEffect(() => {
     if (!open) return
     setName(account?.name ?? assetAccountTypeLabels[account?.type ?? 'Futu'])
-    setHolderId(account?.holderId ?? 'unassigned')
     setType(account?.type ?? 'Futu')
     setAutoSync(Boolean(account?.sync && integration))
     setSyncHost(
@@ -1636,11 +1748,6 @@ export function AssetAccountDialog({
     if (submissionInFlight.current) return
     if (!name.trim()) {
       setError('请输入资产账户名称')
-      return
-    }
-    const holder = holders.find((item) => item.id === holderId)
-    if (!holder) {
-      setError(holders.length ? '请选择持有人' : '请先添加持有人')
       return
     }
     const parsedSyncPort = Number(syncPort)
@@ -1725,7 +1832,6 @@ export function AssetAccountDialog({
       await onSubmit({
           name: name.trim(),
           type,
-          holderId: holder.id,
           ...(syncEnabled
             ? {
               sync: {
@@ -1820,7 +1926,7 @@ export function AssetAccountDialog({
       <DialogContent className="max-h-[92vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{account ? '编辑资产账户' : '添加资产账户'}</DialogTitle>
-          <DialogDescription>选择资产账户的持有人和来源</DialogDescription>
+          <DialogDescription>设置资产账户名称、类型和同步来源</DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={handleSubmit}>
           <div className="grid gap-2">
@@ -1878,49 +1984,6 @@ export function AssetAccountDialog({
               placeholder="例如：我的美股账户"
               maxLength={50}
             />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="asset-account-holder">持有人</Label>
-            <Select
-              value={holderId}
-              disabled={!holders.length}
-              onValueChange={(value) => {
-                setHolderId(value)
-                setError('')
-              }}
-            >
-              <SelectTrigger id="asset-account-holder">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="unassigned" disabled>
-                    请选择持有人
-                  </SelectItem>
-                  {holders.map((holder) => (
-                    <SelectItem key={holder.id} value={holder.id}>
-                      {holder.name}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs leading-5 text-muted-foreground">
-                {holders.length
-                  ? '每个资产账户都需要指定持有人'
-                  : '请先在账户设置中添加持有人'}
-              </p>
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                className="h-auto shrink-0 px-0 py-0"
-                onClick={onManageHolders}
-              >
-                {holders.length ? '管理持有人' : '添加持有人'}
-              </Button>
-            </div>
           </div>
           {supportsAutoSync && (
             <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/20 px-4 py-3.5">
