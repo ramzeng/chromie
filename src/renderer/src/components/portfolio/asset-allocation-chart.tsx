@@ -334,7 +334,7 @@ export function AssetAllocationChart({
           </PieChart>
         </ChartContainer>
         <ul id={summaryId} className="sr-only">
-          <li>按{dimensionLabel}统计。</li>
+          <li>按{dimensionLabel}统计</li>
           {chartData.map((item) => (
             <li key={item.id}>
               {item.label}：{formatMoney(item.value, baseCurrency)}，

@@ -205,9 +205,9 @@ function McpSettingsSection({
   async function copyClientConfig(): Promise<void> {
     try {
       await navigator.clipboard.writeText(clientConfig)
-      toast.success('MCP 配置已复制')
+      toast.success('MCP 协议配置已复制')
     } catch (error) {
-      toast.error('复制 MCP 配置失败', {
+      toast.error('复制 MCP 协议配置失败', {
         description: operationErrorMessage(error)
       })
     }
@@ -216,17 +216,17 @@ function McpSettingsSection({
   return (
     <section className="grid gap-5">
       <div>
-        <h3 className="text-base font-semibold">MCP</h3>
+        <h3 className="text-base font-semibold">MCP 协议</h3>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          允许本机 AI 工具在你授权的范围内读取或维护 Chromie 数据
+          允许 Agent 在你授权的范围内读取或维护 Chromie 数据
         </p>
       </div>
       <div className="divide-y overflow-hidden rounded-sm border">
         <div className="flex items-center justify-between gap-6 p-4">
           <div>
-            <Label htmlFor="mcp-enabled">启用 MCP</Label>
+            <Label htmlFor="mcp-enabled">启用 MCP 协议</Label>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              默认只读；关闭后本机 MCP 连接立即停止
+              默认只读；关闭后本机 MCP 协议连接立即停止
             </p>
           </div>
           <Switch
@@ -261,7 +261,7 @@ function McpSettingsSection({
       {clientConfig && (
         <div className="grid gap-2">
           <div className="flex items-center justify-between gap-3">
-            <Label>MCP 客户端配置</Label>
+            <Label>MCP 协议客户端配置</Label>
             <Button type="button" variant="outline" size="sm" onClick={copyClientConfig}>
               <Copy data-icon="inline-start" />
               复制
@@ -676,9 +676,9 @@ export function WorkspaceSettingsDialog({
     setMcpError('')
     setMcpLoading(false)
     if (!mcp) {
-      const message = 'MCP 组件尚未加载，请重启 Chromie'
+      const message = 'MCP 协议组件尚未加载，请重启 Chromie'
       setMcpError(message)
-      reportOperationError('MCP 操作失败', message)
+      reportOperationError('MCP 协议操作失败', message)
       return
     }
 
@@ -694,7 +694,7 @@ export function WorkspaceSettingsDialog({
         if (!mounted) return
         const message = operationErrorMessage(loadError)
         setMcpError(message)
-        reportOperationError('MCP 操作失败', message)
+        reportOperationError('MCP 协议操作失败', message)
       })
       .finally(() => {
         if (mounted) setMcpLoading(false)
@@ -710,9 +710,9 @@ export function WorkspaceSettingsDialog({
     if (submissionInFlight.current) return
     if (section === 'mcp') {
       if (!window.desktop.mcp) {
-        const message = 'MCP 组件尚未加载，请重启 Chromie'
+        const message = 'MCP 协议组件尚未加载，请重启 Chromie'
         setMcpError(message)
-        reportOperationError('MCP 操作失败', message)
+        reportOperationError('MCP 协议操作失败', message)
         return
       }
       if (!beginSubmission()) return
@@ -725,7 +725,7 @@ export function WorkspaceSettingsDialog({
       } catch (submitError) {
         const message = operationErrorMessage(submitError)
         setMcpError(message)
-        reportOperationError('MCP 操作失败', message)
+        reportOperationError('MCP 协议操作失败', message)
       } finally {
         endSubmission()
       }
@@ -775,7 +775,7 @@ export function WorkspaceSettingsDialog({
         <DialogHeader>
           <DialogTitle>工作区设置</DialogTitle>
           <DialogDescription className="sr-only">
-            管理工作区基础信息、币种与汇率、MCP 和工作区状态
+            管理工作区基础信息、币种与汇率、MCP 协议和工作区状态
           </DialogDescription>
         </DialogHeader>
         <form
@@ -787,7 +787,7 @@ export function WorkspaceSettingsDialog({
           onSubmit={handleSubmit}
         >
           <DialogBody className="grid grid-cols-[10.5rem_minmax(0,1fr)] overflow-hidden p-0">
-            <aside className="border-r border-sidebar-border bg-sidebar p-3 text-sidebar-foreground">
+            <aside className="border-r border-border bg-background/40 p-3 text-foreground">
               <nav className="grid content-start gap-1" aria-label="工作区设置菜单">
                 <Button
                   type="button"
@@ -826,7 +826,7 @@ export function WorkspaceSettingsDialog({
                   onClick={() => setSection('mcp')}
                 >
                   <Wrench className="size-4" />
-                  MCP
+                  MCP 协议
                 </Button>
               </nav>
             </aside>
@@ -981,7 +981,7 @@ export function WorkspaceSettingsDialog({
                 {section === 'mcp' && (
                 <div className="grid gap-4">
                   {mcpLoading ? (
-                    <div className="grid gap-5" aria-label="正在加载 MCP 设置">
+                    <div className="grid gap-5" aria-label="正在加载 MCP 协议设置">
                       <div className="grid gap-2">
                         <Skeleton className="h-5 w-16" />
                         <Skeleton className="h-3 w-72 max-w-full" />

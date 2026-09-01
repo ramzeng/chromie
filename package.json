@@ -66,6 +66,7 @@
     ],
     "mac": {
       "category": "public.app-category.finance",
+      "icon": "resources/chromie-app-icon-knot-v5.png",
       "target": [
         "dmg",
         "zip"

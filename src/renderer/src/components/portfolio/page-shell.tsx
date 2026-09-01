@@ -10,7 +10,7 @@ export function PortfolioPage({ className, ...props }: ComponentProps<'div'>) {
     <div
       data-slot="portfolio-page"
       className={cn(
-        '@container mx-auto w-full max-w-[1440px] px-6 pb-8 pt-5',
+        '@container w-full px-4 pb-6 pt-8 lg:px-6',
         className
       )}
       {...props}
@@ -57,7 +57,7 @@ export function HistoricalVersionBanner({
   onReturnLatest: () => void
 }) {
   return (
-    <div className="mx-auto w-full max-w-[1440px] px-6 pt-1">
+    <div className="w-full px-4 pt-8 lg:px-6">
       <div
         className="flex min-h-10 flex-wrap items-center justify-center gap-x-3 gap-y-2 rounded-sm border border-border/70 bg-muted/25 px-4 py-2 text-sm"
         role="status"

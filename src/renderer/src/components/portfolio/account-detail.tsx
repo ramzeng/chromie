@@ -1,5 +1,4 @@
 import {
-  ChartPie,
   Ellipsis,
   Layers2,
   ListPlus,
@@ -498,17 +497,10 @@ export function AccountGroupDetail({
   return (
     <PortfolioPage>
       <PortfolioPageHeader>
-        <div className="flex min-w-0 flex-[1_1_20rem] items-center gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-sm bg-muted text-muted-foreground">
-            <Layers2 className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <h1 className="truncate text-2xl font-semibold tracking-[-0.035em]">
-                {group.name}
-              </h1>
-            </div>
-          </div>
+        <div className="min-w-0 flex-[1_1_20rem]">
+          <h1 className="truncate text-2xl font-semibold tracking-[-0.035em]">
+            {group.name}
+          </h1>
         </div>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {!readOnly && (
@@ -745,17 +737,10 @@ export function PositionGroupDetail({
   return (
     <PortfolioPage>
       <PortfolioPageHeader>
-        <div className="flex min-w-0 flex-[1_1_20rem] items-center gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-sm bg-muted text-muted-foreground">
-            <ChartPie className="size-5" />
-          </span>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <h1 className="truncate text-2xl font-semibold tracking-[-0.035em]">
-                {group.name}
-              </h1>
-            </div>
-          </div>
+        <div className="min-w-0 flex-[1_1_20rem]">
+          <h1 className="truncate text-2xl font-semibold tracking-[-0.035em]">
+            {group.name}
+          </h1>
         </div>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {!readOnly && (

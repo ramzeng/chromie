@@ -17,7 +17,8 @@ function AlertDialogOverlay({
 }: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
   return (
     <AlertDialogPrimitive.Overlay
-      className={cn('fixed inset-0 z-50 bg-background/80', className)}
+      data-slot="alert-dialog-overlay"
+      className={cn('fixed inset-0 z-50 bg-black/65 backdrop-blur-[2px]', className)}
       {...props}
     />
   )
@@ -31,8 +32,9 @@ function AlertDialogContent({
     <AlertDialogPortal>
       <AlertDialogOverlay />
       <AlertDialogPrimitive.Content
+        data-slot="alert-dialog-content"
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-5 rounded-sm border bg-background p-6 shadow-lg outline-none',
+          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-5 rounded-sm border border-border/80 bg-background p-6 text-foreground shadow-2xl outline-none',
           className
         )}
         {...props}

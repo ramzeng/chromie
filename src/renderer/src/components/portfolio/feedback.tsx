@@ -1,8 +1,8 @@
 import {
   CircleAlert,
   Download,
-  Layers3,
-  Plus
+  Plus,
+  ShieldCheck
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/empty'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
+import { CHROMIE_LOGO_URL } from '@/lib/brand'
 
 export function reportPortfolioError(error: unknown, title = '操作失败'): void {
   toast.error(title, { description: cleanErrorMessage(error) })
@@ -34,22 +35,28 @@ export function EmptyWorkspace({
   importing: boolean
 }) {
   return (
-    <main className="relative grid min-h-screen place-items-center bg-background p-8">
+    <main
+      data-slot="app-content"
+      className="relative grid min-h-screen place-items-center bg-background p-8"
+    >
       <div className="window-drag absolute inset-x-0 top-0 h-12" />
-      <Empty className="w-full max-w-lg border bg-card">
-        <EmptyHeader>
-          <EmptyMedia className="relative mb-4 size-28" aria-hidden="true">
-            <span className="absolute inset-1 rounded-full border border-border/70" />
-            <span className="absolute inset-1 animate-[spin_8s_linear_infinite] rounded-full border border-transparent border-t-primary/60 motion-reduce:animate-none">
-              <span className="absolute -top-1 left-1/2 size-2 -translate-x-1/2 rounded-full bg-primary" />
-            </span>
-            <span className="absolute inset-5 animate-[spin_5s_linear_infinite_reverse] rounded-full border border-dashed border-border motion-reduce:animate-none" />
-            <span className="relative grid size-12 place-items-center rounded-sm bg-primary text-primary-foreground shadow-lg shadow-background/50">
-              <Layers3 className="size-5 animate-pulse motion-reduce:animate-none" />
-            </span>
+      <Empty
+        data-slot="welcome-card"
+        className="w-full max-w-lg border border-solid border-border/70 bg-card shadow-2xl shadow-black/20"
+      >
+        <EmptyHeader className="max-w-none">
+          <EmptyMedia
+            className="mb-3 size-16 rounded-sm border border-border/70 bg-sidebar shadow-lg shadow-black/25"
+            aria-hidden="true"
+          >
+            <img className="size-11 object-contain" src={CHROMIE_LOGO_URL} alt="" />
           </EmptyMedia>
-          <EmptyTitle className="text-2xl">开始使用 Chromie</EmptyTitle>
-          <EmptyDescription>创建你的第一个工作区，或从已有备份继续管理本地资产。</EmptyDescription>
+          <EmptyTitle className="text-xl font-semibold tracking-[-0.025em]">
+            开始使用 Chromie
+          </EmptyTitle>
+          <EmptyDescription className="whitespace-nowrap">
+            创建你的第一个工作区，或从已有备份继续管理本地资产
+          </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <div className="grid w-full gap-2">
@@ -58,6 +65,7 @@ export function EmptyWorkspace({
               创建工作区
             </Button>
             <Button
+              size="lg"
               variant="outline"
               disabled={importing}
               aria-busy={importing}
@@ -71,6 +79,10 @@ export function EmptyWorkspace({
               {importing ? '读取中…' : '导入工作区'}
             </Button>
           </div>
+          <EmptyDescription className="flex items-center gap-1.5">
+            <ShieldCheck className="size-3.5" aria-hidden="true" />
+            数据仅保存在本地
+          </EmptyDescription>
         </EmptyContent>
       </Empty>
     </main>
@@ -80,18 +92,19 @@ export function EmptyWorkspace({
 export function AppLoadingSkeleton() {
   return (
     <div
-      className="flex h-screen min-h-[600px] overflow-hidden bg-background"
+      className="flex h-screen min-h-[600px] overflow-hidden bg-sidebar"
       role="status"
       aria-label="正在加载资产数据"
     >
-      <div className="window-drag fixed inset-x-0 top-0 z-40 h-12" />
-      <aside className="w-64 shrink-0 border-r border-sidebar-border bg-sidebar px-4 pt-14">
-        <div className="flex items-center gap-3 px-2">
-          <Skeleton className="size-8" />
-          <Skeleton className="h-4 w-20" />
+      <div className="window-drag fixed inset-x-0 top-0 z-40 h-2" />
+      <aside data-slot="app-sidebar" className="w-64 shrink-0 bg-sidebar pt-8">
+        <div className="flex h-10 items-center gap-0.5 px-4">
+          <Skeleton className="size-6 shrink-0" />
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="ml-auto size-7" />
         </div>
-        <Skeleton className="mt-6 h-12 w-full" />
-        <div className="mt-7 grid gap-3 px-2">
+        <div className="mt-2 grid gap-3 px-5">
+          <Skeleton className="h-9 w-full" />
           <Skeleton className="h-4 w-28" />
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-full" />
@@ -100,13 +113,12 @@ export function AppLoadingSkeleton() {
           <Skeleton className="h-9 w-4/5" />
         </div>
       </aside>
-      <main className="@container min-w-0 flex-1 pt-12">
-        <div className="mx-auto w-full max-w-[1440px] px-6 pb-8 pt-5">
-          <div className="flex items-center justify-between">
-            <Skeleton className="h-9 w-48" />
-            <Skeleton className="h-9 w-28" />
-          </div>
-          <Skeleton className="mt-5 h-9 w-56" />
+      <main
+        data-slot="app-content"
+        className="@container min-w-0 flex-1 border-l border-border bg-background"
+      >
+        <div className="w-full px-4 pb-6 pt-8 lg:px-6">
+          <Skeleton className="h-8 w-40" />
           <div className="mt-6 grid gap-3 @min-[36rem]:grid-cols-2 @min-[68rem]:grid-cols-5">
             <Skeleton className="h-28 w-full @min-[36rem]:col-span-2" />
             {[0, 1, 2].map((item) => <Skeleton key={item} className="h-28 w-full" />)}
@@ -130,7 +142,10 @@ export function AppLoadingSkeleton() {
 
 export function PortfolioLoadError({ message }: { message: string }) {
   return (
-    <main className="relative grid min-h-screen place-items-center bg-background px-6">
+    <main
+      data-slot="app-content"
+      className="relative grid min-h-screen place-items-center bg-background px-6"
+    >
       <div className="window-drag absolute inset-x-0 top-0 h-12" />
       <Alert variant="destructive" className="max-w-lg">
         <CircleAlert data-icon="inline-start" />

@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftRight,
-  ChartPie,
   ChartSpline,
   ChevronDown,
   ChevronUp,
   Ellipsis,
+  FolderTree,
   History,
   Layers2,
-  Layers3,
   Pencil,
   Plus,
+  Settings,
   Trash2
 } from 'lucide-react'
 
@@ -58,13 +58,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Spinner } from '@/components/ui/spinner'
 import {
   useExchangeRates,
   type ExchangeRateState
 } from '@/lib/exchange-rates'
+import { CHROMIE_LOGO_URL } from '@/lib/brand'
 import { cn } from '@/lib/utils'
 import {
   type AccountGroup,
@@ -381,8 +381,6 @@ export function App(): React.JSX.Element {
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [choosingImport, setChoosingImport] = useState(false)
   const [creatingSnapshot, setCreatingSnapshot] = useState(false)
-  const [accountNavigationCollapsed, setAccountNavigationCollapsed] = useState(false)
-  const [positionNavigationCollapsed, setPositionNavigationCollapsed] = useState(false)
   const syncingAccountIds = useRef(new Set<string>())
   const choosingImportRef = useRef(false)
   const creatingSnapshotRef = useRef(false)
@@ -833,17 +831,6 @@ export function App(): React.JSX.Element {
         align="start"
       >
         <DropdownMenuGroup>
-          {!selectedSnapshot && (
-            <DropdownMenuItem
-              onSelect={() => {
-                setWorkspaceSettingsSection('basic')
-                setWorkspaceSettingsOpen(true)
-              }}
-            >
-              <Pencil />
-              工作区设置
-            </DropdownMenuItem>
-          )}
           <DropdownMenuItem onSelect={() => setWorkspaceDialog({ open: true })}>
             <Plus />
             新建工作区
@@ -858,24 +845,46 @@ export function App(): React.JSX.Element {
   )
 
   return (
-    <div className="flex h-screen min-h-[600px] overflow-hidden bg-background">
-      <div className="window-drag fixed inset-x-0 top-0 z-40 h-12" />
-      <aside className="flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar pt-12 text-sidebar-foreground">
-        <div className="px-3 pb-5 pt-1">
-          <div className="flex min-h-8 items-center gap-3 px-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-sidebar-primary text-sidebar-primary-foreground">
-              <Layers3 className="size-4" aria-hidden="true" />
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.02em]">
-              Chromie
-            </span>
+    <div className="flex h-screen min-h-[600px] overflow-hidden bg-sidebar">
+      <div className="window-drag fixed inset-x-0 top-0 z-40 h-2" />
+      <aside
+        data-slot="app-sidebar"
+        className="flex w-64 shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
+      >
+        <div className="flex h-full w-64 min-w-64 flex-col overflow-hidden">
+          <div className="window-drag shrink-0 pt-8">
+            <div className="flex h-10 items-center gap-0.5 px-4">
+              <span className="grid size-6 shrink-0 place-items-center">
+                <img
+                  className="size-6 object-contain"
+                  src={CHROMIE_LOGO_URL}
+                  alt=""
+                  aria-hidden="true"
+                />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.02em]">
+                Chromie
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="-mr-1 shrink-0"
+                disabled={Boolean(selectedSnapshot)}
+                aria-label="工作区设置"
+                title={selectedSnapshot ? '历史版本中无法修改工作区设置' : '工作区设置'}
+                onClick={() => {
+                  setWorkspaceSettingsSection('basic')
+                  setWorkspaceSettingsOpen(true)
+                }}
+              >
+                <Settings data-icon="icon-only" />
+              </Button>
+            </div>
           </div>
-        </div>
 
-        <Separator />
-
-        <ScrollArea className="mt-4 min-h-0 flex-1">
-          <nav className="px-3 pb-4">
+          <ScrollArea className="min-h-0 flex-1">
+            <nav className="px-3 pb-4 pt-2">
             <div className="mb-4 grid gap-1">
               <Button
                 variant="ghost"
@@ -917,23 +926,9 @@ export function App(): React.JSX.Element {
 
             <>
                 <div className="mb-2 flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 min-w-0 flex-1 justify-start px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
-                    aria-expanded={!accountNavigationCollapsed}
-                    onClick={() => setAccountNavigationCollapsed((current) => !current)}
-                  >
-                    <ChevronDown
-                      data-icon="inline-start"
-                      className={cn(
-                        'transition-transform',
-                        accountNavigationCollapsed && '-rotate-90'
-                      )}
-                    />
+                  <p className="flex h-7 min-w-0 flex-1 items-center px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                     账户分组
-                  </Button>
+                  </p>
                   {!selectedSnapshot && (
                     <Button
                       variant="ghost"
@@ -946,8 +941,7 @@ export function App(): React.JSX.Element {
                     </Button>
                   )}
                 </div>
-                {!accountNavigationCollapsed && (
-                  <div className="grid min-w-0 gap-1">
+                <div className="grid min-w-0 gap-1">
                     <AssetAccountNavigation
                       key={activeWorkspace.id}
                       accounts={activeWorkspace.assetAccounts}
@@ -984,27 +978,12 @@ export function App(): React.JSX.Element {
                         还没有资产账户
                       </p>
                     )}
-                  </div>
-                )}
+                </div>
 
                 <div className="mb-2 mt-5 flex items-center gap-1">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 min-w-0 flex-1 justify-start px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground"
-                    aria-expanded={!positionNavigationCollapsed}
-                    onClick={() => setPositionNavigationCollapsed((current) => !current)}
-                  >
-                    <ChevronDown
-                      data-icon="inline-start"
-                      className={cn(
-                        'transition-transform',
-                        positionNavigationCollapsed && '-rotate-90'
-                      )}
-                    />
+                  <p className="flex h-7 min-w-0 flex-1 items-center px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
                     持仓分组
-                  </Button>
+                  </p>
                   {!selectedSnapshot && (
                     <Button
                       variant="ghost"
@@ -1017,8 +996,7 @@ export function App(): React.JSX.Element {
                     </Button>
                   )}
                 </div>
-                {!positionNavigationCollapsed && (
-                  <div className="grid min-w-0 gap-1">
+                <div className="grid min-w-0 gap-1">
                     {activeWorkspace.positionGroups.map((group) => {
                       const selected = selectedPositionGroupId === group.id
                       return (
@@ -1042,7 +1020,7 @@ export function App(): React.JSX.Element {
                               setSelectedPositionGroupId(group.id)
                             }}
                           >
-                            <ChartPie />
+                            <FolderTree />
                             <span className="min-w-0 flex-1 truncate text-left">
                               {group.name}
                             </span>
@@ -1096,21 +1074,25 @@ export function App(): React.JSX.Element {
                         还没有持仓分组
                       </p>
                     )}
-                  </div>
-                )}
+                </div>
             </>
-          </nav>
-        </ScrollArea>
+            </nav>
+          </ScrollArea>
 
-        <div className="border-t px-3 py-3">
-          {workspaceSwitcher}
+          <div className="px-3 py-3">
+            {workspaceSwitcher}
+          </div>
         </div>
       </aside>
 
-      <ScrollArea className="min-w-0 flex-1">
+      <div
+        data-slot="app-content"
+        className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-border bg-background"
+      >
+        <ScrollArea className="min-h-0 min-w-0 flex-1">
           <main
             className={cn(
-              'min-h-full pt-7 transition-colors',
+              'min-h-full transition-colors',
               selectedSnapshot && 'bg-muted/10'
             )}
             aria-label={selectedSnapshot ? '历史快照，只读' : undefined}
@@ -1197,7 +1179,8 @@ export function App(): React.JSX.Element {
           />
         )}
           </main>
-      </ScrollArea>
+        </ScrollArea>
+      </div>
 
       <WorkspaceDialog
         open={workspaceDialog.open}

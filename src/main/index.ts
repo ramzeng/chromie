@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, nativeImage, nativeTheme, shell } from 'electron'
 
 import { exportBackup, importBackup } from './infra/backup'
 import { syncBinancePositions } from './infra/binance'
@@ -81,6 +81,15 @@ function createWindow(): void {
   }
 }
 
+function setDevelopmentAppIcon(): void {
+  if (process.platform !== 'darwin' || app.isPackaged) return
+
+  const icon = nativeImage.createFromPath(
+    join(__dirname, '../../resources/chromie-app-icon-knot-v5.png')
+  )
+  if (!icon.isEmpty()) app.dock?.setIcon(icon)
+}
+
 async function startApplication(): Promise<void> {
   const portfolioRepository = new SecurePortfolioRepository(
     new SecureFileStore(join(userDataPath, 'portfolio.secure'))
@@ -152,6 +161,7 @@ app.whenReady().then(() => {
     })
     return
   }
+  setDevelopmentAppIcon()
   void startApplication()
 })
 
