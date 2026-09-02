@@ -33,6 +33,12 @@ import {
   EmptyTitle
 } from '@/components/ui/empty'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
+import {
   formatMoney,
   type Account,
   type Position
@@ -65,13 +71,24 @@ export function createAccountAllocationItems(
 }
 
 export function createPositionAllocationItems(
-  positions: Position[]
+  positions: Position[],
+  accounts: Account[] = []
 ): AssetAllocationItem[] {
-  return positions.map((position) => ({
-    id: position.id,
-    label: position.name.trim() || position.symbol,
-    positions: [position]
-  }))
+  const accountByPositionId = new Map<string, Account>(
+    accounts.flatMap((account) =>
+      account.positions.map((position) => [position.id, account] as const)
+    )
+  )
+
+  return positions.map((position) => {
+    const account = accountByPositionId.get(position.id)
+    const positionLabel = position.name.trim() || position.symbol
+    return {
+      id: account ? `${account.id}:${position.id}` : position.id,
+      label: account ? `${positionLabel} · ${account.name}` : positionLabel,
+      positions: [position]
+    }
+  })
 }
 
 function createCurrencyAllocationItems(
@@ -95,13 +112,43 @@ function compactChartLabel(value: string, maxLength = 10): string {
   return value.length > maxLength ? `${value.slice(0, maxLength)}…` : value
 }
 
+function AllocationTooltipValue({
+  label,
+  value,
+  percentage,
+  baseCurrency
+}: {
+  label: string
+  value: number
+  percentage: number
+  baseCurrency: string
+}) {
+  return (
+    <div className="flex min-w-44 items-center justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium tabular-nums text-foreground">
+        <MaskedAssetValue>
+          {formatMoney(value, baseCurrency)}
+        </MaskedAssetValue>{' '}
+        · {formatAmount(percentage)}%
+      </span>
+    </div>
+  )
+}
+
 function PieValueLabel({
   name,
   percent = 0,
+  value,
   x,
   y,
-  textAnchor
-}: PieLabelRenderProps) {
+  cx,
+  cy,
+  outerRadius,
+  midAngle = 0,
+  textAnchor,
+  baseCurrency
+}: PieLabelRenderProps & { baseCurrency: string }) {
   const resolvedTextAnchor =
     textAnchor === 'start' ||
     textAnchor === 'middle' ||
@@ -109,18 +156,60 @@ function PieValueLabel({
     textAnchor === 'inherit'
       ? textAnchor
       : undefined
+  const label = String(name ?? '')
+  const numericValue = Number(value)
+  const percentage = percent * 100
+  const radians = -midAngle * Math.PI / 180
+  const lineStartX = cx + outerRadius * Math.cos(radians)
+  const lineStartY = cy + outerRadius * Math.sin(radians)
 
   return (
-    <text
-      x={x}
-      y={y}
-      textAnchor={resolvedTextAnchor}
-      dominantBaseline="central"
-      fill="var(--muted-foreground)"
-      fontSize={12}
-    >
-      {compactChartLabel(name, 8)} {formatAmount(percent * 100)}%
-    </text>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <g
+          tabIndex={0}
+          aria-label={`${label}：${formatMoney(numericValue, baseCurrency)}，${formatAmount(percentage)}%`}
+          className="cursor-default outline-none"
+        >
+          <line
+            x1={lineStartX}
+            y1={lineStartY}
+            x2={x}
+            y2={y}
+            stroke="transparent"
+            strokeWidth={10}
+          />
+          <line
+            x1={lineStartX}
+            y1={lineStartY}
+            x2={x}
+            y2={y}
+            stroke="var(--muted-foreground)"
+            strokeOpacity={0.45}
+            strokeWidth={1}
+          />
+          <text
+            x={x}
+            y={y}
+            textAnchor={resolvedTextAnchor}
+            dominantBaseline="central"
+            fill="var(--muted-foreground)"
+            fontSize={14}
+            fontWeight={500}
+          >
+            {compactChartLabel(label, 8)} {formatAmount(percentage)}%
+          </text>
+        </g>
+      </TooltipTrigger>
+      <TooltipContent>
+        <AllocationTooltipValue
+          label={label}
+          value={numericValue}
+          percentage={percentage}
+          baseCurrency={baseCurrency}
+        />
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -138,12 +227,16 @@ function DistributionStateCard({
       </CardHeader>
       <CardContent className="grid flex-1 place-items-center px-5 pb-5 pt-0">
         <Empty className="min-h-40 border-0 p-4 md:p-4">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
+          <EmptyHeader className="gap-1.5">
+            <EmptyMedia variant="icon" className="mb-1 text-muted-foreground">
               <ChartPie data-icon="inline-start" />
             </EmptyMedia>
-            <EmptyTitle>暂时无法生成分布</EmptyTitle>
-            <EmptyDescription>{description}</EmptyDescription>
+            <EmptyTitle className="text-sm font-medium tracking-normal text-muted-foreground">
+              暂时无法生成分布
+            </EmptyTitle>
+            <EmptyDescription className="text-xs/relaxed">
+              {description}
+            </EmptyDescription>
           </EmptyHeader>
         </Empty>
       </CardContent>
@@ -268,72 +361,68 @@ export function AssetAllocationChart({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex-1 px-3 pb-4 pt-0">
-        <ChartContainer
-          config={chartConfig}
-          className="h-[270px] w-full aspect-auto"
-          role="img"
-          aria-labelledby={titleId}
-          aria-describedby={summaryId}
-        >
-          <PieChart accessibilityLayer>
-            <ChartTooltip
-              cursor={false}
-              content={
-                <ChartTooltipContent
-                  hideLabel
-                  nameKey="label"
-                  formatter={(value, _name, item) => {
-                    const numericValue = Number(value)
-                    const label = String(item.payload?.label ?? '')
-                    const percentage = totalValue === 0
-                      ? 0
-                      : numericValue / totalValue * 100
-                    return (
-                      <div className="flex min-w-44 items-center justify-between gap-4">
-                        <span className="text-muted-foreground">{label}</span>
-                        <span className="font-medium tabular-nums text-foreground">
-                          <MaskedAssetValue>
-                            {formatMoney(numericValue, baseCurrency)}
-                          </MaskedAssetValue>{' '}
-                          ·{' '}
-                          {formatAmount(percentage)}%
-                        </span>
-                      </div>
-                    )
-                  }}
-                />
-              }
-            />
-            <Pie
-              data={chartData}
-              dataKey="value"
-              nameKey="label"
-              startAngle={hasSingleSlice ? 180 : 90}
-              endAngle={hasSingleSlice ? -180 : -270}
-              outerRadius="60%"
-              isAnimationActive={false}
-              stroke="none"
-              labelLine={{
-                stroke: 'var(--muted-foreground)',
-                strokeOpacity: 0.45,
-                strokeWidth: 1
-              }}
-              label={PieValueLabel}
-            >
-              {chartData.map((item) => (
-                <Cell key={item.id} fill={item.fill} />
-              ))}
-            </Pie>
-            <ChartLegend
-              content={
-                <ChartLegendContent
-                  nameKey="label"
-                  className="flex-wrap gap-x-3 gap-y-1 px-2"
-                />
-              }
-            />
-          </PieChart>
-        </ChartContainer>
+        <TooltipProvider delayDuration={100}>
+          <ChartContainer
+            config={chartConfig}
+            className="h-[270px] w-full aspect-auto"
+            role="img"
+            aria-labelledby={titleId}
+            aria-describedby={summaryId}
+          >
+            <PieChart accessibilityLayer>
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    hideLabel
+                    nameKey="label"
+                    formatter={(value, _name, item) => {
+                      const numericValue = Number(value)
+                      const label = String(item.payload?.label ?? '')
+                      const percentage = totalValue === 0
+                        ? 0
+                        : numericValue / totalValue * 100
+                      return (
+                        <AllocationTooltipValue
+                          label={label}
+                          value={numericValue}
+                          percentage={percentage}
+                          baseCurrency={baseCurrency}
+                        />
+                      )
+                    }}
+                  />
+                }
+              />
+              <Pie
+                data={chartData}
+                dataKey="value"
+                nameKey="label"
+                startAngle={hasSingleSlice ? 180 : 90}
+                endAngle={hasSingleSlice ? -180 : -270}
+                outerRadius="60%"
+                isAnimationActive={false}
+                stroke="none"
+                labelLine={false}
+                label={(props) => (
+                  <PieValueLabel {...props} baseCurrency={baseCurrency} />
+                )}
+              >
+                {chartData.map((item) => (
+                  <Cell key={item.id} fill={item.fill} />
+                ))}
+              </Pie>
+              <ChartLegend
+                content={
+                  <ChartLegendContent
+                    nameKey="label"
+                    className="flex-wrap gap-x-3 gap-y-1 px-2"
+                  />
+                }
+              />
+            </PieChart>
+          </ChartContainer>
+        </TooltipProvider>
         <ul id={summaryId} className="sr-only">
           <li>按{dimensionLabel}统计</li>
           {chartData.map((item) => (

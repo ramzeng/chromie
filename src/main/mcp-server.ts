@@ -45,22 +45,22 @@ const updateAnnotations: ToolAnnotations = {
 const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   chromie_list_workspaces: {
     title: '列出 Chromie 工作区',
-    description: '列出本机 Chromie 中的工作区摘要；汇率只返回 CNY、HKD 和 USD。',
+    description: '列出本地 Chromie 中的工作区摘要。汇率只返回 CNY、HKD 和 USD。',
     annotations: readOnlyAnnotations
   },
   chromie_get_workspace: {
     title: '读取 Chromie 工作区',
-    description: '读取工作区当前数据或指定历史快照。返回标签、资产账户、可选持仓和脱敏同步状态；默认不内嵌持仓，汇率只返回 CNY、HKD 和 USD。',
+    description: '读取工作区当前数据或指定历史快照。返回标签、账户、可选持仓和脱敏同步状态。默认不内嵌持仓，汇率只返回 CNY、HKD 和 USD。',
     annotations: readOnlyAnnotations
   },
   chromie_get_portfolio_overview: {
     title: '读取资产概览',
-    description: '按照资产账户、标签或币种汇总市值、折算市值、市值占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率，响应只包含 CNY、HKD 和 USD 汇率。',
+    description: '按照账户、标签或币种汇总市值、折算市值、市值占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率，响应只包含 CNY、HKD 和 USD 汇率。',
     annotations: readOnlyAnnotations
   },
   chromie_list_positions: {
     title: '列出持仓',
-    description: '列出并按关键词、市场、币种、资产账户或标签筛选持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
+    description: '列出并按关键词、市场、币种、账户或标签筛选持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
     annotations: readOnlyAnnotations
   },
   chromie_list_snapshots: {
@@ -80,7 +80,7 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_create_tag: {
     title: '添加标签',
-    description: '在指定 Chromie 工作区中添加带颜色、可用于资产账户和持仓的标签。',
+    description: '在指定 Chromie 工作区中添加带颜色、可用于账户和持仓的标签。',
     annotations: additiveAnnotations
   },
   chromie_update_tag: {
@@ -89,8 +89,8 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     annotations: updateAnnotations
   },
   chromie_set_account_tags: {
-    title: '设置资产账户标签',
-    description: '完整替换一个资产账户的标签，可同时设置多个标签。',
+    title: '设置账户标签',
+    description: '完整替换一个账户的标签，可同时设置多个标签。',
     annotations: updateAnnotations
   },
   chromie_set_position_tags: {
@@ -99,23 +99,23 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     annotations: updateAnnotations
   },
   chromie_create_account: {
-    title: '创建资产账户',
-    description: '创建不含同步凭据的资产账户。自动同步凭据只能在 Chromie UI 中配置。',
+    title: '创建账户',
+    description: '创建不含同步凭据的账户。自动同步凭据只能在 Chromie UI 中配置。',
     annotations: additiveAnnotations
   },
   chromie_update_account: {
-    title: '更新资产账户',
-    description: '局部修改资产账户名称或类型。不会返回或修改同步凭据；已同步账户不能通过 MCP 改类型。',
+    title: '更新账户',
+    description: '局部修改账户名称或类型。不会返回或修改同步凭据。已同步账户不能通过 MCP 改类型。',
     annotations: updateAnnotations
   },
   chromie_create_position: {
     title: '创建持仓',
-    description: '在手工资产账户中创建持仓。自动同步的资产账户为只读。',
+    description: '在手工账户中创建持仓。自动同步的账户为只读。',
     annotations: additiveAnnotations
   },
   chromie_update_position: {
     title: '更新持仓',
-    description: '局部更新手工资产账户中的持仓。价格传 null 可清除价格。自动同步的资产账户为只读。',
+    description: '局部更新手工账户中的持仓。价格传 null 可清除价格。自动同步的账户为只读。',
     annotations: updateAnnotations
   },
   chromie_create_snapshot: {
@@ -124,8 +124,8 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     annotations: additiveAnnotations
   },
   chromie_sync_account: {
-    title: '同步资产账户',
-    description: '使用 Chromie 安全存储中已有的连接配置同步持仓；工具不会读取或返回任何凭据。',
+    title: '同步账户',
+    description: '使用 Chromie 本地已有的连接配置同步持仓。工具不会读取或返回任何凭据。',
     annotations: {
       readOnlyHint: false,
       destructiveHint: true,
@@ -135,7 +135,7 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_refresh_exchange_rates: {
     title: '更新汇率',
-    description: '从工作区配置的汇率数据源更新 Chromie 本机汇率缓存；响应只返回 CNY、HKD 和 USD。',
+    description: '从工作区配置的汇率数据源更新 Chromie 本地汇率缓存。响应只返回 CNY、HKD 和 USD。',
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

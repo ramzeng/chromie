@@ -110,7 +110,7 @@ function normalizeOptions(options: HstongSyncOptions = {}): GatewayOptions {
     ? rawHost.slice(1, -1)
     : rawHost
   if (!LOOPBACK_HOSTS.has(host)) {
-    throw new Error('华盛 OpenAPI Gateway 仅允许连接本机地址')
+    throw new Error('华盛 OpenAPI Gateway 仅允许连接本地地址')
   }
   const port = options.port ?? DEFAULT_HSTONG_GATEWAY_PORT
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -397,7 +397,7 @@ function friendlyError(error: unknown, options: GatewayOptions): Error {
   const message = error instanceof Error ? error.message : String(error)
   if (needsTradingLogin(error)) {
     return new Error(
-      '华盛 Gateway 尚未完成交易登录；请在 Gateway 执行 tradelogin，或在 Chromie 中配置交易密码'
+      '华盛 Gateway 尚未完成交易登录。请在 Gateway 执行 tradelogin，或在 Chromie 中配置交易密码'
     )
   }
   if (

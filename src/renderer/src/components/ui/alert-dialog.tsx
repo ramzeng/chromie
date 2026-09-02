@@ -34,7 +34,7 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Content
         data-slot="alert-dialog-content"
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 gap-5 rounded-sm border border-border/80 bg-background p-6 text-foreground shadow-2xl outline-none',
+          'fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-lg border border-border/80 bg-background text-foreground shadow-2xl outline-none',
           className
         )}
         {...props}
@@ -44,11 +44,47 @@ function AlertDialogContent({
 }
 
 function AlertDialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex flex-col gap-2', className)} {...props} />
+  return (
+    <div
+      className={cn('flex flex-col gap-2 px-6 pb-4 pt-6', className)}
+      {...props}
+    />
+  )
+}
+
+function AlertDialogMedia({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="alert-dialog-media"
+      className={cn(
+        'grid size-10 shrink-0 place-items-center rounded-full bg-destructive/10 text-destructive [&_svg]:size-5',
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+function AlertDialogBody({ className, ...props }: React.ComponentProps<'div'>) {
+  return (
+    <div
+      data-slot="alert-dialog-body"
+      className={cn('px-6 pb-6', className)}
+      {...props}
+    />
+  )
 }
 
 function AlertDialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
-  return <div className={cn('flex justify-end gap-2', className)} {...props} />
+  return (
+    <div
+      className={cn(
+        'flex flex-col-reverse gap-2 border-t bg-muted/30 px-6 py-4 sm:flex-row sm:justify-end',
+        className
+      )}
+      {...props}
+    />
+  )
 }
 
 function AlertDialogTitle({
@@ -102,11 +138,13 @@ function AlertDialogCancel({
 export {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
+  AlertDialogMedia,
   AlertDialogTitle,
   AlertDialogTrigger
 }

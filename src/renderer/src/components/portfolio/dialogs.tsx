@@ -1,15 +1,14 @@
 import {
   useEffect,
-  useId,
   useRef,
   useState,
   type Dispatch,
   type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent,
   type SetStateAction
 } from 'react'
 import {
   Check,
+  ChartCandlestick,
   Coins,
   Copy,
   Download,
@@ -22,20 +21,15 @@ import {
 import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Combobox,
-  ComboboxChip,
-  ComboboxChips,
-  ComboboxChipsInput,
   ComboboxContent,
   ComboboxEmpty,
   ComboboxInput,
   ComboboxItem,
-  ComboboxList,
-  ComboboxTrigger,
-  ComboboxValue,
-  useComboboxAnchor
+  ComboboxList
 } from '@/components/ui/combobox'
 import {
   Dialog,
@@ -61,13 +55,18 @@ import {
   EmptyTitle
 } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
-import { InputGroupButton } from '@/components/ui/input-group'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput
+} from '@/components/ui/input-group'
 import {
   Field,
   FieldDescription,
-  FieldError,
   FieldGroup,
-  FieldLabel
+  FieldLabel,
+  FieldLegend,
+  FieldSet
 } from '@/components/ui/field'
 import { Label } from '@/components/ui/label'
 import {
@@ -93,14 +92,29 @@ import {
   TableRow
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import type { McpAccessSettings, McpConnectionSettings } from '@/lib/mcp'
+import {
+  DEFAULT_MCP_ACCESS_SETTINGS,
+  type McpAccessSettings,
+  type McpConnectionSettings
+} from '@/lib/mcp'
+import {
+  operationErrorMessage,
+  randomTagColor,
+  reportOperationError,
+  reportValidationError,
+  useSubmissionGuard
+} from './dialog-utils'
 import { TagColorDot } from './tag-badge'
+import { TagSelector } from './tag-selector'
 import { AccountTypeIcon } from './view-helpers'
 import {
   BASE_CURRENCIES,
   accountTypeLabels,
+  CRYPTO_QUOTE_PROVIDERS,
+  cryptoQuoteProviderLabels,
   defaultCurrencyByMarket,
   DEFAULT_BASE_CURRENCY,
+  DEFAULT_CRYPTO_QUOTE_PROVIDER,
   DEFAULT_EXCHANGE_RATE_PROVIDER,
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   DEFAULT_FUTU_OPEND_HOST,
@@ -110,13 +124,15 @@ import {
   DEFAULT_IBKR_GATEWAY_HOST,
   DEFAULT_IBKR_GATEWAY_PORT,
   DEFAULT_SYNC_INTERVAL,
-  DEFAULT_TAG_COLOR,
+  DEFAULT_STOCK_QUOTE_PROVIDER,
   exchangeRateProviderLabels,
   EXCHANGE_RATE_PROVIDERS,
   MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   marketMeta,
   marketOrder,
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
+  STOCK_QUOTE_PROVIDERS,
+  stockQuoteProviderLabels,
   TAG_COLORS,
   tagColorLabels,
   type Account,
@@ -124,10 +140,12 @@ import {
   type AccountInput,
   type AccountType,
   type BaseCurrency,
+  type CryptoQuoteProvider,
   type ExchangeRateProvider,
   type Market,
   type Position,
   type PositionInput,
+  type StockQuoteProvider,
   type Tag,
   type TagColor,
   type TagInput,
@@ -142,6 +160,7 @@ type BaseDialogProps = {
 }
 
 type AutoSyncProvider = 'Futu' | 'Hstong' | 'Ibkr' | 'Okx' | 'Binance'
+type StorageLocationStatus = 'loading' | 'ready' | 'unavailable' | 'error'
 
 const OFFICIAL_INTEGRATION_DOCS: Record<AutoSyncProvider, string> = {
   Futu: 'https://openapi.futunn.com/futu-api-doc/intro/intro.html?lang=zh-cn',
@@ -164,43 +183,6 @@ function OfficialIntegrationDocsLink({ provider }: { provider: AutoSyncProvider 
   )
 }
 
-function FieldMessage({ id, children }: { id?: string; children: string }) {
-  return <FieldError id={id}>{children}</FieldError>
-}
-
-function operationErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.replace(/^Error invoking remote method '[^']+': Error: /, '')
-}
-
-function reportOperationError(title: string, error: unknown): void {
-  toast.error(title, { description: operationErrorMessage(error) })
-}
-
-function useSubmissionGuard() {
-  const [submitting, setSubmitting] = useState(false)
-  const submissionInFlight = useRef(false)
-
-  function beginSubmission(): boolean {
-    if (submissionInFlight.current) return false
-    submissionInFlight.current = true
-    setSubmitting(true)
-    return true
-  }
-
-  function endSubmission(): void {
-    submissionInFlight.current = false
-    setSubmitting(false)
-  }
-
-  return { submitting, submissionInFlight, beginSubmission, endSubmission }
-}
-
-const DISABLED_MCP_ACCESS: McpAccessSettings = {
-  enabled: false,
-  allowWrite: false
-}
-
 const ACCOUNT_TYPES: readonly AccountType[] = [
   'Futu',
   'Hstong',
@@ -220,183 +202,6 @@ const POSITION_CURRENCIES = [
 
 function defaultAccountName(type: AccountType): string {
   return `我的${accountTypeLabels[type]}`
-}
-
-function randomTagColor(): TagColor {
-  const color = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)]
-  return color ?? DEFAULT_TAG_COLOR
-}
-
-function TagSelector({
-  tags,
-  selectedIds,
-  onSelectedIdsChange,
-  onCreateTag,
-  hideLabel = false,
-  hidePlaceholder = false
-}: {
-  tags: Tag[]
-  selectedIds: string[]
-  onSelectedIdsChange: (tagIds: string[]) => void
-  onCreateTag: (input: TagInput) => Promise<string>
-  hideLabel?: boolean
-  hidePlaceholder?: boolean
-}) {
-  const fieldId = useId()
-  const anchor = useComboboxAnchor()
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
-  const [creating, setCreating] = useState(false)
-  const creatingRef = useRef(false)
-  const highlightedTagIdRef = useRef<string | undefined>(undefined)
-  const selectedIdsRef = useRef(selectedIds)
-  selectedIdsRef.current = selectedIds
-  const tagIds = tags.map((tag) => tag.id)
-  const normalizedQuery = query.trim()
-
-  function findTag(tagId: string): Tag | undefined {
-    return tags.find((tag) => tag.id === tagId)
-  }
-
-  async function handleInputKeyDown(
-    event: ReactKeyboardEvent<HTMLInputElement>
-  ): Promise<void> {
-    if (
-      event.key !== 'Enter' ||
-      event.nativeEvent.isComposing ||
-      highlightedTagIdRef.current
-    ) return
-
-    event.preventDefault()
-    event.stopPropagation()
-    const baseUiEvent = event as ReactKeyboardEvent<HTMLInputElement> & {
-      preventBaseUIHandler?: () => void
-    }
-    baseUiEvent.preventBaseUIHandler?.()
-    if (!normalizedQuery || creatingRef.current) return
-
-    const normalizedName = normalizedQuery.toLocaleLowerCase()
-    const existingTag = tags.find(
-      (tag) => tag.name.trim().toLocaleLowerCase() === normalizedName
-    )
-    if (existingTag) {
-      if (!selectedIdsRef.current.includes(existingTag.id)) {
-        onSelectedIdsChange([...selectedIdsRef.current, existingTag.id])
-      }
-      setQuery('')
-      setOpen(false)
-      return
-    }
-
-    creatingRef.current = true
-    setCreating(true)
-    try {
-      const tagId = await onCreateTag({
-        name: normalizedQuery,
-        color: randomTagColor()
-      })
-      if (!selectedIdsRef.current.includes(tagId)) {
-        onSelectedIdsChange([...selectedIdsRef.current, tagId])
-      }
-      setQuery('')
-      setOpen(false)
-    } catch (error) {
-      reportOperationError('添加标签失败', error)
-    } finally {
-      creatingRef.current = false
-      setCreating(false)
-    }
-  }
-
-  return (
-    <Field>
-      {!hideLabel && <FieldLabel htmlFor={fieldId}>标签</FieldLabel>}
-      <Combobox
-        multiple
-        disabled={creating}
-        items={tagIds}
-        value={selectedIds}
-        inputValue={query}
-        open={open}
-        onOpenChange={setOpen}
-        onInputValueChange={(inputValue) => {
-          highlightedTagIdRef.current = undefined
-          setQuery(inputValue)
-        }}
-        onItemHighlighted={(tagId) => {
-          highlightedTagIdRef.current = tagId
-        }}
-        onValueChange={(nextSelectedIds) => {
-          onSelectedIdsChange(nextSelectedIds)
-          setQuery('')
-        }}
-        itemToStringLabel={(tagId) => findTag(tagId)?.name ?? ''}
-        itemToStringValue={(tagId) => tagId}
-        filter={(tagId, query) =>
-          (findTag(tagId)?.name ?? '')
-            .toLocaleLowerCase()
-            .includes(query.trim().toLocaleLowerCase())
-        }
-      >
-        <ComboboxChips ref={anchor}>
-          <ComboboxValue>
-            {(values: string[]) => (
-              <>
-                {values.map((tagId) => {
-                  const tag = findTag(tagId)
-                  return tag ? (
-                    <ComboboxChip key={tagId}>
-                      <TagColorDot color={tag.color} />
-                      {tag.name}
-                    </ComboboxChip>
-                  ) : null
-                })}
-                <ComboboxChipsInput
-                  id={fieldId}
-                  aria-label={hideLabel ? '标签' : undefined}
-                  placeholder={hidePlaceholder
-                    ? undefined
-                    : creating
-                      ? '创建中…'
-                      : selectedIds.length
-                        ? '输入并回车创建…'
-                        : '选择或输入标签…'}
-                  maxLength={40}
-                  onKeyDown={(event) => void handleInputKeyDown(event)}
-                />
-              </>
-            )}
-          </ComboboxValue>
-          <ComboboxTrigger
-            render={
-              <InputGroupButton
-                size="icon-xs"
-                aria-label="选择标签"
-              />
-            }
-          />
-        </ComboboxChips>
-        <ComboboxContent anchor={anchor}>
-          <ComboboxEmpty>
-            {normalizedQuery
-              ? `按 Enter 创建“${normalizedQuery}”`
-              : '输入标签名称'}
-          </ComboboxEmpty>
-          <ComboboxList>
-            {(tagId: string) => {
-              const tag = findTag(tagId)
-              return tag ? (
-                <ComboboxItem key={tagId} value={tagId}>
-                  <TagColorDot color={tag.color} />
-                  {tag.name}
-                </ComboboxItem>
-              ) : null
-            }}
-          </ComboboxList>
-        </ComboboxContent>
-      </Combobox>
-    </Field>
-  )
 }
 
 export function TagDialog({
@@ -427,7 +232,9 @@ export function TagDialog({
     if (submissionInFlight.current) return
     const normalizedName = name.trim()
     if (!normalizedName) {
-      setError('请输入名称')
+      const message = '请输入名称'
+      setError(message)
+      reportValidationError(message)
       return
     }
     if (!beginSubmission()) return
@@ -454,7 +261,7 @@ export function TagDialog({
         <DialogHeader>
           <DialogTitle>{tag ? '编辑标签' : '添加标签'}</DialogTitle>
           <DialogDescription className="sr-only">
-            {tag ? '修改标签名称和颜色' : '添加可用于资产账户和持仓的标签'}
+            {tag ? '修改标签名称和颜色' : '添加可用于账户和持仓的标签'}
           </DialogDescription>
         </DialogHeader>
         <form className="contents" onSubmit={handleSubmit}>
@@ -466,23 +273,20 @@ export function TagDialog({
                   id="tag-name"
                   value={name}
                   aria-invalid={Boolean(error)}
-                  aria-describedby={error ? 'tag-name-error' : undefined}
                   onChange={(event) => {
                     setName(event.target.value)
                     setError('')
                   }}
-                  placeholder="输入名称"
+                  placeholder="长期投资"
                   maxLength={40}
                   autoFocus
                 />
-                {error && <FieldMessage id="tag-name-error">{error}</FieldMessage>}
               </Field>
-              <Field>
-                <FieldLabel id="tag-color-label">颜色</FieldLabel>
+              <FieldSet className="gap-2">
+                <FieldLegend className="leading-none">颜色</FieldLegend>
                 <ToggleGroup
                   type="single"
                   value={color}
-                  aria-labelledby="tag-color-label"
                   className="justify-start"
                   onValueChange={(value) => {
                     setColor(value ? value as TagColor : undefined)
@@ -494,7 +298,7 @@ export function TagDialog({
                       value={tagColor}
                       aria-label={tagColorLabels[tagColor]}
                       title={tagColorLabels[tagColor]}
-                      className="group size-10 min-w-10 rounded-full bg-transparent p-0 data-[state=on]:bg-transparent"
+                      className="group size-10 min-w-10 justify-start bg-transparent p-0 data-[state=on]:bg-transparent"
                     >
                       <TagColorDot
                         color={tagColor}
@@ -503,7 +307,7 @@ export function TagDialog({
                     </ToggleGroupItem>
                   ))}
                 </ToggleGroup>
-              </Field>
+              </FieldSet>
             </FieldGroup>
           </DialogBody>
           <DialogFooter>
@@ -587,7 +391,6 @@ export function TagAssignmentDialog({
               onSelectedIdsChange={setTagIds}
               onCreateTag={onCreateTag}
               hideLabel
-              hidePlaceholder
             />
           </DialogBody>
           <DialogFooter>
@@ -630,9 +433,7 @@ function McpSettingsSection({
       await navigator.clipboard.writeText(clientConfig)
       toast.success('MCP 协议配置已复制')
     } catch (error) {
-      toast.error('复制 MCP 协议配置失败', {
-        description: operationErrorMessage(error)
-      })
+      toast.error(`复制 MCP 协议配置失败：${operationErrorMessage(error)}`)
     }
   }
 
@@ -649,22 +450,22 @@ function McpSettingsSection({
           <div>
             <Label htmlFor="mcp-enabled">启用 MCP 协议</Label>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              默认只读；关闭后本机 MCP 协议连接立即停止
+              关闭后本地 MCP 协议连接立即停止
             </p>
           </div>
           <Switch
             id="mcp-enabled"
             checked={access.enabled}
             onCheckedChange={(enabled) =>
-              setAccess(enabled ? { ...access, enabled: true } : DISABLED_MCP_ACCESS)
+              setAccess((current) => ({ ...current, enabled }))
             }
           />
         </div>
         <div className="flex items-center justify-between gap-6 p-4">
           <div>
-            <Label htmlFor="mcp-write">允许写入与同步</Label>
+            <Label htmlFor="mcp-write">允许写入</Label>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              允许创建和修改资产数据，以及联网同步账户和汇率
+              允许创建和修改资产数据
             </p>
           </div>
           <Switch
@@ -713,7 +514,6 @@ export function WorkspaceDialog({
   const [error, setError] = useState('')
   const { submitting, submissionInFlight, beginSubmission, endSubmission } =
     useSubmissionGuard()
-
   useEffect(() => {
     if (!open) return
     setName('')
@@ -725,7 +525,9 @@ export function WorkspaceDialog({
     event.preventDefault()
     if (submissionInFlight.current) return
     if (!name.trim()) {
-      setError('请输入工作区名称')
+      const message = '请输入工作区名称'
+      setError(message)
+      reportValidationError(message)
       return
     }
     if (!beginSubmission()) return
@@ -757,25 +559,19 @@ export function WorkspaceDialog({
           <DialogBody>
             <FieldGroup>
               <Field data-invalid={Boolean(error)}>
-                <FieldLabel htmlFor="workspace-name" className="sr-only">
-                  工作区名称
-                </FieldLabel>
+                <FieldLabel htmlFor="workspace-name">名称</FieldLabel>
                 <Input
                   id="workspace-name"
                   aria-invalid={Boolean(error)}
-                  aria-describedby={error ? 'workspace-name-error' : undefined}
                   value={name}
                   onChange={(event) => {
                     setName(event.target.value)
                     setError('')
                   }}
-                  placeholder="例如：家庭资产"
+                  placeholder="家庭资产"
                   autoFocus
                   maxLength={40}
                 />
-                {error && (
-                  <FieldMessage id="workspace-name-error">{error}</FieldMessage>
-                )}
               </Field>
               <Field>
                 <FieldLabel htmlFor="workspace-base-currency">本位币</FieldLabel>
@@ -875,53 +671,60 @@ export function WorkspaceSwitcherDialog({
           <DialogTitle>切换工作区</DialogTitle>
           <DialogDescription className="sr-only">选择要进入的工作区</DialogDescription>
         </DialogHeader>
-        <DialogBody className="grid content-start gap-2">
-          {workspaces.map((workspace) => {
-            const active = workspace.id === activeWorkspaceId
-            const switching = workspace.id === switchingWorkspaceId
-            return (
-              <Button
-                key={workspace.id}
-                type="button"
-                variant={active ? 'secondary' : 'outline'}
-                className="h-auto w-full justify-start gap-3 p-3"
-                disabled={Boolean(switchingWorkspaceId)}
-                aria-current={active ? 'true' : undefined}
-                onClick={() => void handleSelect(workspace.id)}
-              >
-                <span className="grid size-9 shrink-0 place-items-center rounded-sm bg-background text-sm font-semibold">
-                  {workspace.name.trim().slice(0, 1).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {workspace.name}
-                </span>
-                {switching ? (
-                  <Spinner data-icon="inline-end" />
-                ) : active ? (
-                  <Check data-icon="inline-end" />
-                ) : null}
-              </Button>
-            )
-          })}
-        <Separator />
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full"
-          disabled={Boolean(switchingWorkspaceId) || importing}
-          aria-busy={importing}
-          onClick={() => {
-            onOpenChange(false)
-            onImport()
-          }}
-        >
-          {importing ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
-            <Download data-icon="inline-start" />
-          )}
-          {importing ? '读取中…' : '导入工作区'}
-        </Button>
+        <DialogBody className="flex flex-col gap-3 py-3">
+          <div className="flex flex-col gap-2">
+            {workspaces.map((workspace) => {
+              const active = workspace.id === activeWorkspaceId
+              const switching = workspace.id === switchingWorkspaceId
+              return (
+                <Button
+                  key={workspace.id}
+                  type="button"
+                  variant={active ? 'secondary' : 'outline'}
+                  className="h-12 w-full justify-start gap-3 px-3"
+                  disabled={Boolean(switchingWorkspaceId)}
+                  aria-current={active ? 'true' : undefined}
+                  onClick={() => void handleSelect(workspace.id)}
+                >
+                  <span
+                    className={cn(
+                      'grid size-7 shrink-0 place-items-center rounded-sm text-xs font-semibold',
+                      active ? 'bg-background' : 'bg-muted'
+                    )}
+                  >
+                    {workspace.name.trim().slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {workspace.name}
+                  </span>
+                  {switching ? (
+                    <Spinner data-icon="inline-end" />
+                  ) : active ? (
+                    <Check data-icon="inline-end" />
+                  ) : null}
+                </Button>
+              )
+            })}
+          </div>
+          <Separator />
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            disabled={Boolean(switchingWorkspaceId) || importing}
+            aria-busy={importing}
+            onClick={() => {
+              onOpenChange(false)
+              onImport()
+            }}
+          >
+            {importing ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <Download data-icon="inline-start" />
+            )}
+            {importing ? '读取中…' : '导入工作区'}
+          </Button>
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -938,7 +741,7 @@ export function WorkspaceSettingsDialog({
   onRequestDelete
 }: BaseDialogProps & {
   workspace: Workspace
-  initialSection?: 'basic' | 'currency' | 'mcp'
+  initialSection?: 'basic' | 'currency' | 'quotes' | 'mcp'
   onSubmit: (input: WorkspaceSettingsInput) => Promise<void>
   onRequestExport: () => void
   onRequestDelete: () => void
@@ -952,12 +755,20 @@ export function WorkspaceSettingsDialog({
   const [exchangeRateRefreshInterval, setExchangeRateRefreshInterval] = useState(
     String(DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES)
   )
-  const [section, setSection] = useState<'basic' | 'currency' | 'mcp'>('basic')
+  const [stockQuoteProvider, setStockQuoteProvider] =
+    useState<StockQuoteProvider>(DEFAULT_STOCK_QUOTE_PROVIDER)
+  const [cryptoQuoteProvider, setCryptoQuoteProvider] =
+    useState<CryptoQuoteProvider>(DEFAULT_CRYPTO_QUOTE_PROVIDER)
+  const [section, setSection] =
+    useState<'basic' | 'currency' | 'quotes' | 'mcp'>('basic')
   const [mcpConnection, setMcpConnection] =
     useState<McpConnectionSettings | null>(null)
   const [mcpAccess, setMcpAccess] =
-    useState<McpAccessSettings>(DISABLED_MCP_ACCESS)
+    useState<McpAccessSettings>({ ...DEFAULT_MCP_ACCESS_SETTINGS })
   const [mcpLoading, setMcpLoading] = useState(false)
+  const [storagePath, setStoragePath] = useState('')
+  const [storageLocationStatus, setStorageLocationStatus] =
+    useState<StorageLocationStatus>('loading')
   const { submitting, submissionInFlight, beginSubmission, endSubmission } =
     useSubmissionGuard()
   const [mcpError, setMcpError] = useState('')
@@ -983,9 +794,68 @@ export function WorkspaceSettingsDialog({
           : DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
       )
     )
+    setStockQuoteProvider(
+      STOCK_QUOTE_PROVIDERS.includes(workspace.stockQuoteProvider)
+        ? workspace.stockQuoteProvider
+        : DEFAULT_STOCK_QUOTE_PROVIDER
+    )
+    setCryptoQuoteProvider(
+      CRYPTO_QUOTE_PROVIDERS.includes(workspace.cryptoQuoteProvider)
+        ? workspace.cryptoQuoteProvider
+        : DEFAULT_CRYPTO_QUOTE_PROVIDER
+    )
     setSection(initialSection)
     setError('')
   }, [workspace.id, initialSection, open])
+
+  useEffect(() => {
+    if (!open) return
+    let mounted = true
+    const storage = window.desktop.storage
+    setStoragePath('')
+    setStorageLocationStatus('loading')
+    if (!storage) {
+      setStorageLocationStatus('unavailable')
+      reportOperationError(
+        '读取数据存储位置失败',
+        '请完全退出并重新打开 Chromie 后重试'
+      )
+      return
+    }
+    const timeout = window.setTimeout(() => {
+      if (!mounted) return
+      setStorageLocationStatus('error')
+      reportOperationError('读取数据存储位置失败', '读取超时，请重新打开设置后重试')
+    }, 5000)
+    void storage
+      .getLocation()
+      .then((location) => {
+        if (!mounted) return
+        window.clearTimeout(timeout)
+        if (!location?.path) throw new Error('返回的数据存储位置无效')
+        setStoragePath(location.path)
+        setStorageLocationStatus('ready')
+      })
+      .catch((loadError) => {
+        if (!mounted) return
+        window.clearTimeout(timeout)
+        setStorageLocationStatus('error')
+        reportOperationError('读取数据存储位置失败', loadError)
+      })
+    return () => {
+      mounted = false
+      window.clearTimeout(timeout)
+    }
+  }, [open])
+
+  const storageLocationPlaceholder =
+    storageLocationStatus === 'loading'
+      ? '正在读取…'
+      : storageLocationStatus === 'unavailable'
+        ? '数据组件未加载'
+        : storageLocationStatus === 'error'
+          ? '读取失败'
+          : ''
 
   useEffect(() => {
     if (!open || section !== 'mcp') return
@@ -993,7 +863,7 @@ export function WorkspaceSettingsDialog({
     const mcp = window.desktop.mcp
 
     setMcpConnection(null)
-    setMcpAccess(DISABLED_MCP_ACCESS)
+    setMcpAccess({ ...DEFAULT_MCP_ACCESS_SETTINGS })
     setMcpError('')
     setMcpLoading(false)
     if (!mcp) {
@@ -1054,7 +924,22 @@ export function WorkspaceSettingsDialog({
     }
     if (!name.trim()) {
       setSection('basic')
-      setError('请输入工作区名称')
+      const message = '请输入工作区名称'
+      setError(message)
+      reportValidationError(message)
+      return
+    }
+    if (!storagePath.trim()) {
+      setSection('basic')
+      setStorageLocationStatus('error')
+      reportValidationError('请输入数据存储路径')
+      return
+    }
+    const storage = window.desktop.storage
+    if (!storage) {
+      setSection('basic')
+      setStorageLocationStatus('unavailable')
+      reportValidationError('请完全退出并重新打开 Chromie 后重试')
       return
     }
     const refreshInterval = Number(exchangeRateRefreshInterval)
@@ -1064,22 +949,43 @@ export function WorkspaceSettingsDialog({
       refreshInterval > MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
     ) {
       setSection('currency')
-      setError(
-        `更新间隔请输入 ${MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}–${MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES} 分钟之间的整数`
-      )
+      const message =
+        `更新间隔请输入 ${MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES} 至 ${MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES} 分钟之间的整数`
+      setError(message)
+      reportValidationError(message)
       return
     }
     if (!beginSubmission()) return
+    let operation: 'storage' | 'workspace' = 'storage'
     try {
+      const validatedLocation = await storage.validateLocation(storagePath)
+      setStoragePath(validatedLocation.path)
+      setStorageLocationStatus('ready')
+      operation = 'workspace'
       await onSubmit({
         name,
         baseCurrency,
         exchangeRateProvider,
-        exchangeRateRefreshIntervalMinutes: refreshInterval
+        exchangeRateRefreshIntervalMinutes: refreshInterval,
+        stockQuoteProvider,
+        cryptoQuoteProvider
       })
+      operation = 'storage'
+      const result = await storage.updateLocation(validatedLocation.path)
+      setStoragePath(result.location.path)
+      if (result.changed) {
+        toast.success('存储位置已更新，Chromie 即将重启')
+      }
       onOpenChange(false)
     } catch (submitError) {
-      reportOperationError('保存工作区设置失败', submitError)
+      if (operation === 'storage') {
+        const message = operationErrorMessage(submitError)
+        setSection('basic')
+        setStorageLocationStatus('error')
+        reportOperationError('保存数据存储位置失败', message)
+      } else {
+        reportOperationError('保存工作区设置失败', submitError)
+      }
     } finally {
       endSubmission()
     }
@@ -1096,15 +1002,12 @@ export function WorkspaceSettingsDialog({
         <DialogHeader>
           <DialogTitle>工作区设置</DialogTitle>
           <DialogDescription className="sr-only">
-            管理工作区基础信息、币种与汇率、MCP 协议和工作区状态
+            管理工作区基础信息、币种与汇率、行情数据、MCP 协议和工作区状态
           </DialogDescription>
         </DialogHeader>
         <form
           className="contents"
           aria-invalid={section !== 'mcp' && Boolean(error)}
-          aria-describedby={
-            section !== 'mcp' && error ? 'workspace-settings-error' : undefined
-          }
           onSubmit={handleSubmit}
         >
           <DialogBody className="grid grid-cols-[10.5rem_minmax(0,1fr)] overflow-hidden p-0">
@@ -1141,6 +1044,19 @@ export function WorkspaceSettingsDialog({
                   variant="ghost"
                   className={cn(
                     'h-9 justify-start gap-2.5 px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    section === 'quotes' &&
+                      'bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent'
+                  )}
+                  onClick={() => setSection('quotes')}
+                >
+                  <ChartCandlestick className="size-4" />
+                  行情数据
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    'h-9 justify-start gap-2.5 px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
                     section === 'mcp' &&
                       'bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent'
                   )}
@@ -1166,16 +1082,54 @@ export function WorkspaceSettingsDialog({
                         setName(event.target.value)
                         setError('')
                       }}
-                      placeholder="输入工作区名称"
+                      placeholder="家庭资产"
                       maxLength={40}
                     />
                   </div>
+                  <Field
+                    data-disabled={
+                      storageLocationStatus === 'loading' ||
+                      storageLocationStatus === 'unavailable'
+                    }
+                    data-invalid={
+                      storageLocationStatus === 'unavailable' ||
+                      storageLocationStatus === 'error'
+                    }
+                  >
+                    <FieldLabel htmlFor="workspace-settings-storage-path">
+                      数据存储位置
+                    </FieldLabel>
+                    <Input
+                      id="workspace-settings-storage-path"
+                      value={storagePath}
+                      placeholder={storageLocationPlaceholder || '/Users/name/.chromie'}
+                      aria-invalid={
+                        storageLocationStatus === 'unavailable' ||
+                        storageLocationStatus === 'error'
+                      }
+                      disabled={
+                        submitting ||
+                        storageLocationStatus === 'loading' ||
+                        storageLocationStatus === 'unavailable'
+                      }
+                      autoComplete="off"
+                      spellCheck={false}
+                      maxLength={4096}
+                      onChange={(event) => {
+                        setStoragePath(event.target.value)
+                        setStorageLocationStatus('ready')
+                      }}
+                    />
+                    <FieldDescription>
+                      支持绝对路径或 ~/ 开头的路径，保存时检查写入权限，路径变化后自动重启
+                    </FieldDescription>
+                  </Field>
                   <Separator />
                   <div className="flex items-center justify-between gap-5">
                     <div className="grid gap-1">
                       <p className="text-sm font-medium">导出工作区</p>
                       <p className="text-xs leading-5 text-muted-foreground">
-                        导出工作区数据与历史快照，备份不包含同步凭据
+                        导出工作区数据、历史快照与账户同步配置
                       </p>
                     </div>
                     <Button
@@ -1230,7 +1184,7 @@ export function WorkspaceSettingsDialog({
                       }}
                     >
                       <SelectTrigger id="workspace-settings-base-currency">
-                        <SelectValue />
+                        <SelectValue placeholder="选择本位币" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectGroup>
@@ -1283,6 +1237,7 @@ export function WorkspaceSettingsDialog({
                     <Input
                       id="workspace-settings-exchange-rate-refresh-interval"
                       type="number"
+                      placeholder={String(DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES)}
                       min={MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}
                       max={MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES}
                       step={1}
@@ -1294,6 +1249,77 @@ export function WorkspaceSettingsDialog({
                     />
                     <p className="text-xs leading-5 text-muted-foreground">
                       打开工作区后立即更新，之后按此间隔自动更新
+                    </p>
+                  </div>
+                </section>
+              )}
+
+                {section === 'quotes' && (
+                <section className="grid gap-5">
+                  <div className="grid gap-1">
+                    <h3 className="text-base font-semibold">行情数据</h3>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      添加或编辑持仓时，根据市场和资产代码自动填写名称、币种与当前价格
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="workspace-settings-stock-quote-provider">
+                      股票资产
+                    </Label>
+                    <Select
+                      value={stockQuoteProvider}
+                      onValueChange={(value) => {
+                        setStockQuoteProvider(value as StockQuoteProvider)
+                        setError('')
+                      }}
+                    >
+                      <SelectTrigger id="workspace-settings-stock-quote-provider">
+                        <SelectValue placeholder="选择股票行情数据源">
+                          {stockQuoteProviderLabels[stockQuoteProvider]}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {STOCK_QUOTE_PROVIDERS.map((provider) => (
+                            <SelectItem key={provider} value={provider}>
+                              {stockQuoteProviderLabels[provider]}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      用于中国内地、香港和美国市场，默认使用东方财富
+                    </p>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="workspace-settings-crypto-quote-provider">
+                      加密资产
+                    </Label>
+                    <Select
+                      value={cryptoQuoteProvider}
+                      onValueChange={(value) => {
+                        setCryptoQuoteProvider(value as CryptoQuoteProvider)
+                        setError('')
+                      }}
+                    >
+                      <SelectTrigger id="workspace-settings-crypto-quote-provider">
+                        <SelectValue placeholder="选择加密资产行情数据源">
+                          {cryptoQuoteProviderLabels[cryptoQuoteProvider]}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {CRYPTO_QUOTE_PROVIDERS.map((provider) => (
+                            <SelectItem key={provider} value={provider}>
+                              {cryptoQuoteProviderLabels[provider]}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      用于 CC 市场，默认使用 Coinbase，数据源不可用时可继续手动填写
                     </p>
                   </div>
                 </section>
@@ -1332,12 +1358,7 @@ export function WorkspaceSettingsDialog({
             </ScrollArea>
           </DialogBody>
 
-          <DialogFooter className="items-center sm:justify-between">
-            <div>
-              {section !== 'mcp' && error && (
-                <FieldMessage id="workspace-settings-error">{error}</FieldMessage>
-              )}
-            </div>
+          <DialogFooter className="items-center sm:justify-end">
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -1351,6 +1372,9 @@ export function WorkspaceSettingsDialog({
                 type="submit"
                 disabled={
                   submitting ||
+                  (section !== 'mcp' &&
+                    (storageLocationStatus === 'loading' ||
+                      storageLocationStatus === 'unavailable')) ||
                   (section === 'mcp' &&
                     (mcpLoading || Boolean(mcpError && !mcpConnection)))
                 }
@@ -1375,6 +1399,7 @@ export function ImportBackupDialog({
   tagCount,
   positionCount,
   snapshotCount,
+  integrationCount,
   onConfirm
 }: BaseDialogProps & {
   workspaceName: string
@@ -1382,6 +1407,7 @@ export function ImportBackupDialog({
   tagCount: number
   positionCount: number
   snapshotCount: number
+  integrationCount: number
   onConfirm: () => void | Promise<void>
 }) {
   const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
@@ -1404,14 +1430,23 @@ export function ImportBackupDialog({
         if (!submitting) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-w-md" showCloseButton={false}>
         <DialogHeader>
           <DialogTitle>导入“{workspaceName}”？</DialogTitle>
           <DialogDescription>
-            包含 {accountCount} 个资产账户、{tagCount} 个标签、{positionCount}{' '}
-            项持仓和 {snapshotCount} 个历史快照，将作为新工作区导入
+            备份将作为新的工作区导入，不会覆盖现有数据
           </DialogDescription>
         </DialogHeader>
+        <DialogBody>
+          <Alert>
+            <Download aria-hidden="true" />
+            <AlertTitle>备份内容</AlertTitle>
+            <AlertDescription>
+              {accountCount} 个账户、{tagCount} 个标签、{positionCount} 项持仓和{' '}
+              {snapshotCount} 个历史快照，其中 {integrationCount} 个账户带有同步配置
+            </AlertDescription>
+          </Alert>
+        </DialogBody>
         <DialogFooter>
           <Button
             type="button"
@@ -1463,11 +1498,20 @@ export function ExportBackupDialog({
         if (!submitting) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent>
+      <DialogContent className="max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>导出当前工作区</DialogTitle>
-          <DialogDescription>备份不包含同步凭据，导入后需重新配置</DialogDescription>
+          <DialogTitle>导出当前工作区？</DialogTitle>
+          <DialogDescription>将生成一份可重新导入 Chromie 的备份文件</DialogDescription>
         </DialogHeader>
+        <DialogBody>
+          <Alert>
+            <Upload aria-hidden="true" />
+            <AlertTitle>备份包含同步凭据</AlertTitle>
+            <AlertDescription>
+              连接参数和 API 凭据会写入备份文件，请将文件保存在可信位置
+            </AlertDescription>
+          </Alert>
+        </DialogBody>
         <DialogFooter>
           <Button
             type="button"
@@ -1620,11 +1664,16 @@ export function AccountDialog({
     setError('')
   }
 
+  function failValidation(message: string): void {
+    setError(message)
+    reportValidationError(message)
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (submissionInFlight.current) return
     if (!name.trim()) {
-      setError('请输入资产账户名称')
+      failValidation('请输入账户名称')
       return
     }
     const parsedSyncPort = Number(syncPort)
@@ -1642,7 +1691,7 @@ export function AccountDialog({
     )
     const hasHstongTradingPassword = hstongTradingPassword.length > 0
     if (type === 'Futu' && syncEnabled && !syncHost.trim()) {
-      setError('请输入 Futu OpenD 地址')
+      failValidation('请输入 Futu OpenD 地址')
       return
     }
     if (
@@ -1650,14 +1699,14 @@ export function AccountDialog({
       syncEnabled &&
       (!Number.isInteger(parsedSyncPort) || parsedSyncPort < 1 || parsedSyncPort > 65535)
     ) {
-      setError('Futu OpenD 端口需为 1–65535')
+      failValidation('Futu OpenD 端口需为 1 至 65535')
       return
     }
     if (
       syncEnabled &&
       (!Number.isInteger(parsedSyncInterval) || parsedSyncInterval < 5 || parsedSyncInterval > 3600)
     ) {
-      setError('同步间隔需为 5–3600 秒')
+      failValidation('同步间隔需为 5 至 3600 秒')
       return
     }
     if (
@@ -1667,7 +1716,7 @@ export function AccountDialog({
         (hasAnyOkxCredential &&
           (!okxApiKey.trim() || !okxSecretKey || !okxPassphrase)))
     ) {
-      setError('请填写完整的 OKX API 配置')
+      failValidation('请填写完整的 OKX API 配置')
       return
     }
     const parsedIbkrGatewayPort = Number(ibkrGatewayPort)
@@ -1680,7 +1729,7 @@ export function AccountDialog({
       syncEnabled &&
       !['127.0.0.1', 'localhost', '::1'].includes(normalizedIbkrGatewayHost)
     ) {
-      setError('IBKR Client Portal Gateway 地址必须是本机回环地址')
+      failValidation('IBKR Client Portal Gateway 地址必须是本地回环地址')
       return
     }
     if (
@@ -1690,7 +1739,7 @@ export function AccountDialog({
         parsedIbkrGatewayPort < 1 ||
         parsedIbkrGatewayPort > 65535)
     ) {
-      setError('IBKR Client Portal Gateway 端口需为 1–65535')
+      failValidation('IBKR Client Portal Gateway 端口需为 1 至 65535')
       return
     }
     if (
@@ -1700,7 +1749,7 @@ export function AccountDialog({
         (hasAnyBinanceCredential &&
           (!binanceApiKey.trim() || !binanceSecretKey)))
     ) {
-      setError('请填写完整的币安 API 配置')
+      failValidation('请填写完整的币安 API 配置')
       return
     }
     const parsedHstongGatewayPort = Number(hstongGatewayPort)
@@ -1713,7 +1762,7 @@ export function AccountDialog({
       syncEnabled &&
       !['127.0.0.1', 'localhost', '::1'].includes(normalizedHstongGatewayHost)
     ) {
-      setError('华盛 OpenAPI Gateway 地址必须是本机回环地址')
+      failValidation('华盛 OpenAPI Gateway 地址必须是本地回环地址')
       return
     }
     if (
@@ -1723,7 +1772,7 @@ export function AccountDialog({
         parsedHstongGatewayPort < 1 ||
         parsedHstongGatewayPort > 65535)
     ) {
-      setError('华盛 OpenAPI Gateway 端口需为 1–65535')
+      failValidation('华盛 OpenAPI Gateway 端口需为 1 至 65535')
       return
     }
     const lastSyncedAt =
@@ -1830,7 +1879,7 @@ export function AccountDialog({
       })
       onOpenChange(false)
     } catch (submitError) {
-      reportOperationError(account ? '更新资产账户失败' : '添加资产账户失败', submitError)
+      reportOperationError(account ? '更新账户失败' : '添加账户失败', submitError)
     } finally {
       endSubmission()
     }
@@ -1845,15 +1894,14 @@ export function AccountDialog({
     >
       <DialogContent className="max-h-[92vh] max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{account ? '编辑资产账户' : '添加资产账户'}</DialogTitle>
+          <DialogTitle>{account ? '编辑账户' : '添加账户'}</DialogTitle>
           <DialogDescription className="sr-only">
-            设置资产账户名称、类型、标签和同步来源
+            设置账户名称、类型、标签和同步来源
           </DialogDescription>
         </DialogHeader>
         <form
           className="contents"
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? 'account-error' : undefined}
           onSubmit={handleSubmit}
         >
           <DialogBody>
@@ -1903,7 +1951,7 @@ export function AccountDialog({
                 setName(event.target.value)
                 setError('')
               }}
-              placeholder="例如：我的美股账户"
+              placeholder="我的美股账户"
               maxLength={50}
             />
           </Field>
@@ -1912,7 +1960,6 @@ export function AccountDialog({
             selectedIds={tagIds}
             onSelectedIdsChange={setTagIds}
             onCreateTag={onCreateTag}
-            hidePlaceholder
           />
           {supportsAutoSync && (
             <Field>
@@ -1925,7 +1972,7 @@ export function AccountDialog({
                 }}
               >
                 <SelectTrigger id="account-auto-sync" className="h-9">
-                  <SelectValue />
+                  <SelectValue placeholder="选择自动同步状态" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -1961,6 +2008,7 @@ export function AccountDialog({
                   <Input
                     id="account-sync-port"
                     type="number"
+                    placeholder={String(DEFAULT_FUTU_OPEND_PORT)}
                     value={syncPort}
                     onChange={(event) => {
                       setSyncPort(event.target.value)
@@ -1987,7 +2035,7 @@ export function AccountDialog({
                       account?.type === 'Futu' &&
                       integration?.provider === 'Futu' &&
                       integration.websocket.credentialConfigured
-                        ? '已安全保存；留空保持不变'
+                        ? '已保存，留空保持不变'
                         : 'WebSocket Authentication Key'
                     }
                     autoComplete="off"
@@ -1999,6 +2047,7 @@ export function AccountDialog({
                   <Input
                     id="account-sync-interval"
                     type="number"
+                    placeholder={String(DEFAULT_SYNC_INTERVAL)}
                     value={syncInterval}
                     onChange={(event) => {
                       setSyncInterval(event.target.value)
@@ -2029,8 +2078,8 @@ export function AccountDialog({
                   }}
                   placeholder={
                     account?.type === 'Okx' && integration?.provider === 'Okx'
-                      ? '已安全保存；留空保持不变'
-                      : undefined
+                      ? '已保存，留空保持不变'
+                      : '请输入 API Key'
                   }
                   autoComplete="off"
                   maxLength={256}
@@ -2049,8 +2098,8 @@ export function AccountDialog({
                     }}
                     placeholder={
                       account?.type === 'Okx' && integration?.provider === 'Okx'
-                        ? '已安全保存；留空保持不变'
-                        : undefined
+                        ? '已保存，留空保持不变'
+                        : '请输入 Secret Key'
                     }
                     autoComplete="new-password"
                     maxLength={512}
@@ -2068,8 +2117,8 @@ export function AccountDialog({
                     }}
                     placeholder={
                       account?.type === 'Okx' && integration?.provider === 'Okx'
-                        ? '已安全保存；留空保持不变'
-                        : undefined
+                        ? '已保存，留空保持不变'
+                        : '请输入 Passphrase'
                     }
                     autoComplete="new-password"
                     maxLength={256}
@@ -2081,6 +2130,7 @@ export function AccountDialog({
                 <Input
                   id="account-okx-sync-interval"
                   type="number"
+                  placeholder={String(DEFAULT_SYNC_INTERVAL)}
                   value={syncInterval}
                   onChange={(event) => {
                     setSyncInterval(event.target.value)
@@ -2096,7 +2146,7 @@ export function AccountDialog({
           {type === 'Ibkr' && autoSync && (
             <div className="grid gap-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium">IBKR Client Portal Gateway</p>
+                <p className="text-sm font-medium">IBKR Client Portal Gateway 配置</p>
                 <OfficialIntegrationDocsLink provider="Ibkr" />
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -2118,6 +2168,7 @@ export function AccountDialog({
                   <Input
                     id="account-ibkr-port"
                     type="number"
+                    placeholder={String(DEFAULT_IBKR_GATEWAY_PORT)}
                     value={ibkrGatewayPort}
                     onChange={(event) => {
                       setIbkrGatewayPort(event.target.value)
@@ -2134,6 +2185,7 @@ export function AccountDialog({
                 <Input
                   id="account-ibkr-sync-interval"
                   type="number"
+                  placeholder={String(DEFAULT_SYNC_INTERVAL)}
                   value={syncInterval}
                   onChange={(event) => {
                     setSyncInterval(event.target.value)
@@ -2149,7 +2201,7 @@ export function AccountDialog({
           {type === 'Hstong' && autoSync && (
             <div className="flex flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-medium">华盛 OpenAPI Gateway</p>
+                <p className="text-sm font-medium">华盛 OpenAPI Gateway 配置</p>
                 <OfficialIntegrationDocsLink provider="Hstong" />
               </div>
               <FieldGroup className="gap-3">
@@ -2172,6 +2224,7 @@ export function AccountDialog({
                     <Input
                       id="account-hstong-port"
                       type="number"
+                      placeholder={String(DEFAULT_HSTONG_GATEWAY_PORT)}
                       value={hstongGatewayPort}
                       onChange={(event) => {
                         setHstongGatewayPort(event.target.value)
@@ -2198,8 +2251,8 @@ export function AccountDialog({
                       }}
                       placeholder={
                         canKeepHstongCredential
-                          ? '已安全保存；留空保持不变'
-                          : undefined
+                          ? '已保存，留空保持不变'
+                          : '请输入交易密码'
                       }
                       autoComplete="new-password"
                       maxLength={256}
@@ -2212,6 +2265,7 @@ export function AccountDialog({
                     <Input
                       id="account-hstong-sync-interval"
                       type="number"
+                      placeholder={String(DEFAULT_SYNC_INTERVAL)}
                       value={syncInterval}
                       onChange={(event) => {
                         setSyncInterval(event.target.value)
@@ -2243,8 +2297,8 @@ export function AccountDialog({
                   }}
                   placeholder={
                     account?.type === 'Binance' && integration?.provider === 'Binance'
-                      ? '已安全保存；留空保持不变'
-                      : undefined
+                      ? '已保存，留空保持不变'
+                      : '请输入 API Key'
                   }
                   autoComplete="off"
                   maxLength={256}
@@ -2262,8 +2316,8 @@ export function AccountDialog({
                   }}
                   placeholder={
                     account?.type === 'Binance' && integration?.provider === 'Binance'
-                      ? '已安全保存；留空保持不变'
-                      : undefined
+                      ? '已保存，留空保持不变'
+                      : '请输入 Secret Key'
                   }
                   autoComplete="new-password"
                   maxLength={512}
@@ -2274,6 +2328,7 @@ export function AccountDialog({
                 <Input
                   id="account-binance-sync-interval"
                   type="number"
+                  placeholder={String(DEFAULT_SYNC_INTERVAL)}
                   value={syncInterval}
                   onChange={(event) => {
                     setSyncInterval(event.target.value)
@@ -2286,7 +2341,6 @@ export function AccountDialog({
               </Field>
             </div>
           )}
-          {error && <FieldMessage id="account-error">{error}</FieldMessage>}
           </FieldGroup>
           </DialogBody>
           <DialogFooter>
@@ -2315,16 +2369,28 @@ export function AccountDialog({
   )
 }
 
+type PositionField = 'symbol' | 'name' | 'currency' | 'quantity' | 'price'
+type AssetQuoteLookupStatus =
+  | 'idle'
+  | 'loading'
+  | 'not-found'
+
+const ASSET_QUOTE_LOOKUP_DELAY_MS = 600
+
 export function PositionDialog({
   open,
   onOpenChange,
   position,
   tags,
+  stockQuoteProvider,
+  cryptoQuoteProvider,
   onCreateTag,
   onSubmit
 }: BaseDialogProps & {
   position?: Position
   tags: Tag[]
+  stockQuoteProvider: StockQuoteProvider
+  cryptoQuoteProvider: CryptoQuoteProvider
   onCreateTag: (input: TagInput) => Promise<string>
   onSubmit: (input: PositionInput) => Promise<string | null>
 }) {
@@ -2335,12 +2401,19 @@ export function PositionDialog({
   const [quantity, setQuantity] = useState('')
   const [price, setPrice] = useState('')
   const [tagIds, setTagIds] = useState<string[]>([])
-  const [error, setError] = useState<{
-    field: 'identity' | 'quantity' | 'price'
-    message: string
-  } | null>(null)
+  const [errors, setErrors] = useState<Partial<Record<PositionField, string>>>({})
+  const [quoteLookupEnabled, setQuoteLookupEnabled] = useState(false)
+  const [quoteLookupStatus, setQuoteLookupStatus] =
+    useState<AssetQuoteLookupStatus>('idle')
+  const quoteLookupRequestRef = useRef(0)
+  const quoteFieldEditedRef = useRef({
+    name: false,
+    currency: false,
+    price: false
+  })
   const { submitting, submissionInFlight, beginSubmission, endSubmission } =
     useSubmissionGuard()
+  const quoteLookupLoading = quoteLookupStatus === 'loading'
 
   useEffect(() => {
     if (!open) return
@@ -2351,37 +2424,138 @@ export function PositionDialog({
     setQuantity(position ? String(position.quantity) : '')
     setPrice(position?.price === undefined ? '' : String(position.price))
     setTagIds(position?.tagIds ?? [])
-    setError(null)
+    setErrors({})
+    setQuoteLookupEnabled(false)
+    setQuoteLookupStatus('idle')
+    quoteLookupRequestRef.current += 1
+    quoteFieldEditedRef.current = { name: false, currency: false, price: false }
     // Preserve edits across background sync refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, position?.id])
 
+  useEffect(() => {
+    const requestId = ++quoteLookupRequestRef.current
+    const normalizedSymbol = symbol.trim()
+    if (!open || !quoteLookupEnabled || !normalizedSymbol) {
+      setQuoteLookupStatus('idle')
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      setQuoteLookupStatus('loading')
+      const lookup = window.desktop.assetQuotes?.lookup
+      if (!lookup) {
+        setQuoteLookupStatus('idle')
+        return
+      }
+
+      const provider = market === 'CC'
+        ? cryptoQuoteProvider
+        : stockQuoteProvider
+      void lookup({ market, symbol: normalizedSymbol, provider })
+        .then((result) => {
+          if (requestId !== quoteLookupRequestRef.current) return
+          if (result.status !== 'found') {
+            setQuoteLookupStatus(
+              result.status === 'not-found' ? 'not-found' : 'idle'
+            )
+            return
+          }
+
+          const filledFields: PositionField[] = []
+          if (result.quote.name && !quoteFieldEditedRef.current.name) {
+            setName(result.quote.name.slice(0, 60))
+            filledFields.push('name')
+          }
+          if (result.quote.currency && !quoteFieldEditedRef.current.currency) {
+            setCurrency(result.quote.currency)
+            filledFields.push('currency')
+          }
+          if (result.quote.price !== undefined && !quoteFieldEditedRef.current.price) {
+            setPrice(String(result.quote.price))
+            filledFields.push('price')
+          }
+          if (filledFields.length > 0) {
+            setErrors((current) => {
+              const next = { ...current }
+              filledFields.forEach((field) => delete next[field])
+              return next
+            })
+            toast.success('行情数据获取成功', {
+              id: 'position-quote-autofill'
+            })
+          }
+          setQuoteLookupStatus('idle')
+        })
+        .catch(() => {
+          if (requestId === quoteLookupRequestRef.current) {
+            setQuoteLookupStatus('idle')
+          }
+        })
+    }, ASSET_QUOTE_LOOKUP_DELAY_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [cryptoQuoteProvider, market, open, quoteLookupEnabled, stockQuoteProvider, symbol])
+
+  function clearError(field: PositionField): void {
+    setErrors((current) => {
+      if (!current[field]) return current
+      const next = { ...current }
+      delete next[field]
+      return next
+    })
+  }
+
+  function failValidation(field: PositionField, message: string): void {
+    setErrors({ [field]: message })
+    reportValidationError(message)
+  }
+
   function handleMarketChange(value: string): void {
     const nextMarket = value as Market
     const previousDefault = defaultCurrencyByMarket[market]
+    quoteLookupRequestRef.current += 1
+    quoteFieldEditedRef.current = { name: false, currency: false, price: false }
+    setQuoteLookupEnabled(true)
+    setQuoteLookupStatus('idle')
     setMarket(nextMarket)
-    if (!currency || currency === previousDefault) setCurrency(defaultCurrencyByMarket[nextMarket])
+    if (!currency || currency === previousDefault) {
+      setCurrency(defaultCurrencyByMarket[nextMarket])
+      clearError('currency')
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
-    if (submissionInFlight.current) return
+    if (submissionInFlight.current || quoteLookupLoading) return
     const parsedQuantity = Number(quantity)
     const parsedPrice = Number(price)
-    if (!symbol.trim() || !name.trim() || !currency.trim()) {
-      setError({ field: 'identity', message: '请填写资产代码、资产名称和币种' })
+    if (!symbol.trim()) {
+      failValidation('symbol', '请填写资产代码')
+      return
+    }
+    if (!name.trim()) {
+      failValidation('name', '请填写资产名称')
+      return
+    }
+    if (!currency.trim()) {
+      failValidation('currency', '请选择币种')
+      return
+    }
+    if (!quantity.trim()) {
+      failValidation('quantity', '请填写资产数量')
       return
     }
     if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
-      setError({ field: 'quantity', message: '资产数量必须大于 0' })
+      failValidation('quantity', '资产数量必须大于 0')
       return
     }
     if (!price.trim()) {
-      setError({ field: 'price', message: '请填写当前价格' })
+      failValidation('price', '请填写当前价格')
       return
     }
     if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      setError({ field: 'price', message: '当前价格必须是大于或等于 0 的数字' })
+      failValidation('price', '当前价格必须是大于或等于 0 的数字')
       return
     }
 
@@ -2422,15 +2596,19 @@ export function PositionDialog({
             设置持仓市场、代码、币种、数量、当前价格和标签
           </DialogDescription>
         </DialogHeader>
-        <form className="contents" onSubmit={handleSubmit}>
+        <form className="contents" noValidate onSubmit={handleSubmit}>
           <DialogBody>
           <FieldGroup>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field>
+            <Field data-disabled={quoteLookupLoading}>
               <FieldLabel>市场</FieldLabel>
-              <Select value={market} onValueChange={handleMarketChange}>
+              <Select
+                value={market}
+                disabled={quoteLookupLoading}
+                onValueChange={handleMarketChange}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="选择市场" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -2443,71 +2621,102 @@ export function PositionDialog({
                 </SelectContent>
               </Select>
             </Field>
-            <Field data-invalid={error?.field === 'identity'}>
+            <Field
+              data-invalid={Boolean(errors.symbol)}
+              data-disabled={quoteLookupLoading}
+            >
               <FieldLabel htmlFor="position-symbol">资产代码</FieldLabel>
-              <Input
-                id="position-symbol"
-                aria-invalid={error?.field === 'identity'}
-                aria-describedby={
-                  error?.field === 'identity' ? 'position-identity-error' : undefined
-                }
-                value={symbol}
-                onChange={(event) => {
-                  setSymbol(event.target.value.toUpperCase())
-                  setError(null)
-                }}
-                placeholder={
-                  market === 'CN'
-                    ? '600519'
-                    : market === 'HK'
-                      ? '00700'
-                      : market === 'US'
-                        ? 'AAPL'
-                        : 'BTC'
-                }
-                autoFocus
-                maxLength={24}
-              />
+              <InputGroup data-disabled={quoteLookupLoading}>
+                <InputGroupInput
+                  id="position-symbol"
+                  aria-invalid={Boolean(errors.symbol)}
+                  aria-describedby={
+                    quoteLookupStatus === 'not-found'
+                      ? 'position-quote-status'
+                      : undefined
+                  }
+                  aria-busy={quoteLookupLoading}
+                  disabled={quoteLookupLoading}
+                  value={symbol}
+                  onChange={(event) => {
+                    quoteLookupRequestRef.current += 1
+                    quoteFieldEditedRef.current = {
+                      name: false,
+                      currency: false,
+                      price: false
+                    }
+                    setQuoteLookupEnabled(true)
+                    setQuoteLookupStatus('idle')
+                    setSymbol(event.target.value.toUpperCase())
+                    clearError('symbol')
+                  }}
+                  placeholder={
+                    market === 'CN'
+                      ? '600519'
+                      : market === 'HK'
+                        ? '00700'
+                        : market === 'US'
+                          ? 'AAPL'
+                          : 'BTC'
+                  }
+                  autoFocus
+                  maxLength={24}
+                />
+                {quoteLookupStatus === 'loading' && (
+                  <InputGroupAddon align="inline-end">
+                    <Spinner aria-label="正在获取行情" />
+                  </InputGroupAddon>
+                )}
+              </InputGroup>
+              {quoteLookupStatus === 'not-found' && (
+                <FieldDescription
+                  id="position-quote-status"
+                  aria-live="polite"
+                >
+                  未找到该资产，可手动填写
+                </FieldDescription>
+              )}
             </Field>
           </div>
-          <Field data-invalid={error?.field === 'identity'}>
+          <Field
+            data-invalid={Boolean(errors.name)}
+            data-disabled={quoteLookupLoading}
+          >
             <FieldLabel htmlFor="position-name">资产名称</FieldLabel>
             <Input
               id="position-name"
-              aria-invalid={error?.field === 'identity'}
-              aria-describedby={
-                error?.field === 'identity' ? 'position-identity-error' : undefined
-              }
+              aria-invalid={Boolean(errors.name)}
+              disabled={quoteLookupLoading}
               value={name}
               onChange={(event) => {
+                quoteFieldEditedRef.current.name = true
                 setName(event.target.value)
-                setError(null)
+                clearError('name')
               }}
-              placeholder="例如：Apple"
+              placeholder="Apple"
               maxLength={60}
             />
-            {error?.field === 'identity' && (
-              <FieldMessage id="position-identity-error">{error.message}</FieldMessage>
-            )}
           </Field>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field data-invalid={error?.field === 'identity'}>
+            <Field
+              data-invalid={Boolean(errors.currency)}
+              data-disabled={quoteLookupLoading}
+            >
               <FieldLabel htmlFor="position-currency">币种</FieldLabel>
               <Select
                 value={currency}
+                disabled={quoteLookupLoading}
                 onValueChange={(value) => {
+                  quoteFieldEditedRef.current.currency = true
                   setCurrency(value)
-                  setError(null)
+                  clearError('currency')
                 }}
               >
                 <SelectTrigger
                   id="position-currency"
-                  aria-invalid={error?.field === 'identity'}
-                  aria-describedby={
-                    error?.field === 'identity' ? 'position-identity-error' : undefined
-                  }
+                  aria-invalid={Boolean(errors.currency)}
                 >
-                  <SelectValue />
+                  <SelectValue placeholder="选择币种" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
@@ -2523,50 +2732,47 @@ export function PositionDialog({
                 </SelectContent>
               </Select>
             </Field>
-            <Field data-invalid={error?.field === 'quantity'}>
+            <Field
+              data-invalid={Boolean(errors.quantity)}
+              data-disabled={quoteLookupLoading}
+            >
               <FieldLabel htmlFor="position-quantity">资产数量</FieldLabel>
               <Input
                 id="position-quantity"
                 type="number"
                 value={quantity}
-                aria-invalid={error?.field === 'quantity'}
-                aria-describedby={
-                  error?.field === 'quantity' ? 'position-quantity-error' : undefined
-                }
+                aria-invalid={Boolean(errors.quantity)}
+                disabled={quoteLookupLoading}
                 onChange={(event) => {
                   setQuantity(event.target.value)
-                  setError(null)
+                  clearError('quantity')
                 }}
                 placeholder="0"
                 min="0"
                 step="any"
               />
-              {error?.field === 'quantity' && (
-                <FieldMessage id="position-quantity-error">{error.message}</FieldMessage>
-              )}
             </Field>
-            <Field data-invalid={error?.field === 'price'}>
+            <Field
+              data-invalid={Boolean(errors.price)}
+              data-disabled={quoteLookupLoading}
+            >
               <FieldLabel htmlFor="position-price">当前价格</FieldLabel>
               <Input
                 id="position-price"
                 type="number"
                 value={price}
-                aria-invalid={error?.field === 'price'}
-                aria-describedby={
-                  error?.field === 'price' ? 'position-price-error' : undefined
-                }
+                aria-invalid={Boolean(errors.price)}
+                disabled={quoteLookupLoading}
                 onChange={(event) => {
+                  quoteFieldEditedRef.current.price = true
                   setPrice(event.target.value)
-                  setError(null)
+                  clearError('price')
                 }}
                 placeholder="0.00"
                 min="0"
                 step="any"
                 required
               />
-              {error?.field === 'price' && (
-                <FieldMessage id="position-price-error">{error.message}</FieldMessage>
-              )}
             </Field>
           </div>
           <TagSelector
@@ -2574,6 +2780,7 @@ export function PositionDialog({
             selectedIds={tagIds}
             onSelectedIdsChange={setTagIds}
             onCreateTag={onCreateTag}
+            disabled={quoteLookupLoading}
           />
           </FieldGroup>
           </DialogBody>
@@ -2586,7 +2793,11 @@ export function PositionDialog({
             >
               取消
             </Button>
-            <Button type="submit" disabled={submitting} aria-busy={submitting}>
+            <Button
+              type="submit"
+              disabled={submitting || quoteLookupLoading}
+              aria-busy={submitting}
+            >
               {submitting && <Spinner data-icon="inline-start" />}
               {submitting
                 ? position

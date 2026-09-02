@@ -51,7 +51,7 @@ function normalizeOptions(options: IbkrSyncOptions = {}): Required<IbkrSyncOptio
     ? rawHost.slice(1, -1)
     : rawHost
   if (!LOOPBACK_HOSTS.has(host)) {
-    throw new Error('IBKR Client Portal Gateway 仅允许连接本机地址')
+    throw new Error('IBKR Client Portal Gateway 仅允许连接本地地址')
   }
   const port = options.port ?? DEFAULT_IBKR_GATEWAY_PORT
   if (!Number.isInteger(port) || port < 1 || port > 65535) {

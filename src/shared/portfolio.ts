@@ -13,6 +13,12 @@ import {
   DEFAULT_HSTONG_GATEWAY_HOST,
   DEFAULT_HSTONG_GATEWAY_PORT
 } from './hstong'
+import {
+  DEFAULT_CRYPTO_QUOTE_PROVIDER,
+  DEFAULT_STOCK_QUOTE_PROVIDER,
+  type CryptoQuoteProvider,
+  type StockQuoteProvider
+} from './asset-quotes'
 import type {
   AccountIntegration,
   AccountIntegrationInput,
@@ -94,6 +100,8 @@ export type Workspace = {
   baseCurrency: BaseCurrency
   exchangeRateProvider: ExchangeRateProvider
   exchangeRateRefreshIntervalMinutes: number
+  stockQuoteProvider: StockQuoteProvider
+  cryptoQuoteProvider: CryptoQuoteProvider
   tags: Tag[]
   accounts: Account[]
 }
@@ -116,6 +124,7 @@ export type AppData = {
 export type WorkspaceBackup = {
   workspace: Workspace
   snapshots: WorkspaceSnapshot[]
+  integrations: AccountIntegration[]
 }
 
 export type WorkspaceInput = Pick<Workspace, 'name' | 'baseCurrency'>
@@ -125,6 +134,8 @@ export type WorkspaceSettingsInput = Pick<
   | 'baseCurrency'
   | 'exchangeRateProvider'
   | 'exchangeRateRefreshIntervalMinutes'
+  | 'stockQuoteProvider'
+  | 'cryptoQuoteProvider'
 >
 export type AccountInput = Pick<
   Account,
@@ -205,23 +216,11 @@ export type PortfolioCommand =
       accountId: string
       positionId: string
     }
-  | {
-      type: 'replace-positions'
-      workspaceId: string
-      accountId: string
-      positions: PositionInput[]
-      lastSyncedAt?: string
-    }
-  | {
-      type: 'import-workspace'
-      workspace: Workspace
-      snapshots?: WorkspaceSnapshot[]
-    }
 
 export type PortfolioCommandResponse = {
   data: AppData
   integrations: AccountIntegration[]
-  result?: string | null
+  result?: string
 }
 
 export type PortfolioLoadResponse = {
@@ -261,17 +260,20 @@ export const DEFAULT_BASE_CURRENCY: BaseCurrency = 'CNY'
 export {
   DEFAULT_EXCHANGE_RATE_PROVIDER,
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
+  DEFAULT_CRYPTO_QUOTE_PROVIDER,
   DEFAULT_FUTU_OPEND_HOST,
   DEFAULT_FUTU_OPEND_PORT,
   DEFAULT_HSTONG_GATEWAY_HOST,
   DEFAULT_HSTONG_GATEWAY_PORT,
   DEFAULT_IBKR_GATEWAY_HOST,
   DEFAULT_IBKR_GATEWAY_PORT,
+  DEFAULT_STOCK_QUOTE_PROVIDER,
   EXCHANGE_RATE_PROVIDERS,
   MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
 }
 export type { ExchangeRateProvider }
+export type { CryptoQuoteProvider, StockQuoteProvider }
 
 export const exchangeRateProviderLabels: Record<ExchangeRateProvider, string> = {
   coinbase: 'Coinbase'

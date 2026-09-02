@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -10,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog'
-import { Field, FieldLabel } from '@/components/ui/field'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 
@@ -33,6 +34,7 @@ export function DeleteConfirmDialog({
 }) {
   const [submitting, setSubmitting] = useState(false)
   const submissionInFlight = useRef(false)
+  const confirmationInputRef = useRef<HTMLInputElement>(null)
   const confirmationInputId = useId()
   const [confirmationValue, setConfirmationValue] = useState('')
   const confirmationMatches =
@@ -63,27 +65,39 @@ export function DeleteConfirmDialog({
         if (!submitting) onOpenChange(nextOpen)
       }}
     >
-      <AlertDialogContent>
+      <AlertDialogContent
+        onOpenAutoFocus={(event) => {
+          if (!confirmationPhrase) return
+          event.preventDefault()
+          confirmationInputRef.current?.focus()
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {description}，此操作无法撤销
+          </AlertDialogDescription>
         </AlertDialogHeader>
         {confirmationPhrase && (
-          <Field>
-            <FieldLabel htmlFor={confirmationInputId}>
-              输入 {confirmationPhrase} 确认删除
-            </FieldLabel>
-            <Input
-              id={confirmationInputId}
-              value={confirmationValue}
-              placeholder={confirmationPhrase}
-              autoComplete="off"
-              autoCapitalize="characters"
-              spellCheck={false}
-              disabled={submitting}
-              onChange={(event) => setConfirmationValue(event.target.value)}
-            />
-          </Field>
+          <AlertDialogBody>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor={confirmationInputId}>
+                  输入工作区名称“{confirmationPhrase}”确认删除
+                </FieldLabel>
+                <Input
+                  ref={confirmationInputRef}
+                  id={confirmationInputId}
+                  value={confirmationValue}
+                  placeholder={confirmationPhrase}
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={submitting}
+                  onChange={(event) => setConfirmationValue(event.target.value)}
+                />
+              </Field>
+            </FieldGroup>
+          </AlertDialogBody>
         )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={submitting}>取消</AlertDialogCancel>

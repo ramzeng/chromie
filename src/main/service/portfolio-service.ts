@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util'
+
 import {
   DEFAULT_EXCHANGE_RATE_PROVIDER,
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
@@ -8,6 +10,14 @@ import {
   type ExchangeRateProvider,
   type ExchangeRateSnapshot
 } from '../../shared/exchange-rates'
+import {
+  CRYPTO_QUOTE_PROVIDERS,
+  DEFAULT_CRYPTO_QUOTE_PROVIDER,
+  DEFAULT_STOCK_QUOTE_PROVIDER,
+  STOCK_QUOTE_PROVIDERS,
+  type CryptoQuoteProvider,
+  type StockQuoteProvider
+} from '../../shared/asset-quotes'
 import {
   DEFAULT_BASE_CURRENCY,
   DEFAULT_FUTU_OPEND_HOST,
@@ -46,11 +56,35 @@ import {
   type AccountIntegration,
   type IntegrationData
 } from '../../shared/integrations'
+import { portfolioCommandSchema } from '../../shared/portfolio-command'
 import type { IntegrationRepository } from '../repository/integration-repository'
 import type { PortfolioRepository } from '../repository/portfolio-repository'
+import {
+  LegacyPortfolioStateRepository,
+  type PortfolioStateRepository
+} from '../repository/portfolio-state-repository'
 
 function normalizeAccountName(value: string): string {
   return value.trim()
+}
+
+function normalizedAccountNameKey(value: string): string {
+  return normalizeAccountName(value).toLocaleLowerCase()
+}
+
+function uniqueAccountName(
+  workspace: Workspace,
+  value: string,
+  excludedAccountId?: string
+): string {
+  const name = normalizeAccountName(value)
+  const nameKey = normalizedAccountNameKey(name)
+  if (workspace.accounts.some(
+    (account) =>
+      account.id !== excludedAccountId &&
+      normalizedAccountNameKey(account.name) === nameKey
+  )) throw new Error(`账户“${name}”已存在`)
+  return name
 }
 
 function isCurrencyCode(value: unknown): value is string {
@@ -78,6 +112,18 @@ function normalizeExchangeRateRefreshInterval(value: unknown): number {
     value <= MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
     ? value
     : DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
+}
+
+function normalizeStockQuoteProvider(value: unknown): StockQuoteProvider {
+  return STOCK_QUOTE_PROVIDERS.includes(value as StockQuoteProvider)
+    ? (value as StockQuoteProvider)
+    : DEFAULT_STOCK_QUOTE_PROVIDER
+}
+
+function normalizeCryptoQuoteProvider(value: unknown): CryptoQuoteProvider {
+  return CRYPTO_QUOTE_PROVIDERS.includes(value as CryptoQuoteProvider)
+    ? (value as CryptoQuoteProvider)
+    : DEFAULT_CRYPTO_QUOTE_PROVIDER
 }
 
 function normalizeSyncInterval(value: unknown): number {
@@ -135,6 +181,16 @@ function normalizeTagIds(value: unknown): string[] {
   return [...new Set(value.flatMap((tagId) =>
     typeof tagId === 'string' && tagId.trim() ? [tagId.trim()] : []
   ))]
+}
+
+function normalizeStoredTagIds(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null
+  const tagIds = value.flatMap((tagId) =>
+    typeof tagId === 'string' && tagId.trim() ? [tagId.trim()] : []
+  )
+  return tagIds.length === value.length && new Set(tagIds).size === tagIds.length
+    ? tagIds
+    : null
 }
 
 function isTagColor(value: unknown): value is TagColor {
@@ -405,7 +461,9 @@ function normalizeStoredIntegrationData(input: unknown): IntegrationData | null 
     usedAccountIds.add(normalized.accountId)
     return [normalized]
   })
-  return { version: 1, integrations }
+  return integrations.length === value.integrations.length
+    ? { version: 1, integrations }
+    : null
 }
 
 function parseStoredIntegrationData(raw: string): IntegrationData | null {
@@ -420,15 +478,24 @@ function normalizeStoredPosition(value: unknown): Position | null {
   if (!value || typeof value !== 'object') return null
   const position = value as Partial<Position>
   const market = normalizeStoredMarket(position.market)
+  const tagIds = normalizeStoredTagIds(position.tagIds)
   if (
     !market ||
+    !tagIds ||
     typeof position.id !== 'string' ||
     !position.id.trim() ||
     typeof position.symbol !== 'string' ||
+    !position.symbol.trim() ||
     typeof position.name !== 'string' ||
+    !position.name.trim() ||
     typeof position.currency !== 'string' ||
+    !isCurrencyCode(position.currency) ||
     typeof position.quantity !== 'number' ||
-    !Number.isFinite(position.quantity)
+    !Number.isFinite(position.quantity) ||
+    (position.price !== undefined &&
+      (typeof position.price !== 'number' ||
+        !Number.isFinite(position.price) ||
+        position.price < 0))
   ) {
     return null
   }
@@ -444,7 +511,7 @@ function normalizeStoredPosition(value: unknown): Position | null {
       currency: position.currency,
     quantity: position.quantity,
       ...(price === undefined ? {} : { price }),
-      tagIds: normalizeTagIds(position.tagIds)
+      tagIds
     },
     position.id
   )
@@ -495,6 +562,8 @@ function normalizeStoredWorkspace(value: unknown): Workspace | null {
     baseCurrency?: unknown
     exchangeRateProvider?: unknown
     exchangeRateRefreshIntervalMinutes?: unknown
+    stockQuoteProvider?: unknown
+    cryptoQuoteProvider?: unknown
     tags?: unknown
     accounts?: unknown
   }
@@ -508,8 +577,9 @@ function normalizeStoredWorkspace(value: unknown): Workspace | null {
 
   const usedAccountIds = new Set<string>()
   const usedPositionIds = new Set<string>()
-  let accounts: Account[] = storedWorkspace.accounts.flatMap((value) => {
-    if (!value || typeof value !== 'object') return []
+  const accounts: Account[] = []
+  for (const value of storedWorkspace.accounts) {
+    if (!value || typeof value !== 'object') return null
     const storedAccount = value as {
       id?: unknown
       name?: unknown
@@ -519,6 +589,7 @@ function normalizeStoredWorkspace(value: unknown): Workspace | null {
       positions?: unknown
     }
     const type = normalizeAccountType(storedAccount.type)
+    const tagIds = normalizeStoredTagIds(storedAccount.tagIds)
     if (
       typeof storedAccount.id !== 'string' ||
       !storedAccount.id.trim() ||
@@ -526,28 +597,28 @@ function normalizeStoredWorkspace(value: unknown): Workspace | null {
       typeof storedAccount.name !== 'string' ||
       !storedAccount.name.trim() ||
       !type ||
+      !tagIds ||
       !Array.isArray(storedAccount.positions)
-    ) return []
+    ) return null
 
     usedAccountIds.add(storedAccount.id)
     const sync = normalizeAccountSync(storedAccount.sync, type)
-    return [{
+    const positions: Position[] = []
+    for (const position of storedAccount.positions) {
+      const normalized = normalizeStoredPosition(position)
+      if (!normalized || usedPositionIds.has(normalized.id)) return null
+      usedPositionIds.add(normalized.id)
+      positions.push(normalized)
+    }
+    accounts.push({
       id: storedAccount.id,
       name: normalizeAccountName(storedAccount.name),
       type,
       ...(sync ? { sync } : {}),
-      tagIds: normalizeTagIds(storedAccount.tagIds),
-      positions: storedAccount.positions.flatMap((position) => {
-        const normalized = normalizeStoredPosition(position)
-        if (!normalized) return []
-        const uniquePosition = usedPositionIds.has(normalized.id)
-          ? { ...normalized, id: createId() }
-          : normalized
-        usedPositionIds.add(uniquePosition.id)
-        return [uniquePosition]
-      })
-    }]
-  })
+      tagIds,
+      positions
+    })
+  }
 
   const usedTagIds = new Set<string>()
   const tagByNormalizedName = new Map<string, Tag>()
@@ -556,10 +627,10 @@ function normalizeStoredWorkspace(value: unknown): Workspace | null {
     if (typeof rawName !== 'string' || !rawName.trim() || !isTagColor(rawColor)) return null
     const name = rawName.trim()
     const key = name.toLocaleLowerCase()
-    const existing = tagByNormalizedName.get(key)
-    if (existing) return existing
+    if (tagByNormalizedName.has(key)) return null
     const requestedId = typeof rawId === 'string' ? rawId.trim() : ''
-    const id = requestedId && !usedTagIds.has(requestedId) ? requestedId : createId()
+    if (!requestedId || usedTagIds.has(requestedId)) return null
+    const id = requestedId
     const tag = { id, name, color: rawColor }
     usedTagIds.add(id)
     tagByNormalizedName.set(key, tag)
@@ -580,14 +651,13 @@ function normalizeStoredWorkspace(value: unknown): Workspace | null {
   if (hasInvalidTag) return null
 
   const availableTagIds = new Set(tags.map((tag) => tag.id))
-  accounts = accounts.map((account) => ({
-    ...account,
-    tagIds: account.tagIds.filter((tagId) => availableTagIds.has(tagId)),
-    positions: account.positions.map((position) => ({
-      ...position,
-      tagIds: position.tagIds.filter((tagId) => availableTagIds.has(tagId))
-    }))
-  }))
+  if (accounts.some(
+    (account) =>
+      account.tagIds.some((tagId) => !availableTagIds.has(tagId)) ||
+      account.positions.some((position) =>
+        position.tagIds.some((tagId) => !availableTagIds.has(tagId))
+      )
+  )) return null
 
   return {
     id: storedWorkspace.id,
@@ -598,6 +668,12 @@ function normalizeStoredWorkspace(value: unknown): Workspace | null {
     ),
     exchangeRateRefreshIntervalMinutes: normalizeExchangeRateRefreshInterval(
       storedWorkspace.exchangeRateRefreshIntervalMinutes
+    ),
+    stockQuoteProvider: normalizeStockQuoteProvider(
+      storedWorkspace.stockQuoteProvider
+    ),
+    cryptoQuoteProvider: normalizeCryptoQuoteProvider(
+      storedWorkspace.cryptoQuoteProvider
     ),
     tags,
     accounts
@@ -622,13 +698,21 @@ function normalizeStoredData(input: unknown): AppData | null {
     const normalized = normalizeStoredWorkspace(workspace)
     return normalized ? [normalized] : []
   })
+  if (workspaces.length !== value.workspaces.length) return null
+  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id))
+  if (workspaceIds.size !== workspaces.length) return null
+  if (
+    (workspaces.length === 0 && value.activeWorkspaceId !== null) ||
+    (workspaces.length > 0 &&
+      (typeof value.activeWorkspaceId !== 'string' ||
+        !workspaceIds.has(value.activeWorkspaceId)))
+  ) return null
   const activeWorkspaceId = workspaces.some(
     (workspace) => workspace.id === value.activeWorkspaceId
   )
     ? (value.activeWorkspaceId as string)
     : (workspaces[0]?.id ?? null)
 
-  const workspaceIds = new Set(workspaces.map((workspace) => workspace.id))
   const usedSnapshotIds = new Set<string>()
   const snapshots = value.snapshots.flatMap((snapshot) => {
         if (!snapshot || typeof snapshot !== 'object') return []
@@ -653,6 +737,7 @@ function normalizeStoredData(input: unknown): AppData | null {
         const workspace = normalizeStoredWorkspace(storedSnapshot.workspace)
         if (!workspace || workspace.id !== storedSnapshot.workspaceId) return []
         const exchangeRates = normalizeStoredExchangeRates(storedSnapshot.exchangeRates)
+        if (storedSnapshot.exchangeRates !== undefined && !exchangeRates) return []
         usedSnapshotIds.add(storedSnapshot.id)
         return [{
           id: storedSnapshot.id,
@@ -662,6 +747,7 @@ function normalizeStoredData(input: unknown): AppData | null {
           ...(exchangeRates ? { exchangeRates } : {})
         }]
       })
+  if (snapshots.length !== value.snapshots.length) return null
 
   snapshots.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
   return { version: 1, activeWorkspaceId, workspaces, snapshots }
@@ -748,11 +834,13 @@ function sanitizeSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
 
 function sanitizeWorkspaceBackup(
   workspace: Workspace,
-  snapshots: WorkspaceSnapshot[]
+  snapshots: WorkspaceSnapshot[],
+  integrations: AccountIntegration[]
 ): WorkspaceBackup {
   return {
     workspace: stripIntegrationFields(workspace),
-    snapshots: snapshots.map(sanitizeSnapshot)
+    snapshots: snapshots.map(sanitizeSnapshot),
+    integrations: structuredClone(integrations)
   }
 }
 
@@ -809,6 +897,10 @@ function isValidBackupWorkspace(value: unknown): boolean {
       !isCurrencyCode(workspace.baseCurrency)) ||
     (workspace.exchangeRateProvider !== undefined &&
       !EXCHANGE_RATE_PROVIDERS.includes(workspace.exchangeRateProvider)) ||
+    (workspace.stockQuoteProvider !== undefined &&
+      !STOCK_QUOTE_PROVIDERS.includes(workspace.stockQuoteProvider)) ||
+    (workspace.cryptoQuoteProvider !== undefined &&
+      !CRYPTO_QUOTE_PROVIDERS.includes(workspace.cryptoQuoteProvider)) ||
     (workspace.exchangeRateRefreshIntervalMinutes !== undefined &&
       (typeof workspace.exchangeRateRefreshIntervalMinutes !== 'number' ||
         !Number.isInteger(workspace.exchangeRateRefreshIntervalMinutes) ||
@@ -900,9 +992,15 @@ function isValidBackupSnapshot(
 
 export function createWorkspaceBackup(
   workspace: Workspace,
-  snapshots: WorkspaceSnapshot[] = []
+  snapshots: WorkspaceSnapshot[] = [],
+  integrations: AccountIntegration[] = []
 ): string {
-  const backup = sanitizeWorkspaceBackup(workspace, snapshots)
+  const accountIds = new Set(workspace.accounts.map((account) => account.id))
+  const backup = sanitizeWorkspaceBackup(
+    workspace,
+    snapshots,
+    integrations.filter((integration) => accountIds.has(integration.accountId))
+  )
   return JSON.stringify(
     {
       format: 'chromie-workspace',
@@ -923,6 +1021,7 @@ export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
       exportedAt?: unknown
       workspace?: unknown
       snapshots?: unknown
+      integrations?: unknown
     }
     if (
       backup.format !== 'chromie-workspace' ||
@@ -937,6 +1036,29 @@ export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
     if (!normalizedWorkspace) return null
     const rawSnapshots = backup.snapshots
     if (!Array.isArray(rawSnapshots)) return null
+    const rawIntegrations = backup.integrations ?? []
+    if (!Array.isArray(rawIntegrations)) return null
+    const normalizedIntegrationData = normalizeStoredIntegrationData({
+      version: 1,
+      integrations: rawIntegrations
+    })
+    if (
+      !normalizedIntegrationData ||
+      normalizedIntegrationData.integrations.length !== rawIntegrations.length
+    ) {
+      return null
+    }
+    const accountTypes = new Map(
+      normalizedWorkspace.accounts.map((account) => [account.id, account.type])
+    )
+    if (
+      normalizedIntegrationData.integrations.some(
+        (integration) =>
+          accountTypes.get(integration.accountId) !== integration.provider
+      )
+    ) {
+      return null
+    }
     const normalized = normalizeStoredData({
       version: backup.version,
       activeWorkspaceId: normalizedWorkspace.id,
@@ -945,7 +1067,11 @@ export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
     })
     const workspace = normalized?.workspaces[0]
     if (!workspace || normalized.snapshots.length !== rawSnapshots.length) return null
-    return { workspace, snapshots: normalized.snapshots }
+    return {
+      workspace,
+      snapshots: normalized.snapshots,
+      integrations: normalizedIntegrationData.integrations
+    }
   } catch {
     return null
   }
@@ -964,14 +1090,6 @@ function createPortfolioOperations(
   integrationData: IntegrationData,
   setIntegrationData: IntegrationDataUpdater
 ) {
-  const activeWorkspace =
-    data.workspaces.find((workspace) => workspace.id === data.activeWorkspaceId) ?? null
-  const activeSnapshots = activeWorkspace
-    ? data.snapshots.filter(
-        (snapshot) => snapshot.workspaceId === activeWorkspace.id
-      )
-    : []
-
   function setAccountIntegration(
     accountId: string,
     integration: AccountIntegration | null
@@ -994,9 +1112,9 @@ function createPortfolioOperations(
   function createSnapshot(
     workspaceId: string,
     exchangeRates?: ExchangeRateSnapshot | null
-  ): string | null {
+  ): string {
     const workspace = data.workspaces.find((item) => item.id === workspaceId)
-    if (!workspace) return null
+    if (!workspace) throw new Error('没有找到对应的工作区')
     const snapshot: WorkspaceSnapshot = {
       id: createId(),
       workspaceId,
@@ -1012,6 +1130,9 @@ function createPortfolioOperations(
   }
 
   function deleteSnapshot(snapshotId: string): void {
+    if (!data.snapshots.some((snapshot) => snapshot.id === snapshotId)) {
+      throw new Error('没有找到对应的快照')
+    }
     setData((current) => ({
       ...current,
       snapshots: current.snapshots.filter((snapshot) => snapshot.id !== snapshotId)
@@ -1019,7 +1140,9 @@ function createPortfolioOperations(
   }
 
   function setActiveWorkspace(id: string): void {
-    if (!data.workspaces.some((workspace) => workspace.id === id)) return
+    if (!data.workspaces.some((workspace) => workspace.id === id)) {
+      throw new Error('没有找到对应的工作区')
+    }
     setData((current) => ({ ...current, activeWorkspaceId: id }))
   }
 
@@ -1031,6 +1154,8 @@ function createPortfolioOperations(
       exchangeRateProvider: DEFAULT_EXCHANGE_RATE_PROVIDER,
       exchangeRateRefreshIntervalMinutes:
         DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
+      stockQuoteProvider: DEFAULT_STOCK_QUOTE_PROVIDER,
+      cryptoQuoteProvider: DEFAULT_CRYPTO_QUOTE_PROVIDER,
       tags: [],
       accounts: []
     }
@@ -1043,6 +1168,9 @@ function createPortfolioOperations(
   }
 
   function updateWorkspace(id: string, input: WorkspaceSettingsInput): void {
+    if (!data.workspaces.some((workspace) => workspace.id === id)) {
+      throw new Error('没有找到对应的工作区')
+    }
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) =>
@@ -1057,7 +1185,13 @@ function createPortfolioOperations(
               exchangeRateRefreshIntervalMinutes:
                 normalizeExchangeRateRefreshInterval(
                   input.exchangeRateRefreshIntervalMinutes
-                )
+                ),
+              stockQuoteProvider: normalizeStockQuoteProvider(
+                input.stockQuoteProvider
+              ),
+              cryptoQuoteProvider: normalizeCryptoQuoteProvider(
+                input.cryptoQuoteProvider
+              )
             }
           : workspace
       )
@@ -1065,6 +1199,9 @@ function createPortfolioOperations(
   }
 
   function deleteWorkspace(id: string): void {
+    if (!data.workspaces.some((workspace) => workspace.id === id)) {
+      throw new Error('没有找到对应的工作区')
+    }
     const deletedAccountIds = new Set(
       data.workspaces
         .find((workspace) => workspace.id === id)
@@ -1134,6 +1271,10 @@ function createPortfolioOperations(
   }
 
   function deleteTag(workspaceId: string, tagId: string): void {
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
+    if (!workspace?.tags.some((tag) => tag.id === tagId)) {
+      throw new Error('没有找到对应的标签')
+    }
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) =>
@@ -1165,14 +1306,14 @@ function createPortfolioOperations(
     workspaceId: string,
     accountId: string,
     tagIds: string[]
-  ): string | null {
+  ): void {
     const workspace = data.workspaces.find((item) => item.id === workspaceId)
-    if (!workspace) return '没有找到对应的工作区'
+    if (!workspace) throw new Error('没有找到对应的工作区')
     if (!workspace.accounts.some((account) => account.id === accountId)) {
-      return '没有找到对应的资产账户'
+      throw new Error('没有找到对应的账户')
     }
     const normalized = validateTagIds(workspace, tagIds)
-    if (!normalized) return '部分标签已不存在，请重新选择'
+    if (!normalized) throw new Error('部分标签已不存在，请重新选择')
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((item) =>
@@ -1186,7 +1327,6 @@ function createPortfolioOperations(
           : item
       )
     }))
-    return null
   }
 
   function setPositionTags(
@@ -1194,16 +1334,16 @@ function createPortfolioOperations(
     accountId: string,
     positionId: string,
     tagIds: string[]
-  ): string | null {
+  ): void {
     const workspace = data.workspaces.find((item) => item.id === workspaceId)
-    if (!workspace) return '没有找到对应的工作区'
+    if (!workspace) throw new Error('没有找到对应的工作区')
     const account = workspace.accounts.find((item) => item.id === accountId)
-    if (!account) return '没有找到对应的资产账户'
+    if (!account) throw new Error('没有找到对应的账户')
     if (!account.positions.some((position) => position.id === positionId)) {
-      return '没有找到对应的持仓'
+      throw new Error('没有找到对应的持仓')
     }
     const normalized = validateTagIds(workspace, tagIds)
-    if (!normalized) return '部分标签已不存在，请重新选择'
+    if (!normalized) throw new Error('部分标签已不存在，请重新选择')
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((item) =>
@@ -1226,7 +1366,6 @@ function createPortfolioOperations(
           : item
       )
     }))
-    return null
   }
 
   function createAccount(workspaceId: string, input: AccountInput): string {
@@ -1235,13 +1374,14 @@ function createPortfolioOperations(
       (workspace) => workspace.id === workspaceId
     )
     if (!workspace) throw new Error('没有找到对应的工作区')
+    const name = uniqueAccountName(workspace, input.name)
     const accountId = createId()
     const integration = resolveIntegrationInput(
       input.integration,
       accountId
     )
     if (input.integration && (!integration || integration.provider !== type)) {
-      throw new Error('同步配置与资产账户类型不匹配')
+      throw new Error('同步配置与账户类型不匹配')
     }
     const sync = integration
       ? (normalizeAccountSync(input.sync, type) ?? {
@@ -1252,7 +1392,7 @@ function createPortfolioOperations(
     if (!tagIds) throw new Error('部分标签已不存在，请重新选择')
     const account: Account = {
       id: accountId,
-      name: normalizeAccountName(input.name),
+      name,
       type,
       ...(sync ? { sync } : {}),
       tagIds,
@@ -1281,7 +1421,7 @@ function createPortfolioOperations(
     )
     if (!workspace) throw new Error('没有找到对应的工作区')
     if (!workspace.accounts.some((workspace) => workspace.id === accountId)) {
-      throw new Error('没有找到对应的资产账户')
+      throw new Error('没有找到对应的账户')
     }
     const existingIntegration = integrationData.integrations.find(
       (item) => item.accountId === accountId
@@ -1292,7 +1432,7 @@ function createPortfolioOperations(
       existingIntegration
     )
     if (input.integration && (!integration || integration.provider !== type)) {
-      throw new Error('同步配置与资产账户类型不匹配')
+      throw new Error('同步配置与账户类型不匹配')
     }
     const sync = integration
       ? (normalizeAccountSync(input.sync, type) ?? {
@@ -1302,6 +1442,7 @@ function createPortfolioOperations(
     const existingAccount = workspace.accounts.find(
       (account) => account.id === accountId
     )!
+    const name = uniqueAccountName(workspace, input.name, accountId)
     const tagIds = validateTagIds(workspace, input.tagIds ?? existingAccount.tagIds)
     if (!tagIds) throw new Error('部分标签已不存在，请重新选择')
     setData((current) => ({
@@ -1314,7 +1455,7 @@ function createPortfolioOperations(
                 account.id === accountId
                   ? {
                       ...account,
-                      name: normalizeAccountName(input.name),
+                      name,
                       type,
                       sync,
                       tagIds
@@ -1329,6 +1470,11 @@ function createPortfolioOperations(
   }
 
   function deleteAccount(workspaceId: string, accountId: string): void {
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
+    if (!workspace) throw new Error('没有找到对应的工作区')
+    if (!workspace.accounts.some((account) => account.id === accountId)) {
+      throw new Error('没有找到对应的账户')
+    }
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) => {
@@ -1349,19 +1495,19 @@ function createPortfolioOperations(
     accountId: string,
     input: PositionInput,
     positionId?: string
-  ): string | null {
+  ): void {
     const workspace = data.workspaces.find((item) => item.id === workspaceId)
     const account = workspace?.accounts.find(
       (item) => item.id === accountId
     )
-    if (!account) return '没有找到对应的资产账户'
-    if (account.sync) return '自动同步的资产账户不能手动修改持仓'
+    if (!account) throw new Error('没有找到对应的账户')
+    if (account.sync) throw new Error('自动同步的账户不能手动修改持仓')
     if (positionId && !account.positions.some((item) => item.id === positionId)) {
-      return '没有找到对应的持仓'
+      throw new Error('没有找到对应的持仓')
     }
     const existingPosition = account.positions.find((item) => item.id === positionId)
     const tagIds = validateTagIds(workspace!, input.tagIds ?? existingPosition?.tagIds ?? [])
-    if (!tagIds) return '部分标签已不存在，请重新选择'
+    if (!tagIds) throw new Error('部分标签已不存在，请重新选择')
     const position = normalizePosition({ ...input, tagIds }, positionId)
 
     const duplicate = account.positions.some(
@@ -1370,7 +1516,9 @@ function createPortfolioOperations(
         item.market === position.market &&
         item.symbol.toUpperCase() === position.symbol
     )
-    if (duplicate) return `${marketMeta[position.market].label} ${position.symbol} 已存在`
+    if (duplicate) {
+      throw new Error(`${marketMeta[position.market].label} ${position.symbol} 已存在`)
+    }
 
     setData((current) => ({
       ...current,
@@ -1394,7 +1542,6 @@ function createPortfolioOperations(
           : workspace
       )
     }))
-    return null
   }
 
   function deletePosition(
@@ -1402,10 +1549,14 @@ function createPortfolioOperations(
     accountId: string,
     positionId: string
   ): void {
-    const account = data.workspaces
-      .find((workspace) => workspace.id === workspaceId)
-      ?.accounts.find((workspace) => workspace.id === accountId)
-    if (!account || account.sync) return
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
+    if (!workspace) throw new Error('没有找到对应的工作区')
+    const account = workspace.accounts.find((item) => item.id === accountId)
+    if (!account) throw new Error('没有找到对应的账户')
+    if (account.sync) throw new Error('自动同步的账户不能手动修改持仓')
+    if (!account.positions.some((position) => position.id === positionId)) {
+      throw new Error('没有找到对应的持仓')
+    }
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) =>
@@ -1484,14 +1635,10 @@ function createPortfolioOperations(
     }))
   }
 
-  function exportWorkspace(): string {
-    if (!activeWorkspace) throw new Error('没有可导出的工作区')
-    return createWorkspaceBackup(activeWorkspace, activeSnapshots)
-  }
-
   function importWorkspace(
     input: Workspace,
-    snapshots: WorkspaceSnapshot[] = []
+    snapshots: WorkspaceSnapshot[] = [],
+    integrations: AccountIntegration[] = []
   ): string {
     const tagIdMap = new Map(
       input.tags.map(
@@ -1508,6 +1655,22 @@ function createPortfolioOperations(
         account.positions.map((position) => [position.id, createId()] as const)
       )
     )
+    const accountTypes = new Map(
+      input.accounts.map((account) => [account.id, account.type])
+    )
+    const importedIntegrations = integrations.flatMap((integration) => {
+      const importedAccountId = accountIdMap.get(integration.accountId)
+      if (
+        !importedAccountId ||
+        accountTypes.get(integration.accountId) !== integration.provider
+      ) {
+        return []
+      }
+      return [{ ...structuredClone(integration), accountId: importedAccountId }]
+    })
+    const integratedAccountIds = new Set(
+      importedIntegrations.map((integration) => integration.accountId)
+    )
     const workspace: Workspace = {
       ...input,
       id: createId(),
@@ -1518,7 +1681,9 @@ function createPortfolioOperations(
       accounts: input.accounts.map((account) => ({
         ...account,
         id: accountIdMap.get(account.id)!,
-        sync: undefined,
+        sync: integratedAccountIds.has(accountIdMap.get(account.id)!)
+          ? account.sync ?? { interval: DEFAULT_SYNC_INTERVAL }
+          : undefined,
         tagIds: account.tagIds.flatMap((tagId) => {
           const importedTagId = tagIdMap.get(tagId)
           return importedTagId ? [importedTagId] : []
@@ -1548,13 +1713,14 @@ function createPortfolioOperations(
       workspaces: [...current.workspaces, workspace],
       snapshots: [...importedSnapshots, ...current.snapshots]
     }))
+    setIntegrationData((current) => ({
+      version: 1,
+      integrations: [...current.integrations, ...importedIntegrations]
+    }))
     return workspace.id
   }
 
   return {
-    workspaces: data.workspaces,
-    activeWorkspace,
-    activeSnapshots,
     setActiveWorkspace,
     createSnapshot,
     deleteSnapshot,
@@ -1572,7 +1738,6 @@ function createPortfolioOperations(
     savePosition,
     deletePosition,
     replacePositions,
-    exportWorkspace,
     importWorkspace
   }
 }
@@ -1580,12 +1745,27 @@ function createPortfolioOperations(
 export interface PortfolioOperations {
   load(): Promise<PortfolioLoadResponse>
   execute(command: PortfolioCommand): Promise<PortfolioCommandResponse>
+  replaceSynchronizedPositions(
+    workspaceId: string,
+    accountId: string,
+    expectedIntegration: AccountIntegration,
+    positions: PositionInput[],
+    syncedAt: string
+  ): Promise<void>
   inspectBackup(content: unknown): WorkspaceBackup | null
   exportActiveWorkspace(): Promise<string>
+  importBackup(content: unknown): Promise<string>
   subscribe(listener: PortfolioChangeListener): () => void
 }
 
 export type PortfolioChangeListener = () => void
+
+export class PortfolioSyncConflictError extends Error {
+  constructor(message = '同步期间账户配置已发生变化，请重新同步') {
+    super(message)
+    this.name = 'PortfolioSyncConflictError'
+  }
+}
 
 export class PortfolioService implements PortfolioOperations {
   private data: AppData = structuredClone(EMPTY_PORTFOLIO_DATA)
@@ -1593,37 +1773,25 @@ export class PortfolioService implements PortfolioOperations {
   private initialized = false
   private pending: Promise<void> = Promise.resolve()
   private readonly listeners = new Set<PortfolioChangeListener>()
+  private readonly repository: PortfolioStateRepository
 
+  constructor(repository: PortfolioStateRepository)
   constructor(
-    private readonly repository: PortfolioRepository,
-    private readonly integrationRepository: IntegrationRepository
-  ) {}
+    repository: PortfolioRepository,
+    integrationRepository: IntegrationRepository
+  )
+  constructor(
+    repository: PortfolioStateRepository | PortfolioRepository,
+    integrationRepository?: IntegrationRepository
+  ) {
+    this.repository = integrationRepository
+      ? new LegacyPortfolioStateRepository(repository as PortfolioRepository, integrationRepository)
+      : repository as PortfolioStateRepository
+  }
 
   load(): Promise<PortfolioLoadResponse> {
     return this.runExclusive(async () => {
-      if (this.initialized) {
-        return {
-          data: structuredClone(this.data),
-          integrations: structuredClone(this.integrationData.integrations)
-        }
-      }
-
-      const [storedContent, storedIntegrationContent] = await Promise.all([
-        this.repository.load(),
-        this.integrationRepository.load()
-      ])
-      const storedData = storedContent ? parseStoredData(storedContent) : null
-      const storedIntegrationData = storedIntegrationContent
-        ? parseStoredIntegrationData(storedIntegrationContent)
-        : null
-      const reconciled = reconcileIntegrations(
-        structuredClone(storedData ?? EMPTY_PORTFOLIO_DATA),
-        structuredClone(storedIntegrationData ?? EMPTY_INTEGRATION_DATA)
-      )
-      this.data = reconciled.data
-      this.integrationData = reconciled.integrationData
-      this.initialized = true
-
+      await this.initialize()
       return {
         data: structuredClone(this.data),
         integrations: structuredClone(this.integrationData.integrations)
@@ -1634,6 +1802,7 @@ export class PortfolioService implements PortfolioOperations {
   execute(command: PortfolioCommand): Promise<PortfolioCommandResponse> {
     return this.runExclusive(async () => {
       await this.initialize()
+      command = portfolioCommandSchema.parse(command) as PortfolioCommand
       let nextData = this.data
       let nextIntegrationData = this.integrationData
       const operations = createPortfolioOperations(
@@ -1647,7 +1816,7 @@ export class PortfolioService implements PortfolioOperations {
             typeof update === 'function' ? update(nextIntegrationData) : update
         }
       )
-      let result: string | null | undefined
+      let result: string | undefined
 
       switch (command.type) {
         case 'set-active-workspace':
@@ -1685,14 +1854,14 @@ export class PortfolioService implements PortfolioOperations {
           operations.deleteTag(command.workspaceId, command.tagId)
           break
         case 'set-account-tags':
-          result = operations.setAccountTags(
+          operations.setAccountTags(
             command.workspaceId,
             command.accountId,
             command.tagIds
           )
           break
         case 'set-position-tags':
-          result = operations.setPositionTags(
+          operations.setPositionTags(
             command.workspaceId,
             command.accountId,
             command.positionId,
@@ -1719,7 +1888,7 @@ export class PortfolioService implements PortfolioOperations {
           )
           break
         case 'save-position':
-          result = operations.savePosition(
+          operations.savePosition(
             command.workspaceId,
             command.accountId,
             command.input,
@@ -1733,49 +1902,61 @@ export class PortfolioService implements PortfolioOperations {
             command.positionId
           )
           break
-        case 'replace-positions':
-          operations.replacePositions(
-            command.workspaceId,
-            command.accountId,
-            command.positions,
-            command.lastSyncedAt
-          )
-          break
-        case 'import-workspace':
-          result = operations.importWorkspace(command.workspace, command.snapshots)
-          break
         default:
           throw new Error('不支持的资产命令')
-      }
-
-      if (
-        typeof result === 'string' &&
-        (command.type === 'save-position' ||
-          command.type === 'set-account-tags' ||
-          command.type === 'set-position-tags')
-      ) {
-        return {
-          data: structuredClone(this.data),
-          integrations: structuredClone(this.integrationData.integrations),
-          result
-        }
       }
 
       await this.persist(nextData, nextIntegrationData)
       this.data = nextData
       this.integrationData = nextIntegrationData
-      this.listeners.forEach((listener) => {
-        try {
-          listener()
-        } catch {
-          // A transport listener must not break a committed portfolio update.
-        }
-      })
+      this.notifyListeners()
       return {
         data: structuredClone(this.data),
         integrations: structuredClone(this.integrationData.integrations),
         ...(result === undefined ? {} : { result })
       }
+    })
+  }
+
+  replaceSynchronizedPositions(
+    workspaceId: string,
+    accountId: string,
+    expectedIntegration: AccountIntegration,
+    positions: PositionInput[],
+    syncedAt: string
+  ): Promise<void> {
+    return this.runExclusive(async () => {
+      await this.initialize()
+      const workspace = this.data.workspaces.find((item) => item.id === workspaceId)
+      const account = workspace?.accounts.find((item) => item.id === accountId)
+      const currentIntegration = this.integrationData.integrations.find(
+        (item) => item.accountId === accountId
+      )
+      if (
+        !account?.sync ||
+        account.type !== expectedIntegration.provider ||
+        !currentIntegration ||
+        !isDeepStrictEqual(currentIntegration, expectedIntegration)
+      ) {
+        throw new PortfolioSyncConflictError()
+      }
+      if (!Number.isFinite(Date.parse(syncedAt))) {
+        throw new Error('同步服务返回了无效的完成时间')
+      }
+
+      let nextData = this.data
+      const operations = createPortfolioOperations(
+        this.data,
+        (update) => {
+          nextData = typeof update === 'function' ? update(nextData) : update
+        },
+        this.integrationData,
+        () => undefined
+      )
+      operations.replacePositions(workspaceId, accountId, positions, syncedAt)
+      await this.persist(nextData, this.integrationData)
+      this.data = nextData
+      this.notifyListeners()
     })
   }
 
@@ -1790,12 +1971,49 @@ export class PortfolioService implements PortfolioOperations {
         (item) => item.id === this.data.activeWorkspaceId
       )
       if (!workspace) throw new Error('没有可导出的工作区')
+      const accountIds = new Set(workspace.accounts.map((account) => account.id))
       return createWorkspaceBackup(
         workspace,
         this.data.snapshots.filter(
           (snapshot) => snapshot.workspaceId === workspace.id
+        ),
+        this.integrationData.integrations.filter((integration) =>
+          accountIds.has(integration.accountId)
         )
       )
+    })
+  }
+
+  importBackup(content: unknown): Promise<string> {
+    return this.runExclusive(async () => {
+      await this.initialize()
+      if (typeof content !== 'string') throw new Error('备份文件无效或版本不受支持')
+      const backup = parseWorkspaceBackup(content)
+      if (!backup) throw new Error('备份文件无效或版本不受支持')
+
+      let nextData = this.data
+      let nextIntegrationData = this.integrationData
+      const operations = createPortfolioOperations(
+        this.data,
+        (update) => {
+          nextData = typeof update === 'function' ? update(nextData) : update
+        },
+        this.integrationData,
+        (update) => {
+          nextIntegrationData =
+            typeof update === 'function' ? update(nextIntegrationData) : update
+        }
+      )
+      const workspaceId = operations.importWorkspace(
+        backup.workspace,
+        backup.snapshots,
+        backup.integrations
+      )
+      await this.persist(nextData, nextIntegrationData)
+      this.data = nextData
+      this.integrationData = nextIntegrationData
+      this.notifyListeners()
+      return workspaceId
     })
   }
 
@@ -1806,18 +2024,29 @@ export class PortfolioService implements PortfolioOperations {
 
   private async initialize(): Promise<void> {
     if (this.initialized) return
-    const [storedContent, storedIntegrationContent] = await Promise.all([
-      this.repository.load(),
-      this.integrationRepository.load()
-    ])
-    const storedData = storedContent ? parseStoredData(storedContent) : null
-    const storedIntegrationData = storedIntegrationContent
-      ? parseStoredIntegrationData(storedIntegrationContent)
-      : null
+    const storedState = await this.repository.load()
+    const storedData = storedState.portfolio === null
+      ? null
+      : parseStoredData(storedState.portfolio)
+    if (storedState.portfolio !== null && !storedData) {
+      throw new Error('资产数据文件损坏或版本不受支持，原文件已保留')
+    }
+    const storedIntegrationData = storedState.integrations === null
+      ? null
+      : parseStoredIntegrationData(storedState.integrations)
+    if (storedState.integrations !== null && !storedIntegrationData) {
+      throw new Error('账户集成数据文件损坏或版本不受支持，原文件已保留')
+    }
     const reconciled = reconcileIntegrations(
       structuredClone(storedData ?? EMPTY_PORTFOLIO_DATA),
       structuredClone(storedIntegrationData ?? EMPTY_INTEGRATION_DATA)
     )
+    if (
+      storedState.source === 'legacy' &&
+      (storedState.portfolio !== null || storedState.integrations !== null)
+    ) {
+      await this.persist(reconciled.data, reconciled.integrationData)
+    }
     this.data = reconciled.data
     this.integrationData = reconciled.integrationData
     this.initialized = true
@@ -1827,8 +2056,17 @@ export class PortfolioService implements PortfolioOperations {
     data: AppData,
     integrationData: IntegrationData
   ): Promise<void> {
-    await this.repository.save(JSON.stringify(data))
-    await this.integrationRepository.save(JSON.stringify(integrationData))
+    await this.repository.save(JSON.stringify(data), JSON.stringify(integrationData))
+  }
+
+  private notifyListeners(): void {
+    this.listeners.forEach((listener) => {
+      try {
+        listener()
+      } catch {
+        // A transport listener must not break a committed portfolio update.
+      }
+    })
   }
 
   private runExclusive<T>(operation: () => Promise<T>): Promise<T> {

@@ -14,6 +14,7 @@ import {
   type McpToolName,
   type McpToolSuccess
 } from '../src/shared/mcp'
+import type { OkxSyncResult } from '../src/shared/okx'
 
 class MemoryRepository {
   content: string | null = null
@@ -70,14 +71,15 @@ test('MCP exposes no deletion tools', () => {
   assert.equal(MCP_TOOL_NAMES.some((name) => name.includes('delete')), false)
 })
 
-test('MCP starts disabled and read-only access cannot mutate', async () => {
+test('MCP defaults to write access while sync operations remain available in read-only mode', async () => {
   const module = createModule()
 
-  await assert.rejects(
-    () => module.callMcpTool('chromie_list_workspaces', {}),
-    (error: unknown) =>
-      error instanceof McpOperationError && error.code === 'MCP_DISABLED'
+  const created = await module.callMcpTool(
+    'chromie_create_workspace',
+    { name: '默认工作区', base_currency: 'CNY' }
   )
+  assertValidOutput('chromie_create_workspace', created)
+
   await assert.rejects(
     () => module.callMcpTool(
       'chromie_create_workspace',
@@ -86,6 +88,23 @@ test('MCP starts disabled and read-only access cannot mutate', async () => {
     ),
     (error: unknown) =>
       error instanceof McpOperationError && error.code === 'PERMISSION_DENIED'
+  )
+
+  const refreshed = await module.callMcpTool(
+    'chromie_refresh_exchange_rates',
+    {},
+    readAccess
+  )
+  assertValidOutput('chromie_refresh_exchange_rates', refreshed)
+
+  await assert.rejects(
+    () => module.callMcpTool(
+      'chromie_sync_account',
+      { workspace_id: 'missing', account_id: 'missing' },
+      readAccess
+    ),
+    (error: unknown) =>
+      error instanceof McpOperationError && error.code === 'NOT_FOUND'
   )
 })
 
@@ -402,4 +421,91 @@ test('invalid tag and snapshot writes leave portfolio data unchanged', async () 
   assert.equal(workspaces.length, 1)
   assert.equal(workspaces[0].id, workspaceId)
   assert.equal(workspaces[0].name, '边界测试')
+})
+
+test('account sync is deduplicated and rejects stale results after configuration changes', async () => {
+  const portfolio = new PortfolioService(
+    new MemoryRepository(),
+    new MemoryRepository()
+  )
+  const workspaceId = (await portfolio.execute({
+    type: 'create-workspace',
+    input: { name: '同步测试', baseCurrency: 'USD' }
+  })).result as string
+  const accountId = (await portfolio.execute({
+    type: 'create-account',
+    workspaceId,
+    input: {
+      name: 'OKX',
+      type: 'Okx',
+      sync: { interval: 30 },
+      integration: {
+        provider: 'Okx',
+        api: {
+          credential: {
+            mode: 'replace',
+            value: {
+              apiKey: 'api-key',
+              secretKey: 'secret-key',
+              passphrase: 'passphrase'
+            }
+          }
+        }
+      }
+    }
+  })).result as string
+
+  let syncCalls = 0
+  let signalStarted: (() => void) | undefined
+  const started = new Promise<void>((resolve) => {
+    signalStarted = resolve
+  })
+  let finishSync: ((value: OkxSyncResult) => void) | undefined
+  const syncResult = new Promise<OkxSyncResult>((resolve) => {
+    finishSync = resolve
+  })
+  const module = new PortfolioModule(portfolio, {
+    ...desktopFake(),
+    syncPositions: () => {
+      syncCalls += 1
+      signalStarted?.()
+      return syncResult
+    }
+  })
+
+  const first = module.syncAccount(workspaceId, accountId)
+  const second = module.syncAccount(workspaceId, accountId)
+  assert.equal(first, second)
+  await started
+  assert.equal(syncCalls, 1)
+
+  await portfolio.execute({
+    type: 'update-account',
+    workspaceId,
+    accountId,
+    input: { name: '手动账户', type: 'General' }
+  })
+  finishSync?.({
+    positions: [{
+      market: 'CC',
+      symbol: 'BTC',
+      name: 'Bitcoin',
+      currency: 'USD',
+      quantity: 1,
+      price: 100
+    }],
+    syncedAt: '2026-09-03T08:00:00.000Z'
+  })
+
+  const settled = await Promise.allSettled([first, second])
+  settled.forEach((result) => {
+    assert.equal(result.status, 'rejected')
+    if (result.status === 'rejected') {
+      assert.ok(result.reason instanceof McpOperationError)
+      assert.equal(result.reason.code, 'SYNC_CONFLICT')
+    }
+  })
+  const account = (await portfolio.load()).data.workspaces[0].accounts[0]
+  assert.equal(account.type, 'General')
+  assert.deepEqual(account.positions, [])
 })
