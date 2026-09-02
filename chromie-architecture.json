@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Chromie 项目架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/ramzeng/chromie",
+      "revision": "ddfa2251f143fdbca05a747ac36900522f3f4c0f"
+    },
+    "viewBox": [1380, 720]
+  },
+  "components": [
+    {
+      "id": "renderer",
+      "type": "frontend",
+      "label": "React Renderer",
+      "sublabel": "界面与状态投影",
+      "tag": "React 19 + shadcn/ui",
+      "pos": [20, 300],
+      "size": [150, 72],
+      "sources": [
+        { "path": "src/renderer/src/app.tsx", "line": 334, "label": "组合页面状态" },
+        { "path": "src/renderer/src/hooks/use-portfolio.ts", "line": 25, "label": "资产状态 Hook" }
+      ]
+    },
+    {
+      "id": "preload",
+      "type": "security",
+      "label": "Preload Bridge",
+      "sublabel": "受控的 window.desktop API",
+      "tag": "contextBridge",
+      "pos": [250, 300],
+      "size": [150, 72],
+      "sources": [
+        { "path": "src/preload/index.ts", "line": 25, "end_line": 90, "label": "Renderer API 白名单" },
+        { "path": "src/main/index.ts", "line": 43, "end_line": 58, "label": "隔离与沙箱配置" }
+      ]
+    },
+    {
+      "id": "ipc",
+      "type": "backend",
+      "label": "Electron IPC",
+      "sublabel": "transport 层",
+      "tag": "可信窗口校验",
+      "pos": [480, 300],
+      "size": [150, 72],
+      "sources": [
+        { "path": "src/main/transport/electron-ipc.ts", "line": 20, "end_line": 47, "label": "发送方校验与变更事件" },
+        { "path": "src/main/transport/electron-ipc.ts", "line": 77, "end_line": 133, "label": "资产与 MCP IPC" }
+      ]
+    },
+    {
+      "id": "services",
+      "type": "backend",
+      "label": "领域服务",
+      "sublabel": "PortfolioModule / Service",
+      "tag": "命令、同步、汇率、MCP",
+      "pos": [720, 300],
+      "size": [170, 72],
+      "sources": [
+        { "path": "src/main/index.ts", "line": 107, "end_line": 125, "label": "依赖装配" },
+        { "path": "src/main/service/portfolio-module.ts", "line": 337, "end_line": 368, "label": "领域门面与 MCP 授权" },
+        { "path": "src/main/service/portfolio-service.ts", "line": 1862, "end_line": 1906, "label": "内存状态与串行命令" }
+      ]
+    },
+    {
+      "id": "repositories",
+      "type": "backend",
+      "label": "Repositories",
+      "sublabel": "持久化端口",
+      "tag": "portfolio / integration / rates / MCP",
+      "pos": [970, 300],
+      "size": [170, 72],
+      "sources": [
+        { "path": "src/main/repository/portfolio-repository.ts", "line": 3, "end_line": 17, "label": "资产仓储" },
+        { "path": "src/main/repository/integration-repository.ts", "line": 3, "end_line": 17, "label": "接入配置仓储" },
+        { "path": "src/main/index.ts", "line": 94, "end_line": 106, "label": "仓储装配" }
+      ]
+    },
+    {
+      "id": "local_store",
+      "type": "database",
+      "label": "本机 userData",
+      "sublabel": "加密资产与本地缓存",
+      "tag": "safeStorage + 0600 原子写",
+      "pos": [1220, 300],
+      "size": [160, 72],
+      "sources": [
+        { "path": "src/main/infra/file-store.ts", "line": 21, "end_line": 31, "label": "原子写入" },
+        { "path": "src/main/infra/file-store.ts", "line": 46, "end_line": 65, "label": "Electron safeStorage" },
+        { "path": "src/main/index.ts", "line": 95, "end_line": 106, "label": "实际文件名" }
+      ]
+    },
+    {
+      "id": "market_sources",
+      "type": "external",
+      "label": "资产数据源",
+      "sublabel": "Futu / IBKR / Hstong",
+      "tag": "OKX / Binance",
+      "pos": [720, 40],
+      "size": [170, 72],
+      "sources": [
+        { "path": "src/main/service/desktop-service.ts", "line": 54, "end_line": 66, "label": "五类同步适配器" },
+        { "path": "src/main/service/portfolio-module.ts", "line": 446, "end_line": 485, "label": "账户同步路由" },
+        { "path": "src/main/index.ts", "line": 113, "end_line": 119, "label": "基础设施注入" }
+      ]
+    },
+    {
+      "id": "coinbase",
+      "type": "external",
+      "label": "Coinbase",
+      "sublabel": "公共汇率接口",
+      "tag": "USD 基准",
+      "pos": [970, 40],
+      "size": [170, 72],
+      "sources": [
+        { "path": "src/main/infra/exchange-rates.ts", "line": 9, "label": "API 地址" },
+        { "path": "src/main/infra/exchange-rates.ts", "line": 45, "end_line": 75, "label": "HTTP 获取与归一化" },
+        { "path": "src/main/service/exchange-rate-service.ts", "line": 65, "end_line": 73, "label": "校验与缓存" }
+      ]
+    },
+    {
+      "id": "mcp_consumer",
+      "type": "external",
+      "label": "本机 Agent",
+      "sublabel": "MCP 客户端",
+      "tag": "显式授权范围",
+      "pos": [20, 520],
+      "size": [150, 72],
+      "sources": [
+        { "path": "README.md", "line": 40, "end_line": 44, "label": "MCP 使用边界" }
+      ]
+    },
+    {
+      "id": "mcp_stdio",
+      "type": "backend",
+      "label": "MCP 辅助进程",
+      "sublabel": "工具注册与 stdio",
+      "tag": "--mcp",
+      "pos": [250, 520],
+      "size": [150, 72],
+      "sources": [
+        { "path": "src/main/mcp-server.ts", "line": 195, "end_line": 233, "label": "工具注册" },
+        { "path": "src/main/mcp-server.ts", "line": 236, "end_line": 255, "label": "stdio 服务" },
+        { "path": "src/main/index.ts", "line": 154, "end_line": 163, "label": "辅助进程入口" }
+      ]
+    },
+    {
+      "id": "mcp_socket",
+      "type": "security",
+      "label": "MCP Socket Host",
+      "sublabel": "主进程内的授权边界",
+      "tag": "Unix Socket + token",
+      "pos": [480, 520],
+      "size": [150, 72],
+      "sources": [
+        { "path": "src/main/transport/mcp-socket.ts", "line": 48, "end_line": 117, "label": "启停与令牌文件" },
+        { "path": "src/main/transport/mcp-socket.ts", "line": 176, "end_line": 203, "label": "认证与工具调用" },
+        { "path": "src/main/infra/mcp-client.ts", "line": 27, "end_line": 68, "label": "本机 Socket 客户端" }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "Electron Renderer：contextIsolation + sandbox",
+      "wraps": ["renderer", "preload"],
+      "pad": 18
+    },
+    {
+      "kind": "region",
+      "label": "Electron 主进程：transport → service → repository → infra",
+      "wraps": ["ipc", "services", "repositories", "mcp_socket"],
+      "pad": 22
+    }
+  ],
+  "connections": [
+    {
+      "id": "renderer_to_preload",
+      "from": "renderer",
+      "to": "preload",
+      "label": "window.desktop",
+      "variant": "security"
+    },
+    {
+      "id": "preload_to_ipc",
+      "from": "preload",
+      "to": "ipc",
+      "label": "ipcRenderer.invoke / 事件",
+      "variant": "security",
+      "labelAt": [440, 386]
+    },
+    {
+      "id": "ipc_to_services",
+      "from": "ipc",
+      "to": "services",
+      "label": "命令、查询与同步",
+      "variant": "emphasis"
+    },
+    {
+      "id": "services_to_repositories",
+      "from": "services",
+      "to": "repositories",
+      "label": "load / save",
+      "labelAt": [930, 386]
+    },
+    {
+      "id": "repositories_to_store",
+      "from": "repositories",
+      "to": "local_store",
+      "label": "加密或明文 JSON",
+      "variant": "security"
+    },
+    {
+      "id": "services_to_market",
+      "from": "services",
+      "to": "market_sources",
+      "label": "只读同步",
+      "variant": "dashed",
+      "labelAt": [805, 190]
+    },
+    {
+      "id": "services_to_coinbase",
+      "from": "services",
+      "to": "coinbase",
+      "label": "HTTPS 汇率刷新",
+      "variant": "dashed"
+    },
+    {
+      "id": "consumer_to_stdio",
+      "from": "mcp_consumer",
+      "to": "mcp_stdio",
+      "label": "MCP stdio",
+      "variant": "emphasis"
+    },
+    {
+      "id": "stdio_to_socket",
+      "from": "mcp_stdio",
+      "to": "mcp_socket",
+      "label": "令牌认证 + Unix Socket",
+      "variant": "security",
+      "labelAt": [440, 606]
+    },
+    {
+      "id": "socket_to_services",
+      "from": "mcp_socket",
+      "to": "services",
+      "label": "授权后的 call-tool",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "核心调用链",
+      "items": [
+        "Renderer 只通过 Preload 白名单和 IPC 访问主进程",
+        "主进程按 transport → service → repository → infra 分层"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "本地优先",
+      "items": [
+        "资产与接入配置经 safeStorage 加密后留在 userData",
+        "汇率缓存与 MCP 开关使用本机 JSON，写入采用 0600 与原子替换"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "外部边界",
+      "items": [
+        "券商与交易所仅同步持仓和现金，不提供交易能力",
+        "MCP 默认关闭且只读，辅助进程不直接持有资产数据"
+      ]
+    }
+  ]
+}
