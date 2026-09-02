@@ -149,7 +149,7 @@ function AccountNavigation({
                     <Ellipsis data-icon="icon-only" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-20">
+                <DropdownMenuContent align="end" className="min-w-18">
                   <DropdownMenuGroup>
                     <DropdownMenuItem onSelect={() => onEdit(account)}>
                       <Pencil className="size-4" />
