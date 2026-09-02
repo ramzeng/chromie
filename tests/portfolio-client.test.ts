@@ -135,6 +135,73 @@ test('client portfolio responses redact credentials and preserve them on edit', 
   assert.match(integrationRepository.content ?? '', /passphrase-secret/)
 })
 
+test('华盛交易密码 stays in secure integration state and is redacted from clients', async () => {
+  const portfolioRepository = new MemoryRepository()
+  const integrationRepository = new MemoryRepository()
+  const portfolio = new PortfolioService(portfolioRepository, integrationRepository)
+  const workspace = await portfolio.execute({
+    type: 'create-workspace',
+    input: { name: '华盛资产', baseCurrency: 'HKD' }
+  })
+  const workspaceId = workspace.result as string
+  const account = await portfolio.execute({
+    type: 'create-asset-account',
+    workspaceId,
+    input: {
+      name: '华盛通',
+      type: 'Hstong',
+      sync: { interval: 30 },
+      integration: {
+        provider: 'Hstong',
+        gateway: {
+          host: '127.0.0.1',
+          port: 11111,
+          credential: {
+            mode: 'replace',
+            value: { tradingPassword: 'trading-password-secret' }
+          }
+        }
+      }
+    }
+  })
+  const assetAccountId = account.result as string
+
+  const state = await loadPortfolioClientState(portfolio)
+  assert.equal(JSON.stringify(state).includes('trading-password-secret'), false)
+  assert.deepEqual(state.integrations, [
+    {
+      assetAccountId,
+      provider: 'Hstong',
+      gateway: {
+        host: '127.0.0.1',
+        port: 11111,
+        credentialConfigured: true
+      }
+    }
+  ])
+  assert.match(integrationRepository.content ?? '', /trading-password-secret/)
+
+  await executePortfolioClientCommand(portfolio, {
+    type: 'update-asset-account',
+    workspaceId,
+    assetAccountId,
+    input: {
+      name: '华盛通长期账户',
+      type: 'Hstong',
+      sync: { interval: 60 },
+      integration: {
+        provider: 'Hstong',
+        gateway: {
+          host: 'localhost',
+          port: 11111,
+          credential: { mode: 'keep' }
+        }
+      }
+    }
+  })
+  assert.match(integrationRepository.content ?? '', /trading-password-secret/)
+})
+
 test('legacy holder backups are rejected after the one-time migration boundary', async () => {
   const portfolioRepository = new MemoryRepository()
   const integrationRepository = new MemoryRepository()

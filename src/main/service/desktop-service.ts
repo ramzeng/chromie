@@ -11,6 +11,7 @@ import {
 } from '../../shared/exchange-rates'
 import type { FutuSyncOptions, FutuSyncResult } from '../../shared/futu'
 import type { IbkrSyncOptions, IbkrSyncResult } from '../../shared/ibkr'
+import type { HstongSyncOptions, HstongSyncResult } from '../../shared/hstong'
 import type { OkxSyncOptions, OkxSyncResult } from '../../shared/okx'
 
 export type AssetSyncRequest =
@@ -18,18 +19,21 @@ export type AssetSyncRequest =
   | { provider: 'okx'; options?: OkxSyncOptions }
   | { provider: 'binance'; options?: BinanceSyncOptions }
   | { provider: 'ibkr'; options?: IbkrSyncOptions }
+  | { provider: 'hstong'; options?: HstongSyncOptions }
 
 export type AssetSyncResult =
   | FutuSyncResult
   | OkxSyncResult
   | BinanceSyncResult
   | IbkrSyncResult
+  | HstongSyncResult
 
 export type DesktopServiceDependencies = {
   syncFutuPositions: (options?: FutuSyncOptions) => Promise<FutuSyncResult>
   syncOkxPositions: (options?: OkxSyncOptions) => Promise<OkxSyncResult>
   syncBinancePositions: (options?: BinanceSyncOptions) => Promise<BinanceSyncResult>
   syncIbkrPositions: (options?: IbkrSyncOptions) => Promise<IbkrSyncResult>
+  syncHstongPositions: (options?: HstongSyncOptions) => Promise<HstongSyncResult>
   fetchExchangeRates: (provider: ExchangeRateProvider) => Promise<ExchangeRateSnapshot>
   loadExchangeRates: (legacyContent?: unknown) => Promise<ExchangeRateSnapshot | null>
   exportBackup: (ownerId: number, content: unknown) => Promise<BackupExportResult>
@@ -57,6 +61,8 @@ export class DesktopService implements DesktopOperations {
         return this.dependencies.syncBinancePositions(request.options)
       case 'ibkr':
         return this.dependencies.syncIbkrPositions(request.options)
+      case 'hstong':
+        return this.dependencies.syncHstongPositions(request.options)
     }
   }
 

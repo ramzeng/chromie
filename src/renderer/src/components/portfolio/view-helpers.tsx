@@ -166,6 +166,22 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
     )
   }
 
+  if (type === 'Hstong') {
+    return (
+      <svg
+        viewBox="0 0 48 48"
+        aria-hidden="true"
+        className={cn('shrink-0 overflow-hidden rounded-sm', className)}
+      >
+        <rect width="48" height="48" rx="8" fill="#e33238" />
+        <path
+          fill="white"
+          d="M11 11h7v10h12V11h7v26h-7V27H18v10h-7V11Z"
+        />
+      </svg>
+    )
+  }
+
   if (type === 'Binance') {
     return (
       <svg

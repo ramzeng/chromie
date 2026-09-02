@@ -131,7 +131,7 @@ export function TimeMachine({
 
   return (
     <PortfolioPage>
-      <PortfolioPageHeader className="items-start gap-6">
+      <PortfolioPageHeader>
         <div>
           <h1 className="text-2xl font-semibold tracking-[-0.035em]">时间机器</h1>
         </div>

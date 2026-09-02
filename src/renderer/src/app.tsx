@@ -5,7 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   Ellipsis,
-  FolderTree,
+  Folder,
   History,
   Layers2,
   Pencil,
@@ -856,7 +856,7 @@ export function App(): React.JSX.Element {
             <div className="flex h-10 items-center gap-2 px-4">
               <span className="grid size-6 shrink-0 place-items-center">
                 <img
-                  className="size-6 object-contain"
+                  className="size-6 object-contain invert"
                   src={CHROMIE_LOGO_URL}
                   alt=""
                   aria-hidden="true"
@@ -1020,7 +1020,7 @@ export function App(): React.JSX.Element {
                               setSelectedPositionGroupId(group.id)
                             }}
                           >
-                            <FolderTree />
+                            <Folder data-icon="inline-start" />
                             <span className="min-w-0 flex-1 truncate text-left">
                               {group.name}
                             </span>

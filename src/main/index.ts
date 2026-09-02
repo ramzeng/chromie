@@ -8,6 +8,7 @@ import { fetchExchangeRates } from './infra/exchange-rates'
 import { PlainTextFileStore, SecureFileStore } from './infra/file-store'
 import { syncFutuPositions } from './infra/futu'
 import { syncIbkrPositions } from './infra/ibkr'
+import { syncHstongPositions } from './infra/hstong'
 import { syncOkxPositions } from './infra/okx'
 import { FileExchangeRateRepository } from './repository/exchange-rate-repository'
 import { SecureIntegrationRepository } from './repository/integration-repository'
@@ -85,7 +86,7 @@ function setDevelopmentAppIcon(): void {
   if (process.platform !== 'darwin' || app.isPackaged) return
 
   const icon = nativeImage.createFromPath(
-    join(__dirname, '../../resources/chromie-app-icon-knot-v5.png')
+    join(__dirname, '../../resources/chromie-app-icon-knot-v7.png')
   )
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
@@ -113,6 +114,7 @@ async function startApplication(): Promise<void> {
     syncOkxPositions,
     syncBinancePositions,
     syncIbkrPositions,
+    syncHstongPositions,
     fetchExchangeRates: (provider) =>
       exchangeRateService.refresh(provider, { fetch: fetchExchangeRates }),
     loadExchangeRates: (legacyContent) => exchangeRateService.load(legacyContent),

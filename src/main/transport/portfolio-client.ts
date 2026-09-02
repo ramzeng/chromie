@@ -34,6 +34,17 @@ export function toAssetAccountIntegrationView(
       gateway: { ...integration.gateway }
     }
   }
+  if (integration.provider === 'Hstong') {
+    return {
+      assetAccountId: integration.assetAccountId,
+      provider: 'Hstong',
+      gateway: {
+        host: integration.gateway.host,
+        port: integration.gateway.port,
+        credentialConfigured: Boolean(integration.gateway.tradingPassword)
+      }
+    }
+  }
   return {
     assetAccountId: integration.assetAccountId,
     provider: integration.provider,

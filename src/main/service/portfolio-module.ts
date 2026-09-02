@@ -217,6 +217,7 @@ function safeIntegrationStatus(
     capable: assetAccount.type === 'Futu' ||
       assetAccount.type === 'Okx' ||
       assetAccount.type === 'Ibkr' ||
+      assetAccount.type === 'Hstong' ||
       assetAccount.type === 'Binance',
     configured: Boolean(assetAccount.sync && integration),
     ...(assetAccount.sync
@@ -284,6 +285,16 @@ function integrationInput(
   }
   if (integration.provider === 'Ibkr') {
     return { provider: 'Ibkr', gateway: { ...integration.gateway } }
+  }
+  if (integration.provider === 'Hstong') {
+    return {
+      provider: 'Hstong',
+      gateway: {
+        host: integration.gateway.host,
+        port: integration.gateway.port,
+        credential: { mode: 'keep' }
+      }
+    }
   }
   if (integration.provider === 'Okx') {
     return {
@@ -459,6 +470,14 @@ export class PortfolioModule implements PortfolioModuleOperations {
       } else if (integration.provider === 'Ibkr' && assetAccount.type === 'Ibkr') {
         result = await this.desktop.syncPositions({
           provider: 'ibkr',
+          options: { ...integration.gateway }
+        })
+      } else if (
+        integration.provider === 'Hstong' &&
+        assetAccount.type === 'Hstong'
+      ) {
+        result = await this.desktop.syncPositions({
+          provider: 'hstong',
           options: { ...integration.gateway }
         })
       } else if (integration.provider === 'Okx' && assetAccount.type === 'Okx') {

@@ -12,6 +12,8 @@ import {
   DEFAULT_BASE_CURRENCY,
   DEFAULT_FUTU_OPEND_HOST,
   DEFAULT_FUTU_OPEND_PORT,
+  DEFAULT_HSTONG_GATEWAY_HOST,
+  DEFAULT_HSTONG_GATEWAY_PORT,
   DEFAULT_IBKR_GATEWAY_HOST,
   DEFAULT_IBKR_GATEWAY_PORT,
   DEFAULT_SYNC_INTERVAL,
@@ -110,6 +112,20 @@ function normalizeIbkrGatewayPort(value: unknown): number {
     : DEFAULT_IBKR_GATEWAY_PORT
 }
 
+function normalizeHstongGatewayHost(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_HSTONG_GATEWAY_HOST
+  const host = value.trim().toLowerCase().replace(/^\[|\]$/g, '')
+  return host === '127.0.0.1' || host === 'localhost' || host === '::1'
+    ? host
+    : DEFAULT_HSTONG_GATEWAY_HOST
+}
+
+function normalizeHstongGatewayPort(value: unknown): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 65535
+    ? value
+    : DEFAULT_HSTONG_GATEWAY_PORT
+}
+
 function createId(): string {
   return crypto.randomUUID()
 }
@@ -141,6 +157,7 @@ function normalizeAssetAccountType(value: unknown): AssetAccountType | null {
   if (type === 'boci') return 'Boci'
   if (type === 'okx') return 'Okx'
   if (type === 'ibkr') return 'Ibkr'
+  if (type === 'hstong') return 'Hstong'
   if (type === 'binance') return 'Binance'
   if (type === 'alipay') return 'Alipay'
   if (type === 'general') return 'General'
@@ -226,6 +243,26 @@ function normalizeIntegration(
     }
   }
 
+  if (integration.provider === 'Hstong') {
+    if (!integration.gateway || typeof integration.gateway !== 'object') return null
+    const gateway = integration.gateway as {
+      host?: unknown
+      port?: unknown
+      tradingPassword?: unknown
+    }
+    return {
+      assetAccountId: normalizedAssetAccountId,
+      provider: 'Hstong',
+      gateway: {
+        host: normalizeHstongGatewayHost(gateway.host),
+        port: normalizeHstongGatewayPort(gateway.port),
+        ...(typeof gateway.tradingPassword === 'string' && gateway.tradingPassword
+          ? { tradingPassword: gateway.tradingPassword.slice(0, 256) }
+          : {})
+      }
+    }
+  }
+
   if (integration.provider === 'Okx' || integration.provider === 'Binance') {
     if (!integration.api || typeof integration.api !== 'object') return null
     const api = integration.api as {
@@ -297,6 +334,31 @@ function resolveIntegrationInput(
           host: input.websocket.host,
           port: input.websocket.port,
           ...(key ? { key } : {})
+        }
+      },
+      assetAccountId
+    )
+  }
+
+  if (input.provider === 'Hstong') {
+    const credential = input.gateway.credential
+    if (credential.mode === 'keep' && existing?.provider !== 'Hstong') {
+      throw new Error('没有可保留的华盛交易密码，请重新填写')
+    }
+    const tradingPassword = credential.mode === 'keep'
+      ? existing?.provider === 'Hstong'
+        ? existing.gateway.tradingPassword
+        : undefined
+      : credential.mode === 'replace'
+        ? credential.value.tradingPassword
+        : undefined
+    return normalizeIntegration(
+      {
+        provider: 'Hstong',
+        gateway: {
+          host: input.gateway.host,
+          port: input.gateway.port,
+          ...(tradingPassword ? { tradingPassword } : {})
         }
       },
       assetAccountId

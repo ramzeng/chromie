@@ -8,6 +8,7 @@ import type {
 } from '../shared/exchange-rates'
 import type { FutuSyncOptions, FutuSyncResult } from '../shared/futu'
 import type { IbkrSyncOptions, IbkrSyncResult } from '../shared/ibkr'
+import type { HstongSyncOptions, HstongSyncResult } from '../shared/hstong'
 import type {
   McpAccessSettings,
   McpConnectionSettings
@@ -38,6 +39,10 @@ contextBridge.exposeInMainWorld('desktop', {
   ibkr: {
     syncPositions: (options?: IbkrSyncOptions): Promise<IbkrSyncResult> =>
       ipcRenderer.invoke('ibkr:sync-positions', options)
+  },
+  hstong: {
+    syncPositions: (options?: HstongSyncOptions): Promise<HstongSyncResult> =>
+      ipcRenderer.invoke('hstong:sync-positions', options)
   },
   exchangeRates: {
     load: (legacyContent?: string): Promise<ExchangeRateSnapshot | null> =>

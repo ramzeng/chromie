@@ -12,6 +12,7 @@ import {
   Coins,
   Copy,
   Download,
+  ExternalLink,
   FolderTree,
   Plus,
   SlidersHorizontal,
@@ -97,6 +98,8 @@ import {
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   DEFAULT_FUTU_OPEND_HOST,
   DEFAULT_FUTU_OPEND_PORT,
+  DEFAULT_HSTONG_GATEWAY_HOST,
+  DEFAULT_HSTONG_GATEWAY_PORT,
   DEFAULT_IBKR_GATEWAY_HOST,
   DEFAULT_IBKR_GATEWAY_PORT,
   DEFAULT_SYNC_INTERVAL,
@@ -127,6 +130,29 @@ import {
 type BaseDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+}
+
+type AutoSyncProvider = 'Futu' | 'Hstong' | 'Ibkr' | 'Okx' | 'Binance'
+
+const OFFICIAL_INTEGRATION_DOCS: Record<AutoSyncProvider, string> = {
+  Futu: 'https://openapi.futunn.com/futu-api-doc/intro/intro.html?lang=zh-cn',
+  Hstong: 'https://quant-open.hstong.com/api-docs/introduction/guidelines.html',
+  Ibkr:
+    'https://www.interactivebrokers.com/campus/trading-lessons/launching-and-authenticating-the-gateway/',
+  Okx: 'https://www.okx.com/docs-v5/zh/#overview',
+  Binance:
+    'https://developers.binance.com/zh-CN/docs/products/spot/rest-api#general-api-information'
+}
+
+function OfficialIntegrationDocsLink({ provider }: { provider: AutoSyncProvider }) {
+  return (
+    <Button asChild variant="link" size="sm" className="mt-2 h-auto justify-start p-0 text-xs">
+      <a href={OFFICIAL_INTEGRATION_DOCS[provider]} target="_blank" rel="noopener noreferrer">
+        官方接入文档
+        <ExternalLink data-icon="inline-end" />
+      </a>
+    </Button>
+  )
 }
 
 function FieldMessage({ id, children }: { id?: string; children: string }) {
@@ -168,6 +194,7 @@ const DISABLED_MCP_ACCESS: McpAccessSettings = {
 
 const ASSET_ACCOUNT_TYPES: readonly AssetAccountType[] = [
   'Futu',
+  'Hstong',
   'Ibkr',
   'Boci',
   'Okx',
@@ -334,7 +361,9 @@ export function AccountGroupDialog({
           <DialogBody>
             <FieldGroup>
               <Field data-invalid={Boolean(error)}>
-                <FieldLabel htmlFor="account-group-name">账户分组名称</FieldLabel>
+                <FieldLabel htmlFor="account-group-name" className="sr-only">
+                  账户分组名称
+                </FieldLabel>
                 <Input
                   id="account-group-name"
                   aria-invalid={Boolean(error)}
@@ -438,7 +467,9 @@ export function WorkspaceDialog({
           <DialogBody>
             <FieldGroup>
               <Field data-invalid={Boolean(error)}>
-                <FieldLabel htmlFor="workspace-name">工作区名称</FieldLabel>
+                <FieldLabel htmlFor="workspace-name" className="sr-only">
+                  工作区名称
+                </FieldLabel>
                 <Input
                   id="workspace-name"
                   aria-invalid={Boolean(error)}
@@ -1287,7 +1318,9 @@ export function PositionGroupDialog({
           <DialogBody>
             <FieldGroup>
               <Field data-invalid={Boolean(error)}>
-                <FieldLabel htmlFor="position-group-name">持仓分组名称</FieldLabel>
+                <FieldLabel htmlFor="position-group-name" className="sr-only">
+                  持仓分组名称
+                </FieldLabel>
                 <Input
                   id="position-group-name"
                   aria-invalid={Boolean(error)}
@@ -1713,13 +1746,28 @@ export function AssetAccountDialog({
   const [ibkrGatewayPort, setIbkrGatewayPort] = useState(
     String(DEFAULT_IBKR_GATEWAY_PORT)
   )
+  const [hstongGatewayHost, setHstongGatewayHost] = useState(
+    DEFAULT_HSTONG_GATEWAY_HOST
+  )
+  const [hstongGatewayPort, setHstongGatewayPort] = useState(
+    String(DEFAULT_HSTONG_GATEWAY_PORT)
+  )
+  const [hstongTradingPassword, setHstongTradingPassword] = useState('')
   const [binanceApiKey, setBinanceApiKey] = useState('')
   const [binanceSecretKey, setBinanceSecretKey] = useState('')
   const [error, setError] = useState('')
   const { submitting, submissionInFlight, beginSubmission, endSubmission } =
     useSubmissionGuard()
   const supportsAutoSync =
-    type === 'Futu' || type === 'Okx' || type === 'Ibkr' || type === 'Binance'
+    type === 'Futu' ||
+    type === 'Hstong' ||
+    type === 'Okx' ||
+    type === 'Ibkr' ||
+    type === 'Binance'
+  const canKeepHstongCredential =
+    account?.type === 'Hstong' &&
+    integration?.provider === 'Hstong' &&
+    integration.gateway.credentialConfigured
 
   useEffect(() => {
     if (!open) return
@@ -1755,6 +1803,19 @@ export function AssetAccountDialog({
           : DEFAULT_IBKR_GATEWAY_PORT
       )
     )
+    setHstongGatewayHost(
+      integration?.provider === 'Hstong'
+        ? integration.gateway.host
+        : DEFAULT_HSTONG_GATEWAY_HOST
+    )
+    setHstongGatewayPort(
+      String(
+        integration?.provider === 'Hstong'
+          ? integration.gateway.port
+          : DEFAULT_HSTONG_GATEWAY_PORT
+      )
+    )
+    setHstongTradingPassword('')
     setBinanceApiKey('')
     setBinanceSecretKey('')
     setError('')
@@ -1802,6 +1863,7 @@ export function AssetAccountDialog({
     const hasAnyBinanceCredential = Boolean(
       binanceApiKey.trim() || binanceSecretKey
     )
+    const hasHstongTradingPassword = hstongTradingPassword.length > 0
     if (type === 'Futu' && syncEnabled && !syncHost.trim()) {
       setError('请输入 Futu OpenD 地址')
       return
@@ -1864,6 +1926,29 @@ export function AssetAccountDialog({
       setError('请填写完整的币安 API 配置')
       return
     }
+    const parsedHstongGatewayPort = Number(hstongGatewayPort)
+    const normalizedHstongGatewayHost = hstongGatewayHost
+      .trim()
+      .toLowerCase()
+      .replace(/^\[|\]$/g, '')
+    if (
+      type === 'Hstong' &&
+      syncEnabled &&
+      !['127.0.0.1', 'localhost', '::1'].includes(normalizedHstongGatewayHost)
+    ) {
+      setError('华盛 OpenAPI Gateway 地址必须是本机回环地址')
+      return
+    }
+    if (
+      type === 'Hstong' &&
+      syncEnabled &&
+      (!Number.isInteger(parsedHstongGatewayPort) ||
+        parsedHstongGatewayPort < 1 ||
+        parsedHstongGatewayPort > 65535)
+    ) {
+      setError('华盛 OpenAPI Gateway 端口需为 1–65535')
+      return
+    }
     const lastSyncedAt =
       account?.type === type ? account.sync?.lastSyncedAt : undefined
     if (!beginSubmission()) return
@@ -1906,6 +1991,24 @@ export function AssetAccountDialog({
                             : { mode: 'clear' as const }
                       }
                     }
+                  : type === 'Hstong'
+                    ? {
+                        provider: 'Hstong' as const,
+                        gateway: {
+                          host: normalizedHstongGatewayHost,
+                          port: parsedHstongGatewayPort,
+                          credential: hasHstongTradingPassword
+                            ? {
+                                mode: 'replace' as const,
+                                value: {
+                                  tradingPassword: hstongTradingPassword
+                                }
+                              }
+                            : canKeepHstongCredential
+                              ? { mode: 'keep' as const }
+                              : { mode: 'clear' as const }
+                        }
+                      }
                   : type === 'Ibkr'
                     ? {
                         provider: 'Ibkr' as const,
@@ -1962,7 +2065,7 @@ export function AssetAccountDialog({
         if (!submitting) onOpenChange(nextOpen)
       }}
     >
-      <DialogContent className="max-h-[92vh] max-w-xl">
+      <DialogContent className="max-h-[92vh] max-w-2xl">
         <DialogHeader>
           <DialogTitle>{account ? '编辑资产账户' : '添加资产账户'}</DialogTitle>
           <DialogDescription className="sr-only">
@@ -1975,9 +2078,10 @@ export function AssetAccountDialog({
           aria-describedby={error ? 'asset-account-error' : undefined}
           onSubmit={handleSubmit}
         >
-          <DialogBody className="grid content-start gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="asset-account-type">账户类型</Label>
+          <DialogBody>
+          <FieldGroup className="gap-4">
+          <Field>
+            <FieldLabel htmlFor="asset-account-type">账户类型</FieldLabel>
             <Combobox
               items={ASSET_ACCOUNT_TYPES}
               value={type}
@@ -2010,9 +2114,9 @@ export function AssetAccountDialog({
                 </ComboboxList>
               </ComboboxContent>
             </Combobox>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="asset-account-name">账户名称</Label>
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="asset-account-name">账户名称</FieldLabel>
             <Input
               id="asset-account-name"
               value={name}
@@ -2023,21 +2127,10 @@ export function AssetAccountDialog({
               placeholder="例如：我的美股账户"
               maxLength={50}
             />
-          </div>
+          </Field>
           {supportsAutoSync && (
-            <div className="flex items-center justify-between gap-4 rounded-sm border bg-muted/20 px-4 py-3.5">
-              <div>
-                <Label htmlFor="asset-account-auto-sync">自动同步</Label>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {type === 'Futu'
-                    ? '通过 Futu OpenD 同步持仓'
-                    : type === 'Ibkr'
-                      ? '通过 Client Portal Gateway 同步持仓'
-                      : type === 'Okx'
-                        ? '通过 OKX 只读 API 同步持仓'
-                        : '通过币安只读 API 同步持仓'}
-                </p>
-              </div>
+            <Field className="flex-row items-center justify-between gap-4 rounded-sm border bg-muted/20 px-4 py-3.5">
+              <FieldLabel htmlFor="asset-account-auto-sync">自动同步</FieldLabel>
               <Switch
                 id="asset-account-auto-sync"
                 checked={autoSync}
@@ -2046,43 +2139,17 @@ export function AssetAccountDialog({
                   setError('')
                 }}
               />
-            </div>
-          )}
-          {!supportsAutoSync && (
-            <div className="rounded-sm border bg-muted/20 px-4 py-3.5">
-              <p className="text-sm font-medium">手动维护</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {type === 'Alipay'
-                  ? '支付宝'
-                  : type === 'Boci'
-                    ? '中银国际'
-                  : type === 'Cmb'
-                    ? '招商银行'
-                    : type === 'Boc'
-                      ? '中国银行'
-                    : '通用'}
-                此类资产账户暂不支持自动同步，可手动添加和编辑持仓
-              </p>
-            </div>
+            </Field>
           )}
           {type === 'Futu' && autoSync && (
             <div className="grid gap-3 rounded-sm border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">Futu OpenD 配置</p>
-                <p
-                  id="asset-account-futu-credential-description"
-                  className="mt-1 text-xs text-muted-foreground"
-                >
-                  {account?.type === 'Futu' &&
-                  integration?.provider === 'Futu' &&
-                  integration.websocket.credentialConfigured
-                    ? '密钥已安全保存；留空保持不变，输入新密钥可替换'
-                    : '连接 WebSocket 服务；密钥可不填'}
-                </p>
+                <OfficialIntegrationDocsLink provider="Futu" />
               </div>
-              <div className="grid grid-cols-[1fr_8rem] gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="asset-account-sync-host">地址</Label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="asset-account-sync-host">地址</FieldLabel>
                   <Input
                     id="asset-account-sync-host"
                     value={syncHost}
@@ -2093,9 +2160,9 @@ export function AssetAccountDialog({
                     placeholder={DEFAULT_FUTU_OPEND_HOST}
                     maxLength={253}
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="asset-account-sync-port">端口</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="asset-account-sync-port">端口</FieldLabel>
                   <Input
                     id="asset-account-sync-port"
                     type="number"
@@ -2108,11 +2175,11 @@ export function AssetAccountDialog({
                     max="65535"
                     step="1"
                   />
-                </div>
+                </Field>
               </div>
-              <div className="grid grid-cols-[1fr_8rem] gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="asset-account-sync-key">密钥</Label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="asset-account-sync-key">密钥</FieldLabel>
                   <Input
                     id="asset-account-sync-key"
                     type="password"
@@ -2128,13 +2195,12 @@ export function AssetAccountDialog({
                         ? '已安全保存；留空保持不变'
                         : 'WebSocket Authentication Key'
                     }
-                    aria-describedby="asset-account-futu-credential-description"
                     autoComplete="off"
                     maxLength={256}
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="asset-account-sync-interval">间隔（秒）</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="asset-account-sync-interval">间隔（秒）</FieldLabel>
                   <Input
                     id="asset-account-sync-interval"
                     type="number"
@@ -2147,7 +2213,7 @@ export function AssetAccountDialog({
                     max="3600"
                     step="1"
                   />
-                </div>
+                </Field>
               </div>
             </div>
           )}
@@ -2155,17 +2221,10 @@ export function AssetAccountDialog({
             <div className="grid gap-3 rounded-sm border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">OKX API 配置</p>
-                <p
-                  id="asset-account-okx-credential-description"
-                  className="mt-1 text-xs text-muted-foreground"
-                >
-                  {account?.type === 'Okx' && integration?.provider === 'Okx'
-                    ? '凭据已安全保存；全部留空保持不变，填写全部字段可替换'
-                    : '仅需读取权限'}
-                </p>
+                <OfficialIntegrationDocsLink provider="Okx" />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="asset-account-okx-api-key">API Key</Label>
+              <Field>
+                <FieldLabel htmlFor="asset-account-okx-api-key">API Key</FieldLabel>
                 <Input
                   id="asset-account-okx-api-key"
                   value={okxApiKey}
@@ -2178,14 +2237,13 @@ export function AssetAccountDialog({
                       ? '已安全保存；留空保持不变'
                       : undefined
                   }
-                  aria-describedby="asset-account-okx-credential-description"
                   autoComplete="off"
                   maxLength={256}
                 />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="asset-account-okx-secret-key">Secret Key</Label>
+              </Field>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="asset-account-okx-secret-key">Secret Key</FieldLabel>
                   <Input
                     id="asset-account-okx-secret-key"
                     type="password"
@@ -2199,13 +2257,12 @@ export function AssetAccountDialog({
                         ? '已安全保存；留空保持不变'
                         : undefined
                     }
-                    aria-describedby="asset-account-okx-credential-description"
                     autoComplete="new-password"
                     maxLength={512}
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="asset-account-okx-passphrase">Passphrase</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="asset-account-okx-passphrase">Passphrase</FieldLabel>
                   <Input
                     id="asset-account-okx-passphrase"
                     type="password"
@@ -2219,14 +2276,13 @@ export function AssetAccountDialog({
                         ? '已安全保存；留空保持不变'
                         : undefined
                     }
-                    aria-describedby="asset-account-okx-credential-description"
                     autoComplete="new-password"
                     maxLength={256}
                   />
-                </div>
+                </Field>
               </div>
-              <div className="grid max-w-40 gap-2">
-                <Label htmlFor="asset-account-okx-sync-interval">间隔（秒）</Label>
+              <Field className="max-w-72">
+                <FieldLabel htmlFor="asset-account-okx-sync-interval">间隔（秒）</FieldLabel>
                 <Input
                   id="asset-account-okx-sync-interval"
                   type="number"
@@ -2239,20 +2295,18 @@ export function AssetAccountDialog({
                   max="3600"
                   step="1"
                 />
-              </div>
+              </Field>
             </div>
           )}
           {type === 'Ibkr' && autoSync && (
             <div className="grid gap-3 rounded-sm border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">IBKR Client Portal Gateway</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  请先启动本机 Gateway，并在浏览器完成登录；仅支持回环地址
-                </p>
+                <OfficialIntegrationDocsLink provider="Ibkr" />
               </div>
-              <div className="grid grid-cols-[1fr_8rem] gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="asset-account-ibkr-host">地址</Label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="asset-account-ibkr-host">地址</FieldLabel>
                   <Input
                     id="asset-account-ibkr-host"
                     value={ibkrGatewayHost}
@@ -2263,9 +2317,9 @@ export function AssetAccountDialog({
                     placeholder={DEFAULT_IBKR_GATEWAY_HOST}
                     maxLength={64}
                   />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="asset-account-ibkr-port">端口</Label>
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="asset-account-ibkr-port">端口</FieldLabel>
                   <Input
                     id="asset-account-ibkr-port"
                     type="number"
@@ -2278,10 +2332,10 @@ export function AssetAccountDialog({
                     max="65535"
                     step="1"
                   />
-                </div>
+                </Field>
               </div>
-              <div className="grid max-w-40 gap-2">
-                <Label htmlFor="asset-account-ibkr-sync-interval">间隔（秒）</Label>
+              <Field className="max-w-72">
+                <FieldLabel htmlFor="asset-account-ibkr-sync-interval">间隔（秒）</FieldLabel>
                 <Input
                   id="asset-account-ibkr-sync-interval"
                   type="number"
@@ -2294,24 +2348,97 @@ export function AssetAccountDialog({
                   max="3600"
                   step="1"
                 />
+              </Field>
+            </div>
+          )}
+          {type === 'Hstong' && autoSync && (
+            <div className="flex flex-col gap-3 rounded-sm border bg-muted/20 p-4">
+              <div>
+                <p className="text-sm font-medium">华盛 OpenAPI Gateway</p>
+                <OfficialIntegrationDocsLink provider="Hstong" />
               </div>
+              <FieldGroup className="gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="asset-account-hstong-host">地址</FieldLabel>
+                    <Input
+                      id="asset-account-hstong-host"
+                      value={hstongGatewayHost}
+                      onChange={(event) => {
+                        setHstongGatewayHost(event.target.value)
+                        setError('')
+                      }}
+                      placeholder={DEFAULT_HSTONG_GATEWAY_HOST}
+                      maxLength={64}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="asset-account-hstong-port">端口</FieldLabel>
+                    <Input
+                      id="asset-account-hstong-port"
+                      type="number"
+                      value={hstongGatewayPort}
+                      onChange={(event) => {
+                        setHstongGatewayPort(event.target.value)
+                        setError('')
+                      }}
+                      min="1"
+                      max="65535"
+                      step="1"
+                    />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field>
+                    <FieldLabel htmlFor="asset-account-hstong-password">
+                      交易密码（可选）
+                    </FieldLabel>
+                    <Input
+                      id="asset-account-hstong-password"
+                      type="password"
+                      value={hstongTradingPassword}
+                      onChange={(event) => {
+                        setHstongTradingPassword(event.target.value)
+                        setError('')
+                      }}
+                      placeholder={
+                        canKeepHstongCredential
+                          ? '已安全保存；留空保持不变'
+                          : undefined
+                      }
+                      autoComplete="new-password"
+                      maxLength={256}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="asset-account-hstong-sync-interval">
+                      间隔（秒）
+                    </FieldLabel>
+                    <Input
+                      id="asset-account-hstong-sync-interval"
+                      type="number"
+                      value={syncInterval}
+                      onChange={(event) => {
+                        setSyncInterval(event.target.value)
+                        setError('')
+                      }}
+                      min="5"
+                      max="3600"
+                      step="1"
+                    />
+                  </Field>
+                </div>
+              </FieldGroup>
             </div>
           )}
           {type === 'Binance' && autoSync && (
             <div className="grid gap-3 rounded-sm border bg-muted/20 p-4">
               <div>
                 <p className="text-sm font-medium">币安 API 配置</p>
-                <p
-                  id="asset-account-binance-credential-description"
-                  className="mt-1 text-xs text-muted-foreground"
-                >
-                  {account?.type === 'Binance' && integration?.provider === 'Binance'
-                    ? '凭据已安全保存；全部留空保持不变，填写全部字段可替换'
-                    : '使用 HMAC API Key，仅需读取权限'}
-                </p>
+                <OfficialIntegrationDocsLink provider="Binance" />
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="asset-account-binance-api-key">API Key</Label>
+              <Field>
+                <FieldLabel htmlFor="asset-account-binance-api-key">API Key</FieldLabel>
                 <Input
                   id="asset-account-binance-api-key"
                   value={binanceApiKey}
@@ -2324,13 +2451,12 @@ export function AssetAccountDialog({
                       ? '已安全保存；留空保持不变'
                       : undefined
                   }
-                  aria-describedby="asset-account-binance-credential-description"
                   autoComplete="off"
                   maxLength={256}
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="asset-account-binance-secret-key">Secret Key</Label>
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="asset-account-binance-secret-key">Secret Key</FieldLabel>
                 <Input
                   id="asset-account-binance-secret-key"
                   type="password"
@@ -2344,13 +2470,12 @@ export function AssetAccountDialog({
                       ? '已安全保存；留空保持不变'
                       : undefined
                   }
-                  aria-describedby="asset-account-binance-credential-description"
                   autoComplete="new-password"
                   maxLength={512}
                 />
-              </div>
-              <div className="grid max-w-40 gap-2">
-                <Label htmlFor="asset-account-binance-sync-interval">间隔（秒）</Label>
+              </Field>
+              <Field className="max-w-72">
+                <FieldLabel htmlFor="asset-account-binance-sync-interval">间隔（秒）</FieldLabel>
                 <Input
                   id="asset-account-binance-sync-interval"
                   type="number"
@@ -2363,10 +2488,11 @@ export function AssetAccountDialog({
                   max="3600"
                   step="1"
                 />
-              </div>
+              </Field>
             </div>
           )}
           {error && <FieldMessage id="asset-account-error">{error}</FieldMessage>}
+          </FieldGroup>
           </DialogBody>
           <DialogFooter>
             <Button
@@ -2497,7 +2623,7 @@ export function PositionDialog({
         <form className="contents" onSubmit={handleSubmit}>
           <DialogBody>
           <FieldGroup>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field>
               <FieldLabel>市场</FieldLabel>
               <Select value={market} onValueChange={handleMarketChange}>
@@ -2562,7 +2688,7 @@ export function PositionDialog({
               <FieldMessage id="position-identity-error">{error.message}</FieldMessage>
             )}
           </Field>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field data-invalid={error?.field === 'identity'}>
               <FieldLabel htmlFor="position-currency">币种</FieldLabel>
               <Select

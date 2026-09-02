@@ -49,12 +49,12 @@ export function EmptyWorkspace({
             className="mb-3 size-16 rounded-sm border border-border/70 bg-sidebar shadow-lg shadow-black/25"
             aria-hidden="true"
           >
-            <img className="size-11 object-contain" src={CHROMIE_LOGO_URL} alt="" />
+            <img className="size-11 object-contain invert" src={CHROMIE_LOGO_URL} alt="" />
           </EmptyMedia>
           <EmptyTitle className="text-xl font-semibold tracking-[-0.025em]">
             开始使用 Chromie
           </EmptyTitle>
-          <EmptyDescription className="whitespace-nowrap">
+          <EmptyDescription>
             创建你的第一个工作区，或从已有备份继续管理本地资产
           </EmptyDescription>
         </EmptyHeader>
@@ -99,7 +99,12 @@ export function AppLoadingSkeleton() {
       <div className="window-drag fixed inset-x-0 top-0 z-40 h-2" />
       <aside data-slot="app-sidebar" className="w-64 shrink-0 bg-sidebar pt-8">
         <div className="flex h-10 items-center gap-2 px-4">
-          <Skeleton className="size-6 shrink-0" />
+          <img
+            className="size-6 shrink-0 object-contain invert"
+            src={CHROMIE_LOGO_URL}
+            alt=""
+            aria-hidden="true"
+          />
           <Skeleton className="h-4 w-16" />
           <Skeleton className="ml-auto size-7" />
         </div>
@@ -117,13 +122,15 @@ export function AppLoadingSkeleton() {
         data-slot="app-content"
         className="@container min-w-0 flex-1 border-l border-border bg-background"
       >
-        <div className="w-full px-4 pb-6 pt-8 lg:px-6">
+        <div className="mx-auto w-full max-w-[96rem] px-4 pb-6 pt-8 lg:px-6">
           <Skeleton className="h-8 w-40" />
-          <div className="mt-6 grid gap-3 @min-[36rem]:grid-cols-2 @min-[68rem]:grid-cols-5">
-            <Skeleton className="h-28 w-full @min-[36rem]:col-span-2" />
-            {[0, 1, 2].map((item) => <Skeleton key={item} className="h-28 w-full" />)}
+          <div className="mt-5 grid gap-2 @min-[36rem]:grid-cols-2 @min-[48rem]:grid-cols-3 @min-[68rem]:grid-cols-5">
+            <Skeleton className="h-[104px] w-full @min-[36rem]:col-span-2 @min-[48rem]:col-span-3 @min-[68rem]:col-span-2" />
+            <Skeleton className="h-[104px] w-full" />
+            <Skeleton className="h-[104px] w-full" />
+            <Skeleton className="h-[104px] w-full @min-[36rem]:col-span-2 @min-[48rem]:col-span-1" />
           </div>
-          <div className="mt-3 grid gap-3 @min-[68rem]:grid-cols-2">
+          <div className="mt-6 grid gap-3 @min-[68rem]:grid-cols-2">
             <Skeleton className="h-[300px] w-full" />
             <Skeleton className="h-[300px] w-full" />
           </div>

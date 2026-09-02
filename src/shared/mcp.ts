@@ -35,13 +35,14 @@ const assetAccountType = z.enum([
   'Boci',
   'Okx',
   'Ibkr',
+  'Hstong',
   'Binance',
   'Alipay',
   'General',
   'Cmb',
   'Boc'
 ])
-const integrationProvider = z.enum(['Futu', 'Okx', 'Ibkr', 'Binance'])
+const integrationProvider = z.enum(['Futu', 'Okx', 'Ibkr', 'Hstong', 'Binance'])
 
 export const mcpViewSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('latest') }).strict(),

@@ -9,6 +9,10 @@ import {
 } from './exchange-rates'
 import { DEFAULT_FUTU_OPEND_HOST, DEFAULT_FUTU_OPEND_PORT } from './futu'
 import { DEFAULT_IBKR_GATEWAY_HOST, DEFAULT_IBKR_GATEWAY_PORT } from './ibkr'
+import {
+  DEFAULT_HSTONG_GATEWAY_HOST,
+  DEFAULT_HSTONG_GATEWAY_PORT
+} from './hstong'
 import type {
   AssetAccountIntegration,
   AssetAccountIntegrationInput,
@@ -22,6 +26,7 @@ export type AssetAccountType =
   | 'Boci'
   | 'Okx'
   | 'Ibkr'
+  | 'Hstong'
   | 'Binance'
   | 'Alipay'
   | 'General'
@@ -262,6 +267,8 @@ export {
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   DEFAULT_FUTU_OPEND_HOST,
   DEFAULT_FUTU_OPEND_PORT,
+  DEFAULT_HSTONG_GATEWAY_HOST,
+  DEFAULT_HSTONG_GATEWAY_PORT,
   DEFAULT_IBKR_GATEWAY_HOST,
   DEFAULT_IBKR_GATEWAY_PORT,
   EXCHANGE_RATE_PROVIDERS,
@@ -279,6 +286,7 @@ export const assetAccountTypeLabels: Record<AssetAccountType, string> = {
   Boci: '中银国际',
   Okx: '欧易',
   Ibkr: '盈透证券',
+  Hstong: '华盛通',
   Binance: '币安',
   Alipay: '支付宝',
   General: '通用',

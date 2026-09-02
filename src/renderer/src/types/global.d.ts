@@ -12,6 +12,10 @@ import type {
 import type { FutuSyncOptions, FutuSyncResult } from '../../../shared/futu'
 import type { IbkrSyncOptions, IbkrSyncResult } from '../../../shared/ibkr'
 import type {
+  HstongSyncOptions,
+  HstongSyncResult
+} from '../../../shared/hstong'
+import type {
   McpAccessSettings,
   McpConnectionSettings
 } from '../../../shared/mcp'
@@ -39,6 +43,9 @@ declare global {
       }
       ibkr?: {
         syncPositions: (options?: IbkrSyncOptions) => Promise<IbkrSyncResult>
+      }
+      hstong?: {
+        syncPositions: (options?: HstongSyncOptions) => Promise<HstongSyncResult>
       }
       exchangeRates?: {
         load: (legacyContent?: string) => Promise<ExchangeRateSnapshot | null>

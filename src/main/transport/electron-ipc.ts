@@ -3,6 +3,7 @@ import { ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import type { BinanceSyncOptions } from '../../shared/binance'
 import type { FutuSyncOptions } from '../../shared/futu'
 import type { IbkrSyncOptions } from '../../shared/ibkr'
+import type { HstongSyncOptions } from '../../shared/hstong'
 import type { OkxSyncOptions } from '../../shared/okx'
 import type { PortfolioCommand } from '../../shared/portfolio'
 import type { McpAccessSettings } from '../../shared/mcp'
@@ -60,6 +61,10 @@ export function registerDesktopIpc(
   ipcMain.handle('ibkr:sync-positions', (event, options?: IbkrSyncOptions) => {
     assertTrustedSender(event, validateSender)
     return service.syncPositions({ provider: 'ibkr', options })
+  })
+  ipcMain.handle('hstong:sync-positions', (event, options?: HstongSyncOptions) => {
+    assertTrustedSender(event, validateSender)
+    return service.syncPositions({ provider: 'hstong', options })
   })
   ipcMain.handle('exchange-rates:load', (event, legacyContent?: unknown) => {
     assertTrustedSender(event, validateSender)

@@ -17,6 +17,16 @@ export type IbkrIntegration = {
   }
 }
 
+export type HstongIntegration = {
+  assetAccountId: string
+  provider: 'Hstong'
+  gateway: {
+    host: string
+    port: number
+    tradingPassword?: string
+  }
+}
+
 export type OkxIntegration = {
   assetAccountId: string
   provider: 'Okx'
@@ -39,6 +49,7 @@ export type BinanceIntegration = {
 export type AssetAccountIntegration =
   | FutuIntegration
   | IbkrIntegration
+  | HstongIntegration
   | OkxIntegration
   | BinanceIntegration
 
@@ -60,6 +71,14 @@ export type AssetAccountIntegrationInput =
       }
     }
   | Omit<IbkrIntegration, 'assetAccountId'>
+  | {
+      provider: 'Hstong'
+      gateway: {
+        host: string
+        port: number
+        credential: OptionalCredentialUpdate<{ tradingPassword: string }>
+      }
+    }
   | {
       provider: 'Okx'
       api: {
@@ -96,6 +115,15 @@ export type AssetAccountIntegrationView =
       gateway: {
         host: string
         port: number
+      }
+    }
+  | {
+      assetAccountId: string
+      provider: 'Hstong'
+      gateway: {
+        host: string
+        port: number
+        credentialConfigured: boolean
       }
     }
   | {
