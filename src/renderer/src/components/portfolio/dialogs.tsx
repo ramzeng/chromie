@@ -5,6 +5,7 @@ import {
   useState,
   type Dispatch,
   type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type SetStateAction
 } from 'react'
 import {
@@ -13,7 +14,6 @@ import {
   Copy,
   Download,
   ExternalLink,
-  Plus,
   SlidersHorizontal,
   Trash2,
   Upload,
@@ -61,6 +61,7 @@ import {
   EmptyTitle
 } from '@/components/ui/empty'
 import { Input } from '@/components/ui/input'
+import { InputGroupButton } from '@/components/ui/input-group'
 import {
   Field,
   FieldDescription,
@@ -154,7 +155,7 @@ const OFFICIAL_INTEGRATION_DOCS: Record<AutoSyncProvider, string> = {
 
 function OfficialIntegrationDocsLink({ provider }: { provider: AutoSyncProvider }) {
   return (
-    <Button asChild variant="link" size="sm" className="mt-2 h-auto justify-start p-0 text-xs">
+    <Button asChild variant="link" size="sm" className="h-auto p-0 text-xs">
       <a href={OFFICIAL_INTEGRATION_DOCS[provider]} target="_blank" rel="noopener noreferrer">
         官方接入文档
         <ExternalLink data-icon="inline-end" />
@@ -230,34 +231,105 @@ function TagSelector({
   tags,
   selectedIds,
   onSelectedIdsChange,
-  onCreateTag
+  onCreateTag,
+  hideLabel = false,
+  hidePlaceholder = false
 }: {
   tags: Tag[]
   selectedIds: string[]
   onSelectedIdsChange: (tagIds: string[]) => void
   onCreateTag: (input: TagInput) => Promise<string>
+  hideLabel?: boolean
+  hidePlaceholder?: boolean
 }) {
   const fieldId = useId()
   const anchor = useComboboxAnchor()
   const [open, setOpen] = useState(false)
-  const [tagDialogOpen, setTagDialogOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [creating, setCreating] = useState(false)
+  const creatingRef = useRef(false)
+  const highlightedTagIdRef = useRef<string | undefined>(undefined)
+  const selectedIdsRef = useRef(selectedIds)
+  selectedIdsRef.current = selectedIds
   const tagIds = tags.map((tag) => tag.id)
+  const normalizedQuery = query.trim()
 
   function findTag(tagId: string): Tag | undefined {
     return tags.find((tag) => tag.id === tagId)
   }
 
+  async function handleInputKeyDown(
+    event: ReactKeyboardEvent<HTMLInputElement>
+  ): Promise<void> {
+    if (
+      event.key !== 'Enter' ||
+      event.nativeEvent.isComposing ||
+      highlightedTagIdRef.current
+    ) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    const baseUiEvent = event as ReactKeyboardEvent<HTMLInputElement> & {
+      preventBaseUIHandler?: () => void
+    }
+    baseUiEvent.preventBaseUIHandler?.()
+    if (!normalizedQuery || creatingRef.current) return
+
+    const normalizedName = normalizedQuery.toLocaleLowerCase()
+    const existingTag = tags.find(
+      (tag) => tag.name.trim().toLocaleLowerCase() === normalizedName
+    )
+    if (existingTag) {
+      if (!selectedIdsRef.current.includes(existingTag.id)) {
+        onSelectedIdsChange([...selectedIdsRef.current, existingTag.id])
+      }
+      setQuery('')
+      setOpen(false)
+      return
+    }
+
+    creatingRef.current = true
+    setCreating(true)
+    try {
+      const tagId = await onCreateTag({
+        name: normalizedQuery,
+        color: randomTagColor()
+      })
+      if (!selectedIdsRef.current.includes(tagId)) {
+        onSelectedIdsChange([...selectedIdsRef.current, tagId])
+      }
+      setQuery('')
+      setOpen(false)
+    } catch (error) {
+      reportOperationError('添加标签失败', error)
+    } finally {
+      creatingRef.current = false
+      setCreating(false)
+    }
+  }
+
   return (
     <Field>
-      <FieldLabel htmlFor={fieldId}>标签</FieldLabel>
+      {!hideLabel && <FieldLabel htmlFor={fieldId}>标签</FieldLabel>}
       <Combobox
         multiple
-        autoHighlight
+        disabled={creating}
         items={tagIds}
         value={selectedIds}
+        inputValue={query}
         open={open}
         onOpenChange={setOpen}
-        onValueChange={onSelectedIdsChange}
+        onInputValueChange={(inputValue) => {
+          highlightedTagIdRef.current = undefined
+          setQuery(inputValue)
+        }}
+        onItemHighlighted={(tagId) => {
+          highlightedTagIdRef.current = tagId
+        }}
+        onValueChange={(nextSelectedIds) => {
+          onSelectedIdsChange(nextSelectedIds)
+          setQuery('')
+        }}
         itemToStringLabel={(tagId) => findTag(tagId)?.name ?? ''}
         itemToStringValue={(tagId) => tagId}
         filter={(tagId, query) =>
@@ -281,16 +353,23 @@ function TagSelector({
                 })}
                 <ComboboxChipsInput
                   id={fieldId}
-                  placeholder={selectedIds.length ? undefined : '选择标签…'}
+                  aria-label={hideLabel ? '标签' : undefined}
+                  placeholder={hidePlaceholder
+                    ? undefined
+                    : creating
+                      ? '创建中…'
+                      : selectedIds.length
+                        ? '输入并回车创建…'
+                        : '选择或输入标签…'}
+                  maxLength={40}
+                  onKeyDown={(event) => void handleInputKeyDown(event)}
                 />
               </>
             )}
           </ComboboxValue>
           <ComboboxTrigger
             render={
-              <Button
-                type="button"
-                variant="ghost"
+              <InputGroupButton
                 size="icon-xs"
                 aria-label="选择标签"
               />
@@ -298,50 +377,24 @@ function TagSelector({
           />
         </ComboboxChips>
         <ComboboxContent anchor={anchor}>
-          {tags.length > 0 && (
-            <>
-              <ComboboxEmpty>未找到标签</ComboboxEmpty>
-              <ComboboxList>
-                {(tagId: string) => {
-                  const tag = findTag(tagId)
-                  return tag ? (
-                    <ComboboxItem key={tagId} value={tagId}>
-                      <TagColorDot color={tag.color} />
-                      {tag.name}
-                    </ComboboxItem>
-                  ) : null
-                }}
-              </ComboboxList>
-              <Separator />
-            </>
-          )}
-          <div className="p-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start"
-              onClick={() => {
-                setOpen(false)
-                setTagDialogOpen(true)
-              }}
-            >
-              <Plus data-icon="inline-start" />
-              添加标签
-            </Button>
-          </div>
+          <ComboboxEmpty>
+            {normalizedQuery
+              ? `按 Enter 创建“${normalizedQuery}”`
+              : '输入标签名称'}
+          </ComboboxEmpty>
+          <ComboboxList>
+            {(tagId: string) => {
+              const tag = findTag(tagId)
+              return tag ? (
+                <ComboboxItem key={tagId} value={tagId}>
+                  <TagColorDot color={tag.color} />
+                  {tag.name}
+                </ComboboxItem>
+              ) : null
+            }}
+          </ComboboxList>
         </ComboboxContent>
       </Combobox>
-      <TagDialog
-        open={tagDialogOpen}
-        onOpenChange={setTagDialogOpen}
-        onSubmit={async (input) => {
-          const tagId = await onCreateTag(input)
-          if (!selectedIds.includes(tagId)) {
-            onSelectedIdsChange([...selectedIds, tagId])
-          }
-        }}
-      />
     </Field>
   )
 }
@@ -370,6 +423,7 @@ export function TagDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
+    event.stopPropagation()
     if (submissionInFlight.current) return
     const normalizedName = name.trim()
     if (!normalizedName) {
@@ -532,6 +586,8 @@ export function TagAssignmentDialog({
               selectedIds={tagIds}
               onSelectedIdsChange={setTagIds}
               onCreateTag={onCreateTag}
+              hideLabel
+              hidePlaceholder
             />
           </DialogBody>
           <DialogFooter>
@@ -1841,6 +1897,7 @@ export function AccountDialog({
             <FieldLabel htmlFor="account-name">账户名称</FieldLabel>
             <Input
               id="account-name"
+              className="h-9"
               value={name}
               onChange={(event) => {
                 setName(event.target.value)
@@ -1855,23 +1912,33 @@ export function AccountDialog({
             selectedIds={tagIds}
             onSelectedIdsChange={setTagIds}
             onCreateTag={onCreateTag}
+            hidePlaceholder
           />
           {supportsAutoSync && (
-            <Field className="flex-row items-center justify-between gap-4 rounded-sm border bg-muted/20 px-4 py-3.5">
+            <Field>
               <FieldLabel htmlFor="account-auto-sync">自动同步</FieldLabel>
-              <Switch
-                id="account-auto-sync"
-                checked={autoSync}
-                onCheckedChange={(checked) => {
-                  setAutoSync(checked)
+              <Select
+                value={autoSync ? 'enabled' : 'disabled'}
+                onValueChange={(value) => {
+                  setAutoSync(value === 'enabled')
                   setError('')
                 }}
-              />
+              >
+                <SelectTrigger id="account-auto-sync" className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="disabled">关闭</SelectItem>
+                    <SelectItem value="enabled">开启</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </Field>
           )}
           {type === 'Futu' && autoSync && (
-            <div className="grid gap-3 rounded-sm border bg-muted/20 p-4">
-              <div>
+            <div className="grid gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-medium">Futu OpenD 配置</p>
                 <OfficialIntegrationDocsLink provider="Futu" />
               </div>
@@ -1946,8 +2013,8 @@ export function AccountDialog({
             </div>
           )}
           {type === 'Okx' && autoSync && (
-            <div className="grid gap-3 rounded-sm border bg-muted/20 p-4">
-              <div>
+            <div className="grid gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-medium">OKX API 配置</p>
                 <OfficialIntegrationDocsLink provider="Okx" />
               </div>
@@ -2027,8 +2094,8 @@ export function AccountDialog({
             </div>
           )}
           {type === 'Ibkr' && autoSync && (
-            <div className="grid gap-3 rounded-sm border bg-muted/20 p-4">
-              <div>
+            <div className="grid gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-medium">IBKR Client Portal Gateway</p>
                 <OfficialIntegrationDocsLink provider="Ibkr" />
               </div>
@@ -2080,8 +2147,8 @@ export function AccountDialog({
             </div>
           )}
           {type === 'Hstong' && autoSync && (
-            <div className="flex flex-col gap-3 rounded-sm border bg-muted/20 p-4">
-              <div>
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-medium">华盛 OpenAPI Gateway</p>
                 <OfficialIntegrationDocsLink provider="Hstong" />
               </div>
@@ -2160,8 +2227,8 @@ export function AccountDialog({
             </div>
           )}
           {type === 'Binance' && autoSync && (
-            <div className="grid gap-3 rounded-sm border bg-muted/20 p-4">
-              <div>
+            <div className="grid gap-3">
+              <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-medium">币安 API 配置</p>
                 <OfficialIntegrationDocsLink provider="Binance" />
               </div>

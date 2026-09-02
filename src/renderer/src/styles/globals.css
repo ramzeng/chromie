@@ -71,11 +71,11 @@
   --border: rgb(255 255 255 / 8%);
   --input: rgb(255 255 255 / 12%);
   --ring: #72757c;
-  --chart-1: oklch(0.72 0.14 250);
-  --chart-2: oklch(0.73 0.13 185);
-  --chart-3: oklch(0.7 0.15 305);
-  --chart-4: oklch(0.78 0.14 85);
-  --chart-5: oklch(0.7 0.16 25);
+  --chart-1: #9ed1ff;
+  --chart-2: #3596ff;
+  --chart-3: #1778fd;
+  --chart-4: #1862eb;
+  --chart-5: #2054c5;
   --sidebar: #0e0f10;
   --sidebar-foreground: #b8bac0;
   --sidebar-primary: #222325;
@@ -95,6 +95,20 @@
 
 * {
   border-color: var(--border);
+}
+
+:is(
+  [data-slot='dialog-overlay'],
+  [data-slot='alert-dialog-overlay']
+):has(
+  ~ :is(
+    [data-slot='dialog-overlay'],
+    [data-slot='alert-dialog-overlay']
+  )
+) {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 [data-slot="app-sidebar"] {

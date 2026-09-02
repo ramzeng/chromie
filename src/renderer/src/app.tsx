@@ -49,7 +49,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -140,7 +139,7 @@ function AccountNavigation({
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="icon-xs"
+                    size="icon"
                     className={cn(
                       'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100',
                       selected && 'opacity-100'
@@ -156,9 +155,6 @@ function AccountNavigation({
                       <Pencil className="size-4" />
                       编辑
                     </DropdownMenuItem>
-                  </DropdownMenuGroup>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuGroup>
                     <DropdownMenuItem variant="destructive" onSelect={() => onDelete(account)}>
                       <Trash2 className="size-4" />
                       删除
@@ -799,6 +795,9 @@ export function App(): React.JSX.Element {
             exchangeRates={exchangeRates}
             onAddPosition={() =>
               setPositionDialog({ open: true, accountId: selectedAccount.id })
+            }
+            onEditAccount={() =>
+              setAccountDialog({ open: true, account: selectedAccount })
             }
             onSync={() => syncAccount(selectedAccount.id)}
             syncState={syncStates[selectedAccount.id]}

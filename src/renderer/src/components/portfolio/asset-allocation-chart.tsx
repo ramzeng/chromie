@@ -312,8 +312,7 @@ export function AssetAllocationChart({
               endAngle={hasSingleSlice ? -180 : -270}
               outerRadius="60%"
               isAnimationActive={false}
-              stroke={hasSingleSlice ? 'none' : 'var(--card)'}
-              strokeWidth={hasSingleSlice ? 0 : 2}
+              stroke="none"
               labelLine={{
                 stroke: 'var(--muted-foreground)',
                 strokeOpacity: 0.45,

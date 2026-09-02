@@ -1,4 +1,4 @@
-import { Ellipsis, Pencil, Plus, RefreshCw, Tags, Trash2, Wrench } from 'lucide-react'
+import { Ellipsis, Pencil, Plus, RefreshCw, Tags, Trash2 } from 'lucide-react'
 
 import {
   AssetDistributionCharts,
@@ -17,7 +17,6 @@ import {
   AccountTypeIcon,
   MaskedAssetValue,
   formatAmount,
-  formatLastSyncedAt,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
 import { Button } from '@/components/ui/button'
@@ -26,7 +25,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Spinner } from '@/components/ui/spinner'
@@ -181,11 +179,11 @@ function PositionTable({
                           <Ellipsis data-icon="icon-only" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="min-w-28">
+                      <DropdownMenuContent align="end" className="min-w-20">
                         <DropdownMenuGroup>
                           <DropdownMenuItem onSelect={() => onManageTags(position)}>
                             <Tags className="size-4" />
-                            管理标签
+                            标签
                           </DropdownMenuItem>
                           {allowPositionMutation && (
                             <DropdownMenuItem onSelect={() => onEditPosition(position)}>
@@ -193,21 +191,16 @@ function PositionTable({
                               编辑
                             </DropdownMenuItem>
                           )}
+                          {allowPositionMutation && (
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => onDeletePosition(position)}
+                            >
+                              <Trash2 className="size-4" />
+                              删除
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuGroup>
-                        {allowPositionMutation && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuGroup>
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onSelect={() => onDeletePosition(position)}
-                              >
-                                <Trash2 className="size-4" />
-                                删除
-                              </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                          </>
-                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -228,6 +221,7 @@ export function AccountDetail({
   baseCurrency,
   exchangeRates,
   onAddPosition,
+  onEditAccount,
   onSync,
   syncState,
   onManagePositionTags,
@@ -240,6 +234,7 @@ export function AccountDetail({
   baseCurrency: string
   exchangeRates: ExchangeRateView
   onAddPosition: () => void
+  onEditAccount: () => void
   onSync: () => Promise<void>
   syncState?: AccountSyncState
   onManagePositionTags: (position: Position) => void
@@ -260,43 +255,39 @@ export function AccountDetail({
             <h1 className="truncate text-2xl font-semibold tracking-[-0.035em]">
               {account.name}
             </h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 text-sm">
-                <Wrench aria-hidden="true" className="size-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground">更新方式</span>
-                <span className="font-medium">{account.sync ? '自动同步' : '手动维护'}</span>
+            {account.tagIds.length > 0 && (
+              <div className="mt-1.5">
+                <TagBadges tagIds={account.tagIds} tags={tags} />
               </div>
-              <TagBadges tagIds={account.tagIds} tags={tags} />
-            </div>
+            )}
           </div>
         </div>
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
           {!readOnly && account.sync && (
-            <>
-              <span className="mr-1 text-xs tabular-nums text-muted-foreground">
-                {account.sync.lastSyncedAt
-                  ? `最近同步 ${formatLastSyncedAt(account.sync.lastSyncedAt)}`
-                  : '尚未同步'}
-              </span>
-              <Button
-                variant="outline"
-                onClick={() => void onSync()}
-                disabled={syncState?.status === 'syncing'}
-                aria-busy={syncState?.status === 'syncing'}
-              >
-                {syncState?.status === 'syncing' ? (
-                  <Spinner data-icon="inline-start" />
-                ) : (
-                  <RefreshCw data-icon="inline-start" />
-                )}
-                同步
-              </Button>
-            </>
+            <Button
+              variant="secondary"
+              onClick={() => void onSync()}
+              disabled={syncState?.status === 'syncing'}
+              aria-busy={syncState?.status === 'syncing'}
+            >
+              {syncState?.status === 'syncing' ? (
+                <Spinner data-icon="inline-start" />
+              ) : (
+                <RefreshCw data-icon="inline-start" />
+              )}
+              同步
+            </Button>
           )}
           {!readOnly && !account.sync && (
-            <Button onClick={onAddPosition}>
+            <Button variant="secondary" onClick={onAddPosition}>
               <Plus data-icon="inline-start" />
               添加持仓
+            </Button>
+          )}
+          {!readOnly && (
+            <Button onClick={onEditAccount}>
+              <Pencil data-icon="inline-start" />
+              编辑
             </Button>
           )}
         </div>

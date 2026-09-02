@@ -227,25 +227,13 @@ export function Overview({
   const positions = workspace.accounts.flatMap(
     (account) => account.positions
   )
-  const taggedItems = workspace.tags.map((tag) => ({
+  const tagItems = workspace.tags.map((tag) => ({
     id: tag.id,
     label: tag.name,
-    color: `var(--tag-${tag.color})`,
     positions: workspace.accounts.flatMap((account) =>
-      account.positions.filter(
-        (position) =>
-          account.tagIds.includes(tag.id) || position.tagIds.includes(tag.id)
-      )
+      account.positions.filter((position) => position.tagIds.includes(tag.id))
     )
   }))
-  const tagItems = taggedItems.some((item) => item.positions.length > 0)
-    ? taggedItems
-    : [{
-        id: 'tag:other',
-        label: '无标签',
-        color: 'var(--chart-1)',
-        positions
-      }]
   return (
     <PortfolioPage>
       <PortfolioPageHeader>
