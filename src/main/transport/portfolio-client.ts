@@ -1,6 +1,6 @@
 import type {
-  AssetAccountIntegration,
-  AssetAccountIntegrationView
+  AccountIntegration,
+  AccountIntegrationView
 } from '../../shared/integrations'
 import type {
   PortfolioClientCommandResponse,
@@ -13,12 +13,12 @@ import type { PortfolioOperations } from '../service/portfolio-service'
 
 type ClientPortfolioOperations = Pick<PortfolioOperations, 'execute' | 'load'>
 
-export function toAssetAccountIntegrationView(
-  integration: AssetAccountIntegration
-): AssetAccountIntegrationView {
+export function toAccountIntegrationView(
+  integration: AccountIntegration
+): AccountIntegrationView {
   if (integration.provider === 'Futu') {
     return {
-      assetAccountId: integration.assetAccountId,
+      accountId: integration.accountId,
       provider: 'Futu',
       websocket: {
         host: integration.websocket.host,
@@ -29,14 +29,14 @@ export function toAssetAccountIntegrationView(
   }
   if (integration.provider === 'Ibkr') {
     return {
-      assetAccountId: integration.assetAccountId,
+      accountId: integration.accountId,
       provider: 'Ibkr',
       gateway: { ...integration.gateway }
     }
   }
   if (integration.provider === 'Hstong') {
     return {
-      assetAccountId: integration.assetAccountId,
+      accountId: integration.accountId,
       provider: 'Hstong',
       gateway: {
         host: integration.gateway.host,
@@ -46,16 +46,16 @@ export function toAssetAccountIntegrationView(
     }
   }
   return {
-    assetAccountId: integration.assetAccountId,
+    accountId: integration.accountId,
     provider: integration.provider,
     credentialConfigured: true
   }
 }
 
 function redactIntegrations(
-  integrations: AssetAccountIntegration[]
-): AssetAccountIntegrationView[] {
-  return integrations.map(toAssetAccountIntegrationView)
+  integrations: AccountIntegration[]
+): AccountIntegrationView[] {
+  return integrations.map(toAccountIntegrationView)
 }
 
 function toClientLoadResponse(

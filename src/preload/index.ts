@@ -54,14 +54,14 @@ contextBridge.exposeInMainWorld('desktop', {
     load: (): Promise<PortfolioClientLoadResponse> => ipcRenderer.invoke('portfolio:load'),
     execute: (command: PortfolioCommand): Promise<PortfolioClientCommandResponse> =>
       ipcRenderer.invoke('portfolio:execute', command),
-    syncAssetAccount: (
+    syncAccount: (
       workspaceId: string,
-      assetAccountId: string
+      accountId: string
     ): Promise<PortfolioSyncResponse> =>
       ipcRenderer.invoke(
-        'portfolio:sync-asset-account',
+        'portfolio:sync-account',
         workspaceId,
-        assetAccountId
+        accountId
       ),
     onChanged: (listener: () => void): (() => void) => {
       const handleChange = () => {

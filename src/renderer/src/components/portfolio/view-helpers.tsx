@@ -9,7 +9,7 @@ import { OKX_ICON_DATA_URL } from '@/lib/okx-icon'
 import type { ExchangeRateState } from '@/lib/exchange-rates'
 import {
   DEFAULT_SYNC_INTERVAL,
-  type AssetAccount
+  type Account
 } from '@/lib/portfolio'
 import { cn } from '@/lib/utils'
 
@@ -17,7 +17,7 @@ export function MaskedAssetValue({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-export function accountSyncInterval(account: AssetAccount): number {
+export function accountSyncInterval(account: Account): number {
   const value = account.sync?.interval
   return typeof value === 'number' && Number.isFinite(value) && value >= 5
     ? Math.min(Math.round(value), 3600)

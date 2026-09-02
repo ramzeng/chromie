@@ -2,34 +2,27 @@ import { useEffect, useRef, useState } from 'react'
 import {
   ArrowLeftRight,
   ChartSpline,
-  ChevronDown,
   ChevronUp,
   Ellipsis,
-  Folder,
   History,
-  Layers2,
   Pencil,
   Plus,
   Settings,
+  Tags,
   Trash2
 } from 'lucide-react'
 
 import {
-  AccountGroupDetail,
-  AssetAccountDetail,
-  PositionGroupDetail,
+  AccountDetail,
   type AccountSyncState
 } from '@/components/portfolio/account-detail'
 import {
-  AccountGroupDialog,
-  AssetAccountDialog,
+  AccountDialog,
   DeleteConfirmDialog,
   ExportBackupDialog,
-  GroupAccountsDialog,
   ImportBackupDialog,
-  GroupPositionsDialog,
   PositionDialog,
-  PositionGroupDialog,
+  TagAssignmentDialog,
   WorkspaceDialog,
   WorkspaceSwitcherDialog,
   WorkspaceSettingsDialog
@@ -41,6 +34,7 @@ import {
   reportPortfolioError
 } from '@/components/portfolio/feedback'
 import { Overview } from '@/components/portfolio/overview'
+import { TagManagement } from '@/components/portfolio/tag-management'
 import { TimeMachine } from '@/components/portfolio/time-machine'
 import { HistoricalVersionBanner } from '@/components/portfolio/page-shell'
 import {
@@ -59,7 +53,6 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Spinner } from '@/components/ui/spinner'
 import {
   useExchangeRates,
   type ExchangeRateState
@@ -67,14 +60,12 @@ import {
 import { CHROMIE_LOGO_URL } from '@/lib/brand'
 import { cn } from '@/lib/utils'
 import {
-  type AccountGroup,
-  type AccountGroupInput,
-  type AssetAccount,
-  type AssetAccountInput,
+  type Account,
+  type AccountInput,
   type Position,
-  type PositionGroup,
-  type PositionGroupInput,
   type PositionInput,
+  type Tag,
+  type TagInput,
   type WorkspaceSnapshot,
   type Workspace,
   type WorkspaceInput,
@@ -84,244 +75,97 @@ import {
 import { toast } from 'sonner'
 
 type WorkspaceDialogState = { open: boolean }
-type AssetDialogState = { open: boolean; account?: AssetAccount; groupId?: string }
+type AccountDialogState = { open: boolean; account?: Account }
 type PositionDialogState = { open: boolean; accountId?: string; position?: Position }
-type AccountGroupDialogState = { open: boolean; group?: AccountGroup }
-type PositionGroupDialogState = { open: boolean; group?: PositionGroup }
+type TagAssignmentTarget = { accountId: string; position: Position } | null
 type DeleteTarget =
   | { kind: 'workspace'; workspace: Workspace }
-  | { kind: 'asset'; account: AssetAccount }
-  | { kind: 'account-group'; group: AccountGroup }
-  | { kind: 'position-group'; group: PositionGroup }
-  | { kind: 'position'; account: AssetAccount; position: Position }
+  | { kind: 'account'; account: Account }
+  | { kind: 'tag'; tag: Tag }
+  | { kind: 'position'; account: Account; position: Position }
   | { kind: 'snapshot'; snapshot: WorkspaceSnapshot }
   | null
 
 type PendingImport = {
   workspace: Workspace
   snapshots: WorkspaceSnapshot[]
-  assetAccountCount: number
-  groupCount: number
+  accountCount: number
+  tagCount: number
   positionCount: number
   snapshotCount: number
 } | null
 
 const SELECTED_NAVIGATION_CLASS_NAME = 'bg-sidebar-accent text-sidebar-accent-foreground'
 
-function AssetAccountNavigation({
+function AccountNavigation({
   accounts,
-  accountGroups,
   readOnly,
   selectedAccountId,
-  selectedAccountGroupId,
   onSelect,
-  onSelectGroup,
   onEdit,
-  onDelete,
-  onCreateAccount,
-  onEditGroup,
-  onDeleteGroup
+  onDelete
 }: {
-  accounts: AssetAccount[]
-  accountGroups: Workspace['accountGroups']
+  accounts: Account[]
   readOnly: boolean
   selectedAccountId: string | null
-  selectedAccountGroupId: string | null
-  onSelect: (account: AssetAccount) => void
-  onSelectGroup: (group: AccountGroup) => void
-  onEdit: (account: AssetAccount) => void
-  onDelete: (account: AssetAccount) => void
-  onCreateAccount: (group: AccountGroup) => void
-  onEditGroup: (group: AccountGroup) => void
-  onDeleteGroup: (group: AccountGroup) => void
+  onSelect: (account: Account) => void
+  onEdit: (account: Account) => void
+  onDelete: (account: Account) => void
 }) {
-  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<string>>(
-    () => new Set()
-  )
-  const groupedAssetAccountIds = new Set(
-    accountGroups.flatMap((group) => group.assetAccountIds)
-  )
-  const groups = [
-    ...accountGroups.map((group) => ({
-      group,
-      id: group.id,
-      label: group.name,
-      accounts: group.assetAccountIds.flatMap((assetAccountId) => {
-        const account = accounts.find((item) => item.id === assetAccountId)
-        return account ? [account] : []
-      })
-    })),
-    {
-      group: null,
-      id: 'unassigned',
-      label: '未分组',
-      accounts: accounts.filter((account) => !groupedAssetAccountIds.has(account.id))
-    }
-  ].filter(({ group, accounts: groupAccounts }) => group || groupAccounts.length > 0)
-
-  function toggleGroup(groupId: string): void {
-    setCollapsedGroupIds((current) => {
-      const next = new Set(current)
-      if (next.has(groupId)) next.delete(groupId)
-      else next.add(groupId)
-      return next
-    })
-  }
-
   return (
-    <div className="grid min-w-0 gap-3">
-      {groups.map(({ group, id, label, accounts: groupAccounts }) => {
-        const groupSelected = group?.id === selectedAccountGroupId
-        const collapsed = collapsedGroupIds.has(id)
-        const accessibilityLabel = group?.name ?? '未分组资产账户'
+    <div className="grid min-w-0 gap-1">
+      {accounts.map((account) => {
+        const selected = selectedAccountId === account.id
         return (
-          <div key={id} className="min-w-0 pl-2">
-            <div
+          <div
+            key={account.id}
+            className={cn(
+              'group flex min-w-0 items-center rounded-sm pr-1 transition-colors hover:bg-muted/70',
+              selected && SELECTED_NAVIGATION_CLASS_NAME
+            )}
+          >
+            <Button
+              variant="ghost"
               className={cn(
-                'group flex min-w-0 items-center rounded-sm pr-1 transition-colors hover:bg-muted/70',
-                groupSelected && SELECTED_NAVIGATION_CLASS_NAME
+                'h-auto min-w-0 flex-1 justify-start gap-3 px-3 py-2.5 font-normal hover:bg-transparent',
+                selected && 'font-medium'
               )}
+              onClick={() => onSelect(account)}
             >
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="shrink-0 hover:bg-transparent"
-                aria-expanded={!collapsed}
-                aria-label={`${collapsed ? '展开' : '收起'}${accessibilityLabel}`}
-                onClick={() => toggleGroup(id)}
-              >
-                <ChevronDown
-                  data-icon="inline-start"
-                  className={cn('transition-transform', collapsed && '-rotate-90')}
-                />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={cn(
-                  'h-7 min-w-0 flex-1 justify-start px-1 text-left text-xs text-muted-foreground hover:bg-transparent',
-                  groupSelected && 'font-medium text-foreground'
-                )}
-                disabled={!group}
-                onClick={() => group && onSelectGroup(group)}
-              >
-                <Layers2 data-icon="inline-start" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">{label}</span>
-              </Button>
-              {!readOnly && group && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      className={cn(
-                        'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100',
-                        groupSelected && 'opacity-100'
-                      )}
-                      aria-label={`${group.name}操作`}
-                    >
-                      <Ellipsis data-icon="icon-only" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="min-w-20">
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem onSelect={() => onEditGroup(group)}>
-                        <Pencil className="size-4" />
-                        编辑
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onSelect={() => onDeleteGroup(group)}
-                      >
-                        <Trash2 className="size-4" />
-                        删除
-                      </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-            {!collapsed && (
-              <div className="mt-1 grid min-w-0 gap-1 pl-5">
-                {groupAccounts.map((account) => {
-                  const selected = selectedAccountId === account.id
-                  return (
-                    <div
-                      key={account.id}
-                      className={cn(
-                        'group flex min-w-0 items-center rounded-sm pr-1 transition-colors hover:bg-muted/70',
-                        selected && SELECTED_NAVIGATION_CLASS_NAME
-                      )}
-                    >
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          'h-auto min-w-0 flex-1 justify-start gap-3 px-3 py-2.5 font-normal hover:bg-transparent',
-                          selected && 'font-medium'
-                        )}
-                        onClick={() => onSelect(account)}
-                      >
-                        <AccountTypeIcon type={account.type} className="size-4 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-left">
-                          {account.name}
-                        </span>
-                      </Button>
-                      {!readOnly && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              className={cn(
-                                'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100',
-                                selected && 'opacity-100'
-                              )}
-                              aria-label={`${account.name}操作`}
-                            >
-                              <Ellipsis data-icon="icon-only" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="min-w-20">
-                            <DropdownMenuGroup>
-                              <DropdownMenuItem onSelect={() => onEdit(account)}>
-                                <Pencil className="size-4" />
-                                编辑
-                              </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuGroup>
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onSelect={() => onDelete(account)}
-                              >
-                                <Trash2 className="size-4" />
-                                删除
-                              </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </div>
-                  )
-                })}
-                {!readOnly && group && (
+              <AccountTypeIcon type={account.type} className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-left">{account.name}</span>
+            </Button>
+            {!readOnly && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
                   <Button
-                    type="button"
                     variant="ghost"
-                    size="sm"
-                    className="h-8 w-full justify-start px-3 text-muted-foreground"
-                    onClick={() => onCreateAccount(group)}
+                    size="icon-xs"
+                    className={cn(
+                      'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100',
+                      selected && 'opacity-100'
+                    )}
+                    aria-label={`${account.name}操作`}
                   >
-                    <Plus data-icon="inline-start" />
-                    新建资产账户
+                    <Ellipsis data-icon="icon-only" />
                   </Button>
-                )}
-              </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-20">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onSelect={() => onEdit(account)}>
+                      <Pencil className="size-4" />
+                      编辑
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem variant="destructive" onSelect={() => onDelete(account)}>
+                      <Trash2 className="size-4" />
+                      删除
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         )
@@ -355,26 +199,19 @@ export function App(): React.JSX.Element {
         error: selectedSnapshot.exchangeRates ? '' : '快照中没有汇率数据'
       }
     : liveExchangeRateView
-  const [selectedAssetAccountId, setSelectedAssetAccountId] = useState<string | null>(null)
-  const [selectedAccountGroupId, setSelectedAccountGroupId] = useState<string | null>(null)
-  const [selectedPositionGroupId, setSelectedPositionGroupId] = useState<string | null>(null)
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [showTimeMachine, setShowTimeMachine] = useState(false)
+  const [showTagManagement, setShowTagManagement] = useState(false)
   const [workspaceDialog, setWorkspaceDialog] = useState<WorkspaceDialogState>({ open: false })
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false)
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false)
   const [workspaceSettingsSection, setWorkspaceSettingsSection] = useState<'basic' | 'currency'>(
     'basic'
   )
-  const [assetDialog, setAssetDialog] = useState<AssetDialogState>({ open: false })
+  const [accountDialog, setAccountDialog] = useState<AccountDialogState>({ open: false })
   const [positionDialog, setPositionDialog] = useState<PositionDialogState>({ open: false })
-  const [accountGroupDialog, setAccountGroupDialog] = useState<AccountGroupDialogState>({
-    open: false
-  })
-  const [positionGroupDialog, setPositionGroupDialog] = useState<PositionGroupDialogState>({
-    open: false
-  })
-  const [groupAccountsDialogOpen, setGroupAccountsDialogOpen] = useState(false)
-  const [groupPositionsDialogOpen, setGroupPositionsDialogOpen] = useState(false)
+  const [tagAssignmentTarget, setTagAssignmentTarget] =
+    useState<TagAssignmentTarget>(null)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [syncStates, setSyncStates] = useState<Record<string, AccountSyncState>>({})
   const [pendingImport, setPendingImport] = useState<PendingImport>(null)
@@ -402,56 +239,46 @@ export function App(): React.JSX.Element {
   }, [exchangeRates.error, exchangeRates.snapshot, exchangeRates.status])
 
   const activeWorkspace = selectedSnapshot?.workspace ?? latestWorkspace
-  const selectedAssetAccount =
-    activeWorkspace?.assetAccounts.find(
-      (account) => account.id === selectedAssetAccountId
+  const selectedAccount =
+    activeWorkspace?.accounts.find(
+      (account) => account.id === selectedAccountId
     ) ?? null
-  const selectedAccountGroup =
-    activeWorkspace?.accountGroups.find(
-      (group) => group.id === selectedAccountGroupId
-    ) ?? null
-  const selectedPositionGroup =
-    activeWorkspace?.positionGroups.find(
-      (group) => group.id === selectedPositionGroupId
-    ) ?? null
-
   useEffect(() => {
     setSelectedSnapshotId(null)
-    setSelectedAssetAccountId(null)
-    setSelectedAccountGroupId(null)
-    setSelectedPositionGroupId(null)
+    setSelectedAccountId(null)
+    setShowTagManagement(false)
   }, [latestWorkspace?.id])
 
-  async function syncAssetAccount(assetAccountId: string): Promise<void> {
+  async function syncAccount(accountId: string): Promise<void> {
     if (
       !latestWorkspace ||
       selectedSnapshot ||
-      syncingAccountIds.current.has(assetAccountId)
+      syncingAccountIds.current.has(accountId)
     ) return
-    const assetAccount = latestWorkspace.assetAccounts.find(
-      (account) => account.id === assetAccountId
+    const account = latestWorkspace.accounts.find(
+      (account) => account.id === accountId
     )
-    if (!assetAccount?.sync) return
+    if (!account?.sync) return
 
-    syncingAccountIds.current.add(assetAccountId)
+    syncingAccountIds.current.add(accountId)
     setSyncStates((current) => ({
       ...current,
-      [assetAccountId]: {
+      [accountId]: {
         status: 'syncing'
       }
     }))
     try {
-      await portfolio.syncAssetAccount(
+      await portfolio.syncAccount(
         latestWorkspace.id,
-        assetAccountId
+        accountId
       )
     } catch (error) {
-      reportPortfolioError(error, `${assetAccount.name} 同步失败`)
+      reportPortfolioError(error, `${account.name} 同步失败`)
     } finally {
-      syncingAccountIds.current.delete(assetAccountId)
+      syncingAccountIds.current.delete(accountId)
       setSyncStates((current) => {
         const next = { ...current }
-        delete next[assetAccountId]
+        delete next[accountId]
         return next
       })
     }
@@ -460,7 +287,7 @@ export function App(): React.JSX.Element {
   const autoSyncAccounts =
     selectedSnapshot
       ? []
-      : latestWorkspace?.assetAccounts.flatMap((account) =>
+      : latestWorkspace?.accounts.flatMap((account) =>
           account.sync
             ? [
                 {
@@ -476,9 +303,9 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     if (!autoSyncAccounts.length) return
     const timers = autoSyncAccounts.map((account) => {
-      void syncAssetAccount(account.id)
+      void syncAccount(account.id)
       return window.setInterval(
-        () => void syncAssetAccount(account.id),
+        () => void syncAccount(account.id),
         account.interval * 1000
       )
     })
@@ -522,10 +349,10 @@ export function App(): React.JSX.Element {
       setPendingImport({
         workspace,
         snapshots,
-        assetAccountCount: workspace.assetAccounts.length,
-        groupCount: workspace.positionGroups.length,
-        positionCount: workspace.assetAccounts.reduce(
-          (total, assetAccount) => total + assetAccount.positions.length,
+        accountCount: workspace.accounts.length,
+        tagCount: workspace.tags.length,
+        positionCount: workspace.accounts.reduce(
+          (total, account) => total + account.positions.length,
           0
         ),
         snapshotCount: snapshots.length
@@ -541,9 +368,7 @@ export function App(): React.JSX.Element {
   async function confirmImportWorkspace(): Promise<void> {
     if (!pendingImport) return
     try {
-      setSelectedAssetAccountId(null)
-      setSelectedAccountGroupId(null)
-      setSelectedPositionGroupId(null)
+      setSelectedAccountId(null)
       await portfolio.importWorkspace(pendingImport.workspace, pendingImport.snapshots)
       setPendingImport(null)
       toast.success('工作区已导入')
@@ -582,8 +407,8 @@ export function App(): React.JSX.Element {
             if (!open) setPendingImport(null)
           }}
           workspaceName={pendingImport?.workspace.name ?? ''}
-          assetAccountCount={pendingImport?.assetAccountCount ?? 0}
-          groupCount={pendingImport?.groupCount ?? 0}
+          accountCount={pendingImport?.accountCount ?? 0}
+          tagCount={pendingImport?.tagCount ?? 0}
           positionCount={pendingImport?.positionCount ?? 0}
           snapshotCount={pendingImport?.snapshotCount ?? 0}
           onConfirm={confirmImportWorkspace}
@@ -620,91 +445,40 @@ export function App(): React.JSX.Element {
     toast.success('工作区设置已保存')
   }
 
-  async function submitAssetAccount(input: AssetAccountInput): Promise<void> {
+  async function submitAccount(input: AccountInput): Promise<void> {
     if (!activeWorkspace) return
-    if (assetDialog.account) {
-      await portfolio.updateAssetAccount(activeWorkspace.id, assetDialog.account.id, input)
+    if (accountDialog.account) {
+      await portfolio.updateAccount(activeWorkspace.id, accountDialog.account.id, input)
       toast.success('资产账户已更新')
       return
     }
-    const id = await portfolio.createAssetAccount(activeWorkspace.id, input)
-    if (assetDialog.groupId) {
-      const group = activeWorkspace.accountGroups.find(
-        (item) => item.id === assetDialog.groupId
-      )
-      if (!group) throw new Error('没有找到对应的账户分组')
-      const membershipError = await portfolio.setAccountGroupAccounts(
-        activeWorkspace.id,
-        group.id,
-        [...group.assetAccountIds, id]
-      )
-      if (membershipError) throw new Error(membershipError)
-    }
-    setSelectedAccountGroupId(null)
-    setSelectedPositionGroupId(null)
-    setSelectedAssetAccountId(id)
+    const id = await portfolio.createAccount(activeWorkspace.id, input)
+    setSelectedAccountId(id)
     toast.success('资产账户已添加')
   }
 
-  async function submitAccountGroup(input: AccountGroupInput): Promise<void> {
+  async function createTag(input: TagInput): Promise<string> {
+    if (!activeWorkspace) throw new Error('没有找到对应的工作区')
+    const tagId = await portfolio.createTag(activeWorkspace.id, input)
+    toast.success('标签已添加')
+    return tagId
+  }
+
+  async function updateTag(tagId: string, input: TagInput): Promise<void> {
     if (!activeWorkspace) return
-    if (accountGroupDialog.group) {
-      await portfolio.updateAccountGroup(
-        activeWorkspace.id,
-        accountGroupDialog.group.id,
-        input
-      )
-      toast.success('账户分组已更新')
-      return
-    }
-    const id = await portfolio.createAccountGroup(activeWorkspace.id, input)
-    setSelectedAssetAccountId(null)
-    setSelectedPositionGroupId(null)
-    setSelectedAccountGroupId(id)
-    toast.success('账户分组已创建')
+    await portfolio.updateTag(activeWorkspace.id, tagId, input)
+    toast.success('标签已更新')
   }
 
-  async function submitGroupAccounts(assetAccountIds: string[]): Promise<string | null> {
-    if (!activeWorkspace || !selectedAccountGroup) {
-      return '没有找到对应的账户分组'
-    }
-    const result = await portfolio.setAccountGroupAccounts(
+  async function submitPositionTags(tagIds: string[]): Promise<string | null> {
+    if (!activeWorkspace || !tagAssignmentTarget) return '没有找到对应的持仓'
+    const result = await portfolio.setPositionTags(
       activeWorkspace.id,
-      selectedAccountGroup.id,
-      assetAccountIds
+      tagAssignmentTarget.accountId,
+      tagAssignmentTarget.position.id,
+      tagIds
     )
-    if (!result) toast.success('账户分组已更新')
-    return result
-  }
-
-  async function submitPositionGroup(input: PositionGroupInput): Promise<void> {
-    if (!activeWorkspace) return
-    if (positionGroupDialog.group) {
-      await portfolio.updatePositionGroup(
-        activeWorkspace.id,
-        positionGroupDialog.group.id,
-        input
-      )
-      toast.success('持仓分组已更新')
-      return
-    }
-    const id = await portfolio.createPositionGroup(activeWorkspace.id, input)
-    setSelectedAssetAccountId(null)
-    setSelectedAccountGroupId(null)
-    setSelectedPositionGroupId(id)
-    toast.success('持仓分组已创建')
-  }
-
-  async function submitGroupPositions(positionIds: string[]): Promise<string | null> {
-    if (!activeWorkspace || !selectedPositionGroup) {
-      return '没有找到对应的持仓分组'
-    }
-    const result = await portfolio.setPositionGroupPositions(
-      activeWorkspace.id,
-      selectedPositionGroup.id,
-      positionIds
-    )
-    if (!result) toast.success('持仓分组已更新')
+    if (!result) toast.success('持仓标签已更新')
     return result
   }
 
@@ -731,12 +505,10 @@ export function App(): React.JSX.Element {
         ? '工作区已删除'
         : deleteTarget.kind === 'snapshot'
           ? '快照已删除'
-          : deleteTarget.kind === 'asset'
+          : deleteTarget.kind === 'account'
             ? '资产账户已删除'
-            : deleteTarget.kind === 'account-group'
-              ? '账户分组已删除'
-              : deleteTarget.kind === 'position-group'
-              ? '持仓分组已删除'
+            : deleteTarget.kind === 'tag'
+              ? '标签已删除'
               : '持仓已删除'
     try {
       if (deleteTarget.kind === 'snapshot') {
@@ -748,15 +520,11 @@ export function App(): React.JSX.Element {
         return
       } else if (deleteTarget.kind === 'workspace') {
         await portfolio.deleteWorkspace(deleteTarget.workspace.id)
-      } else if (deleteTarget.kind === 'asset') {
-        await portfolio.deleteAssetAccount(latestWorkspace.id, deleteTarget.account.id)
-        setSelectedAssetAccountId(null)
-      } else if (deleteTarget.kind === 'account-group') {
-        await portfolio.deleteAccountGroup(latestWorkspace.id, deleteTarget.group.id)
-        setSelectedAccountGroupId(null)
-      } else if (deleteTarget.kind === 'position-group') {
-        await portfolio.deletePositionGroup(latestWorkspace.id, deleteTarget.group.id)
-        setSelectedPositionGroupId(null)
+      } else if (deleteTarget.kind === 'account') {
+        await portfolio.deleteAccount(latestWorkspace.id, deleteTarget.account.id)
+        setSelectedAccountId(null)
+      } else if (deleteTarget.kind === 'tag') {
+        await portfolio.deleteTag(latestWorkspace.id, deleteTarget.tag.id)
       } else {
         await portfolio.deletePosition(
           latestWorkspace.id,
@@ -782,25 +550,19 @@ export function App(): React.JSX.Element {
     if (deleteTarget.kind === 'workspace') {
       return {
         title: `删除工作区“${deleteTarget.workspace.name}”？`,
-        description: `将同时删除 ${deleteTarget.workspace.accountGroups.length} 个账户分组、${deleteTarget.workspace.assetAccounts.length} 个资产账户、${deleteTarget.workspace.positionGroups.length} 个持仓分组和全部持仓。此操作无法撤销`
+        description: `将同时删除 ${deleteTarget.workspace.tags.length} 个标签、${deleteTarget.workspace.accounts.length} 个资产账户和全部持仓。此操作无法撤销`
       }
     }
-    if (deleteTarget.kind === 'asset') {
+    if (deleteTarget.kind === 'account') {
       return {
         title: `删除“${deleteTarget.account.name}”？`,
         description: `将同时删除 ${deleteTarget.account.positions.length} 项持仓。此操作无法撤销`
       }
     }
-    if (deleteTarget.kind === 'account-group') {
+    if (deleteTarget.kind === 'tag') {
       return {
-        title: `删除账户分组“${deleteTarget.group.name}”？`,
-        description: '只会删除账户分组，不会影响其中的资产账户及持仓。此操作无法撤销'
-      }
-    }
-    if (deleteTarget.kind === 'position-group') {
-      return {
-        title: `删除持仓分组“${deleteTarget.group.name}”？`,
-        description: '只会删除持仓分组，不会影响原资产账户及其中的持仓。此操作无法撤销'
+        title: `删除标签“${deleteTarget.tag.name}”？`,
+        description: '将从相关资产账户和持仓中移除此标签，不会删除资产数据。此操作无法撤销'
       }
     }
     return {
@@ -885,197 +647,91 @@ export function App(): React.JSX.Element {
 
           <ScrollArea className="min-h-0 flex-1">
             <nav className="px-3 pb-4 pt-2">
-            <div className="mb-4 grid gap-1">
-              <Button
-                variant="ghost"
-                className={cn(
-                  'w-full justify-start px-3 font-normal',
-                  !selectedAssetAccountId &&
-                    !selectedAccountGroupId &&
-                    !selectedPositionGroupId &&
-                    !showTimeMachine &&
-                    cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
+              <div className="mb-4 grid gap-1">
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    'w-full justify-start px-3 font-normal',
+                    !selectedAccountId &&
+                      !showTimeMachine &&
+                      !showTagManagement &&
+                      cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
+                  )}
+                  onClick={() => {
+                    setShowTimeMachine(false)
+                    setShowTagManagement(false)
+                    setSelectedAccountId(null)
+                  }}
+                >
+                  <ChartSpline />
+                  资产概览
+                </Button>
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    'w-full justify-start px-3 font-normal',
+                    showTimeMachine && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
+                  )}
+                  onClick={() => {
+                    setShowTimeMachine(true)
+                    setShowTagManagement(false)
+                    setSelectedAccountId(null)
+                  }}
+                >
+                  <History />
+                  时间机器
+                </Button>
+                <Button
+                  variant="ghost"
+                  className={cn(
+                    'w-full justify-start px-3 font-normal',
+                    showTagManagement && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
+                  )}
+                  onClick={() => {
+                    setShowTimeMachine(false)
+                    setShowTagManagement(true)
+                    setSelectedAccountId(null)
+                  }}
+                >
+                  <Tags />
+                  标签
+                </Button>
+              </div>
+
+              <div className="mb-2 flex items-center gap-1">
+                <p className="flex h-7 min-w-0 flex-1 items-center px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                  资产账户
+                </p>
+                {!selectedSnapshot && (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label="添加资产账户"
+                    title="添加资产账户"
+                    onClick={() => setAccountDialog({ open: true })}
+                  >
+                    <Plus data-icon="icon-only" />
+                  </Button>
                 )}
-                onClick={() => {
+              </div>
+              <AccountNavigation
+                key={activeWorkspace.id}
+                accounts={activeWorkspace.accounts}
+                readOnly={Boolean(selectedSnapshot)}
+                selectedAccountId={selectedAccountId}
+                onSelect={(account) => {
                   setShowTimeMachine(false)
-                  setSelectedAssetAccountId(null)
-                  setSelectedAccountGroupId(null)
-                  setSelectedPositionGroupId(null)
+                  setShowTagManagement(false)
+                  setSelectedAccountId(account.id)
                 }}
-              >
-                <ChartSpline />
-                资产概览
-              </Button>
-              <Button
-                variant="ghost"
-                className={cn(
-                  'w-full justify-start px-3 font-normal',
-                  showTimeMachine && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
-                )}
-                onClick={() => {
-                  setShowTimeMachine(true)
-                  setSelectedAssetAccountId(null)
-                  setSelectedAccountGroupId(null)
-                  setSelectedPositionGroupId(null)
-                }}
-              >
-                <History />
-                时间机器
-              </Button>
-            </div>
-
-            <>
-                <div className="mb-2 flex items-center gap-1">
-                  <p className="flex h-7 min-w-0 flex-1 items-center px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                    账户分组
-                  </p>
-                  {!selectedSnapshot && (
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label="新建账户分组"
-                      title="新建账户分组"
-                      onClick={() => setAccountGroupDialog({ open: true })}
-                    >
-                      <Plus />
-                    </Button>
-                  )}
-                </div>
-                <div className="grid min-w-0 gap-1">
-                    <AssetAccountNavigation
-                      key={activeWorkspace.id}
-                      accounts={activeWorkspace.assetAccounts}
-                      accountGroups={activeWorkspace.accountGroups}
-                      readOnly={Boolean(selectedSnapshot)}
-                      selectedAccountId={selectedAssetAccountId}
-                      selectedAccountGroupId={selectedAccountGroupId}
-                      onSelect={(account) => {
-                        setShowTimeMachine(false)
-                        setSelectedAccountGroupId(null)
-                        setSelectedPositionGroupId(null)
-                        setSelectedAssetAccountId(account.id)
-                      }}
-                      onSelectGroup={(group) => {
-                        setShowTimeMachine(false)
-                        setSelectedAssetAccountId(null)
-                        setSelectedPositionGroupId(null)
-                        setSelectedAccountGroupId(group.id)
-                      }}
-                      onEdit={(account) => setAssetDialog({ open: true, account })}
-                      onDelete={(account) => setDeleteTarget({ kind: 'asset', account })}
-                      onCreateAccount={(group) =>
-                        setAssetDialog({ open: true, groupId: group.id })
-                      }
-                      onEditGroup={(group) =>
-                        setAccountGroupDialog({ open: true, group })
-                      }
-                      onDeleteGroup={(group) =>
-                        setDeleteTarget({ kind: 'account-group', group })
-                      }
-                    />
-                    {!activeWorkspace.assetAccounts.length && (
-                      <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">
-                        还没有资产账户
-                      </p>
-                    )}
-                </div>
-
-                <div className="mb-2 mt-5 flex items-center gap-1">
-                  <p className="flex h-7 min-w-0 flex-1 items-center px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                    持仓分组
-                  </p>
-                  {!selectedSnapshot && (
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label="新建持仓分组"
-                      title="新建持仓分组"
-                      onClick={() => setPositionGroupDialog({ open: true })}
-                    >
-                      <Plus />
-                    </Button>
-                  )}
-                </div>
-                <div className="grid min-w-0 gap-1">
-                    {activeWorkspace.positionGroups.map((group) => {
-                      const selected = selectedPositionGroupId === group.id
-                      return (
-                        <div
-                          key={group.id}
-                          className={cn(
-                            'group flex min-w-0 items-center rounded-sm pr-1 transition-colors hover:bg-muted/70',
-                            selected && SELECTED_NAVIGATION_CLASS_NAME
-                          )}
-                        >
-                          <Button
-                            variant="ghost"
-                            className={cn(
-                              'h-auto min-w-0 flex-1 justify-start gap-3 px-3 py-2.5 font-normal hover:bg-transparent',
-                              selected && 'font-medium'
-                            )}
-                            onClick={() => {
-                              setShowTimeMachine(false)
-                              setSelectedAssetAccountId(null)
-                              setSelectedAccountGroupId(null)
-                              setSelectedPositionGroupId(group.id)
-                            }}
-                          >
-                            <Folder data-icon="inline-start" />
-                            <span className="min-w-0 flex-1 truncate text-left">
-                              {group.name}
-                            </span>
-                          </Button>
-                          {!selectedSnapshot && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon-xs"
-                                  className={cn(
-                                    'shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 data-[state=open]:opacity-100',
-                                    selected && 'opacity-100'
-                                  )}
-                                  aria-label={`${group.name}操作`}
-                                >
-                                  <Ellipsis />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="min-w-20">
-                                <DropdownMenuGroup>
-                                  <DropdownMenuItem
-                                    onSelect={() =>
-                                      setPositionGroupDialog({ open: true, group })
-                                    }
-                                  >
-                                    <Pencil />
-                                    编辑
-                                  </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuGroup>
-                                  <DropdownMenuItem
-                                    variant="destructive"
-                                    onSelect={() =>
-                                      setDeleteTarget({ kind: 'position-group', group })
-                                    }
-                                  >
-                                    <Trash2 />
-                                    删除
-                                  </DropdownMenuItem>
-                                </DropdownMenuGroup>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
-                        </div>
-                      )
-                    })}
-                    {!activeWorkspace.positionGroups.length && (
-                      <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">
-                        还没有持仓分组
-                      </p>
-                    )}
-                </div>
-            </>
+                onEdit={(account) => setAccountDialog({ open: true, account })}
+                onDelete={(account) => setDeleteTarget({ kind: 'account', account })}
+              />
+              {selectedSnapshot && !activeWorkspace.accounts.length && (
+                <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  暂无资产账户
+                </p>
+              )}
             </nav>
           </ScrollArea>
 
@@ -1124,57 +780,49 @@ export function App(): React.JSX.Element {
               setDeleteTarget({ kind: 'snapshot', snapshot })
             }
           />
-        ) : selectedAccountGroup ? (
-          <AccountGroupDetail
-            group={selectedAccountGroup}
-            assetAccounts={activeWorkspace.assetAccounts}
+        ) : showTagManagement ? (
+          <TagManagement
+            workspace={activeWorkspace}
             readOnly={Boolean(selectedSnapshot)}
-            baseCurrency={activeWorkspace.baseCurrency}
-            exchangeRates={exchangeRates}
-            onManageAccounts={() => setGroupAccountsDialogOpen(true)}
+            onCreate={async (input) => {
+              await createTag(input)
+            }}
+            onUpdate={updateTag}
+            onDelete={(tag) => setDeleteTarget({ kind: 'tag', tag })}
           />
-        ) : selectedPositionGroup ? (
-          <PositionGroupDetail
-            group={selectedPositionGroup}
-            assetAccounts={activeWorkspace.assetAccounts}
-            accountGroups={activeWorkspace.accountGroups}
-            readOnly={Boolean(selectedSnapshot)}
-            baseCurrency={activeWorkspace.baseCurrency}
-            exchangeRates={exchangeRates}
-            onManagePositions={() => setGroupPositionsDialogOpen(true)}
-          />
-        ) : selectedAssetAccount ? (
-          <AssetAccountDetail
-            account={selectedAssetAccount}
+        ) : selectedAccount ? (
+          <AccountDetail
+            account={selectedAccount}
+            tags={activeWorkspace.tags}
             readOnly={Boolean(selectedSnapshot)}
             baseCurrency={activeWorkspace.baseCurrency}
             exchangeRates={exchangeRates}
             onAddPosition={() =>
-              setPositionDialog({ open: true, accountId: selectedAssetAccount.id })
+              setPositionDialog({ open: true, accountId: selectedAccount.id })
             }
-            onSync={() => syncAssetAccount(selectedAssetAccount.id)}
-            syncState={syncStates[selectedAssetAccount.id]}
+            onSync={() => syncAccount(selectedAccount.id)}
+            syncState={syncStates[selectedAccount.id]}
+            onManagePositionTags={(position) =>
+              setTagAssignmentTarget({ accountId: selectedAccount.id, position })
+            }
             onEditPosition={(position) =>
               setPositionDialog({
                 open: true,
-                accountId: selectedAssetAccount.id,
+                accountId: selectedAccount.id,
                 position
               })
             }
             onDeletePosition={(position) =>
-              setDeleteTarget({ kind: 'position', account: selectedAssetAccount, position })
+              setDeleteTarget({ kind: 'position', account: selectedAccount, position })
             }
           />
         ) : (
           <Overview
             workspace={activeWorkspace}
             exchangeRates={exchangeRates}
-            readOnly={Boolean(selectedSnapshot)}
-            onCreateAssetAccount={() => setAssetDialog({ open: true })}
-            onOpenAssetAccount={(id) => {
-              setSelectedAccountGroupId(null)
-              setSelectedPositionGroupId(null)
-              setSelectedAssetAccountId(id)
+            onOpenAccount={(accountId) => {
+              setShowTagManagement(false)
+              setSelectedAccountId(accountId)
             }}
           />
         )}
@@ -1210,60 +858,40 @@ export function App(): React.JSX.Element {
           setDeleteTarget({ kind: 'workspace', workspace: activeWorkspace })
         }
       />
-      <AssetAccountDialog
-        open={assetDialog.open}
+      <AccountDialog
+        open={accountDialog.open}
         onOpenChange={(open) =>
-          setAssetDialog((current) => (open ? { ...current, open } : { open: false }))
+          setAccountDialog((current) => (open ? { ...current, open } : { open: false }))
         }
-        account={assetDialog.account}
+        account={accountDialog.account}
         integration={
-          assetDialog.account
-            ? portfolio.getAssetAccountIntegration(assetDialog.account.id)
+          accountDialog.account
+            ? portfolio.getAccountIntegration(accountDialog.account.id)
             : undefined
         }
-        onSubmit={submitAssetAccount}
-      />
-      <AccountGroupDialog
-        open={accountGroupDialog.open}
-        onOpenChange={(open) =>
-          setAccountGroupDialog((current) => ({ ...current, open }))
-        }
-        group={accountGroupDialog.group}
-        onSubmit={submitAccountGroup}
+        tags={activeWorkspace.tags}
+        onCreateTag={createTag}
+        onSubmit={submitAccount}
       />
       <PositionDialog
         open={positionDialog.open}
         onOpenChange={(open) => setPositionDialog((current) => ({ ...current, open }))}
         position={positionDialog.position}
+        tags={activeWorkspace.tags}
+        onCreateTag={createTag}
         onSubmit={submitPosition}
       />
-      <PositionGroupDialog
-        open={positionGroupDialog.open}
-        onOpenChange={(open) =>
-          setPositionGroupDialog((current) => ({ ...current, open }))
-        }
-        group={positionGroupDialog.group}
-        onSubmit={submitPositionGroup}
-      />
-      {selectedPositionGroup && (
-        <GroupPositionsDialog
-          open={groupPositionsDialogOpen}
-          onOpenChange={setGroupPositionsDialogOpen}
-          group={selectedPositionGroup}
-          assetAccounts={activeWorkspace.assetAccounts}
-          accountGroups={activeWorkspace.accountGroups}
-          positionGroups={activeWorkspace.positionGroups}
-          onSubmit={submitGroupPositions}
-        />
-      )}
-      {selectedAccountGroup && (
-        <GroupAccountsDialog
-          open={groupAccountsDialogOpen}
-          onOpenChange={setGroupAccountsDialogOpen}
-          group={selectedAccountGroup}
-          assetAccounts={activeWorkspace.assetAccounts}
-          accountGroups={activeWorkspace.accountGroups}
-          onSubmit={submitGroupAccounts}
+      {tagAssignmentTarget && (
+        <TagAssignmentDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setTagAssignmentTarget(null)
+          }}
+          title={`管理 ${tagAssignmentTarget.position.symbol} 的标签`}
+          tags={activeWorkspace.tags}
+          selectedTagIds={tagAssignmentTarget.position.tagIds}
+          onCreateTag={createTag}
+          onSubmit={submitPositionTags}
         />
       )}
       <DeleteConfirmDialog
@@ -1282,8 +910,8 @@ export function App(): React.JSX.Element {
           if (!open) setPendingImport(null)
         }}
         workspaceName={pendingImport?.workspace.name ?? ''}
-        assetAccountCount={pendingImport?.assetAccountCount ?? 0}
-        groupCount={pendingImport?.groupCount ?? 0}
+        accountCount={pendingImport?.accountCount ?? 0}
+        tagCount={pendingImport?.tagCount ?? 0}
         positionCount={pendingImport?.positionCount ?? 0}
         snapshotCount={pendingImport?.snapshotCount ?? 0}
         onConfirm={confirmImportWorkspace}

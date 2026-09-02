@@ -1,5 +1,3 @@
-import { Plus, WalletCards } from 'lucide-react'
-
 import {
   AssetDistributionCharts
 } from '@/components/portfolio/asset-allocation-chart'
@@ -16,6 +14,7 @@ import {
   compareOptionalNumbers,
   useTableSort
 } from '@/components/portfolio/sortable-table-head'
+import { TableEmptyState } from '@/components/portfolio/table-empty-state'
 import { ValueSummaryCard } from '@/components/portfolio/value-summary-card'
 import {
   AccountTypeIcon,
@@ -23,15 +22,7 @@ import {
   formatAmount,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
-import { Button } from '@/components/ui/button'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle
-} from '@/components/ui/empty'
+import { TagBadge } from '@/components/portfolio/tag-badge'
 import {
   Table,
   TableBody,
@@ -48,20 +39,20 @@ import {
 } from '@/components/ui/tooltip'
 import {
   formatMoney,
-  type AssetAccount,
+  type Account,
   type Workspace
 } from '@/lib/portfolio'
 import { valuePositions } from '@/lib/valuation'
 
-function AssetAccountTable({
+function AccountTable({
   accounts,
-  accountGroups,
+  tags,
   baseCurrency,
   exchangeRates,
   onOpen
 }: {
-  accounts: AssetAccount[]
-  accountGroups: Workspace['accountGroups']
+  accounts: Account[]
+  tags: Workspace['tags']
   baseCurrency: string
   exchangeRates: ExchangeRateView
   onOpen: (id: string) => void
@@ -73,9 +64,10 @@ function AssetAccountTable({
   const rows = accounts
     .map((account) => ({
       account,
-      accountGroupName: accountGroups.find((accountGroup) =>
-        accountGroup.assetAccountIds.includes(account.id)
-      )?.name ?? '未分组',
+      accountTags: account.tagIds.flatMap((tagId) => {
+        const tag = tags.find((item) => item.id === tagId)
+        return tag ? [tag] : []
+      }),
       marketValues: createCurrencyMarketValues(account.positions),
       valuation: valuePositions(
         account.positions,
@@ -108,7 +100,7 @@ function AssetAccountTable({
         <Table className="min-w-[900px] [&_.tabular-nums]:whitespace-nowrap">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
-              <TableHead className="min-w-32">账户分组</TableHead>
+              <TableHead className="min-w-32">标签</TableHead>
               <TableHead className="min-w-44">资产账户</TableHead>
               {portfolioDisplayCurrencies.map((currency) => (
                 <TableHead
@@ -134,7 +126,7 @@ function AssetAccountTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map(({ account, accountGroupName, marketValues, valuation }) => (
+            {rows.map(({ account, accountTags, marketValues, valuation }) => (
               <TableRow
                 key={account.id}
                 role="button"
@@ -147,8 +139,16 @@ function AssetAccountTable({
                   onOpen(account.id)
                 }}
               >
-                <TableCell className="truncate text-muted-foreground">
-                  {accountGroupName}
+                <TableCell>
+                  {accountTags.length ? (
+                    <div className="flex flex-wrap gap-1">
+                      {accountTags.map((tag) => (
+                        <TagBadge key={tag.id} tag={tag} />
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex min-w-0 items-center gap-2">
@@ -218,30 +218,34 @@ function AssetAccountTable({
 export function Overview({
   workspace,
   exchangeRates,
-  readOnly,
-  onCreateAssetAccount,
-  onOpenAssetAccount
+  onOpenAccount
 }: {
   workspace: Workspace
   exchangeRates: ExchangeRateView
-  readOnly: boolean
-  onCreateAssetAccount: () => void
-  onOpenAssetAccount: (id: string) => void
+  onOpenAccount: (id: string) => void
 }) {
-  const positions = workspace.assetAccounts.flatMap(
-    (assetAccount) => assetAccount.positions
+  const positions = workspace.accounts.flatMap(
+    (account) => account.positions
   )
-  const positionsById = new Map(
-    positions.map((position) => [position.id, position])
-  )
-  const positionGroupItems = workspace.positionGroups.map((group) => ({
-    id: group.id,
-    label: group.name,
-    positions: group.positionIds.flatMap((positionId) => {
-      const position = positionsById.get(positionId)
-      return position ? [position] : []
-    })
+  const taggedItems = workspace.tags.map((tag) => ({
+    id: tag.id,
+    label: tag.name,
+    color: `var(--tag-${tag.color})`,
+    positions: workspace.accounts.flatMap((account) =>
+      account.positions.filter(
+        (position) =>
+          account.tagIds.includes(tag.id) || position.tagIds.includes(tag.id)
+      )
+    )
   }))
+  const tagItems = taggedItems.some((item) => item.positions.length > 0)
+    ? taggedItems
+    : [{
+        id: 'tag:other',
+        label: '无标签',
+        color: 'var(--chart-1)',
+        positions
+      }]
   return (
     <PortfolioPage>
       <PortfolioPageHeader>
@@ -261,44 +265,26 @@ export function Overview({
       </section>
 
       <section className="mt-6">
-        {workspace.assetAccounts.length > 0 ? (
+        {workspace.accounts.length > 0 ? (
           <div className="flex flex-col gap-6">
             <AssetDistributionCharts
               positions={positions}
-              breakdownItems={positionGroupItems}
-              breakdownTitle="持仓分组市值分布"
-              breakdownDimensionLabel="持仓分组"
+              breakdownItems={tagItems}
+              breakdownTitle="标签市值分布"
+              breakdownDimensionLabel="标签"
               baseCurrency={workspace.baseCurrency}
               rates={exchangeRates.snapshot?.rates}
             />
-            <AssetAccountTable
-              accounts={workspace.assetAccounts}
-              accountGroups={workspace.accountGroups}
+            <AccountTable
+              accounts={workspace.accounts}
+              tags={workspace.tags}
               baseCurrency={workspace.baseCurrency}
               exchangeRates={exchangeRates}
-              onOpen={onOpenAssetAccount}
+              onOpen={onOpenAccount}
             />
           </div>
         ) : (
-          <Empty className="min-h-64 border bg-card">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <WalletCards data-icon="inline-start" />
-              </EmptyMedia>
-              <EmptyTitle>暂无资产账户</EmptyTitle>
-              <EmptyDescription>
-                支持富途牛牛、中银国际、欧易、支付宝、招商银行、中国银行和通用账户
-              </EmptyDescription>
-            </EmptyHeader>
-            {!readOnly && (
-              <EmptyContent>
-                <Button onClick={onCreateAssetAccount}>
-                  <Plus data-icon="inline-start" />
-                  添加资产账户
-                </Button>
-              </EmptyContent>
-            )}
-          </Empty>
+          <TableEmptyState>暂无资产账户</TableEmptyState>
         )}
       </section>
     </PortfolioPage>

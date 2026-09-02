@@ -50,17 +50,17 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_get_workspace: {
     title: '读取 Chromie 工作区',
-    description: '读取工作区当前数据或指定历史快照。返回账户分组、资产账户、持仓分组、可选持仓和脱敏同步状态；默认不内嵌持仓，汇率只返回 CNY、HKD 和 USD。',
+    description: '读取工作区当前数据或指定历史快照。返回标签、资产账户、可选持仓和脱敏同步状态；默认不内嵌持仓，汇率只返回 CNY、HKD 和 USD。',
     annotations: readOnlyAnnotations
   },
   chromie_get_portfolio_overview: {
     title: '读取资产概览',
-    description: '按照资产账户、账户分组、持仓分组或币种汇总市值、折算市值、市值占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率，响应只包含 CNY、HKD 和 USD 汇率。',
+    description: '按照资产账户、标签或币种汇总市值、折算市值、市值占比和缺失汇率。只使用 Chromie 当前缓存或快照中的汇率，响应只包含 CNY、HKD 和 USD 汇率。',
     annotations: readOnlyAnnotations
   },
   chromie_list_positions: {
     title: '列出持仓',
-    description: '列出并按关键词、市场、币种、资产账户、账户分组或持仓分组筛选持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
+    description: '列出并按关键词、市场、币种、资产账户或标签筛选持仓。继续分页时原样传回 next_cursor，并保持其他查询条件不变。',
     annotations: readOnlyAnnotations
   },
   chromie_list_snapshots: {
@@ -75,30 +75,35 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_update_workspace: {
     title: '更新 Chromie 工作区',
-    description: '局部修改工作区名称、本位币或汇率设置，不会覆盖账户分组。',
+    description: '局部修改工作区名称、本位币或汇率设置，不会覆盖标签。',
     annotations: updateAnnotations
   },
-  chromie_create_account_group: {
-    title: '创建账户分组',
-    description: '在指定 Chromie 工作区中创建账户分组。',
+  chromie_create_tag: {
+    title: '添加标签',
+    description: '在指定 Chromie 工作区中添加带颜色、可用于资产账户和持仓的标签。',
     annotations: additiveAnnotations
   },
-  chromie_update_account_group: {
-    title: '更新账户分组',
-    description: '修改已有账户分组的名称。',
+  chromie_update_tag: {
+    title: '更新标签',
+    description: '修改已有标签的名称和颜色。',
     annotations: updateAnnotations
   },
-  chromie_replace_account_group_members: {
-    title: '替换账户分组成员',
-    description: '完整替换一个账户分组中的资产账户；一个资产账户最多属于一个账户分组。',
+  chromie_set_account_tags: {
+    title: '设置资产账户标签',
+    description: '完整替换一个资产账户的标签，可同时设置多个标签。',
     annotations: updateAnnotations
   },
-  chromie_create_asset_account: {
+  chromie_set_position_tags: {
+    title: '设置持仓标签',
+    description: '完整替换一项持仓的标签，可同时设置多个标签。',
+    annotations: updateAnnotations
+  },
+  chromie_create_account: {
     title: '创建资产账户',
     description: '创建不含同步凭据的资产账户。自动同步凭据只能在 Chromie UI 中配置。',
     annotations: additiveAnnotations
   },
-  chromie_update_asset_account: {
+  chromie_update_account: {
     title: '更新资产账户',
     description: '局部修改资产账户名称或类型。不会返回或修改同步凭据；已同步账户不能通过 MCP 改类型。',
     annotations: updateAnnotations
@@ -113,27 +118,12 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     description: '局部更新手工资产账户中的持仓。价格传 null 可清除价格。自动同步的资产账户为只读。',
     annotations: updateAnnotations
   },
-  chromie_create_position_group: {
-    title: '创建持仓分组',
-    description: '在指定 Chromie 工作区中创建持仓分组。',
-    annotations: additiveAnnotations
-  },
-  chromie_update_position_group: {
-    title: '更新持仓分组',
-    description: '修改已有持仓分组的名称。',
-    annotations: updateAnnotations
-  },
-  chromie_replace_position_group_members: {
-    title: '替换持仓分组成员',
-    description: '完整替换一个持仓分组的成员；一项持仓最多属于一个分组。',
-    annotations: updateAnnotations
-  },
   chromie_create_snapshot: {
     title: '创建资产快照',
     description: '保存工作区当前结构、持仓价格和当前缓存汇率。',
     annotations: additiveAnnotations
   },
-  chromie_sync_asset_account: {
+  chromie_sync_account: {
     title: '同步资产账户',
     description: '使用 Chromie 安全存储中已有的连接配置同步持仓；工具不会读取或返回任何凭据。',
     annotations: {

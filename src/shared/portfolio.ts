@@ -14,14 +14,14 @@ import {
   DEFAULT_HSTONG_GATEWAY_PORT
 } from './hstong'
 import type {
-  AssetAccountIntegration,
-  AssetAccountIntegrationInput,
-  AssetAccountIntegrationView
+  AccountIntegration,
+  AccountIntegrationInput,
+  AccountIntegrationView
 } from './integrations'
 
 export type Market = 'CN' | 'HK' | 'US' | 'CC'
 export type BaseCurrency = 'CNY' | 'HKD' | 'USD'
-export type AssetAccountType =
+export type AccountType =
   | 'Futu'
   | 'Boci'
   | 'Okx'
@@ -41,31 +41,51 @@ export type Position = {
   currency: string
   quantity: number
   price?: number
+  tagIds: string[]
 }
 
-export type AssetAccountSync = {
+export type AccountSync = {
   interval: number
   lastSyncedAt?: string
 }
 
-export type AccountGroup = {
-  id: string
-  name: string
-  assetAccountIds: string[]
+export const TAG_COLORS = [
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'blue',
+  'purple',
+  'gray'
+] as const
+
+export type TagColor = (typeof TAG_COLORS)[number]
+
+export const DEFAULT_TAG_COLOR: TagColor = 'gray'
+
+export const tagColorLabels: Record<TagColor, string> = {
+  gray: '灰色',
+  red: '红色',
+  orange: '橙色',
+  yellow: '黄色',
+  green: '绿色',
+  blue: '蓝色',
+  purple: '紫色'
 }
 
-export type AssetAccount = {
+export type Tag = {
   id: string
   name: string
-  type: AssetAccountType
-  sync?: AssetAccountSync
+  color: TagColor
+}
+
+export type Account = {
+  id: string
+  name: string
+  type: AccountType
+  sync?: AccountSync
+  tagIds: string[]
   positions: Position[]
-}
-
-export type PositionGroup = {
-  id: string
-  name: string
-  positionIds: string[]
 }
 
 export type Workspace = {
@@ -74,9 +94,8 @@ export type Workspace = {
   baseCurrency: BaseCurrency
   exchangeRateProvider: ExchangeRateProvider
   exchangeRateRefreshIntervalMinutes: number
-  accountGroups: AccountGroup[]
-  assetAccounts: AssetAccount[]
-  positionGroups: PositionGroup[]
+  tags: Tag[]
+  accounts: Account[]
 }
 
 export type WorkspaceSnapshot = {
@@ -107,15 +126,15 @@ export type WorkspaceSettingsInput = Pick<
   | 'exchangeRateProvider'
   | 'exchangeRateRefreshIntervalMinutes'
 >
-export type AssetAccountInput = Pick<
-  AssetAccount,
+export type AccountInput = Pick<
+  Account,
   'name' | 'type' | 'sync'
 > & {
-  integration?: AssetAccountIntegrationInput
+  tagIds?: string[]
+  integration?: AccountIntegrationInput
 }
-export type PositionInput = Omit<Position, 'id'>
-export type AccountGroupInput = Pick<AccountGroup, 'name'>
-export type PositionGroupInput = Pick<PositionGroup, 'name'>
+export type PositionInput = Omit<Position, 'id' | 'tagIds'> & { tagIds?: string[] }
+export type TagInput = Pick<Tag, 'name' | 'color'>
 
 export type PortfolioCommand =
   | { type: 'set-active-workspace'; id: string }
@@ -133,86 +152,63 @@ export type PortfolioCommand =
     }
   | { type: 'delete-workspace'; id: string }
   | {
-      type: 'create-account-group'
+      type: 'create-tag'
       workspaceId: string
-      input: AccountGroupInput
+      input: TagInput
     }
   | {
-      type: 'update-account-group'
+      type: 'update-tag'
       workspaceId: string
-      groupId: string
-      input: AccountGroupInput
+      tagId: string
+      input: TagInput
     }
-  | { type: 'delete-account-group'; workspaceId: string; groupId: string }
+  | { type: 'delete-tag'; workspaceId: string; tagId: string }
   | {
-      type: 'set-account-group-accounts'
+      type: 'set-account-tags'
       workspaceId: string
-      groupId: string
-      assetAccountIds: string[]
-    }
-  | {
-      type: 'remove-account-from-group'
-      workspaceId: string
-      groupId: string
-      assetAccountId: string
+      accountId: string
+      tagIds: string[]
     }
   | {
-      type: 'create-position-group'
+      type: 'set-position-tags'
       workspaceId: string
-      input: PositionGroupInput
-    }
-  | {
-      type: 'update-position-group'
-      workspaceId: string
-      groupId: string
-      input: PositionGroupInput
-    }
-  | { type: 'delete-position-group'; workspaceId: string; groupId: string }
-  | {
-      type: 'set-position-group-positions'
-      workspaceId: string
-      groupId: string
-      positionIds: string[]
-    }
-  | {
-      type: 'remove-position-from-group'
-      workspaceId: string
-      groupId: string
+      accountId: string
       positionId: string
+      tagIds: string[]
     }
   | {
-      type: 'create-asset-account'
+      type: 'create-account'
       workspaceId: string
-      input: AssetAccountInput
+      input: AccountInput
     }
   | {
-      type: 'update-asset-account'
+      type: 'update-account'
       workspaceId: string
-      assetAccountId: string
-      input: AssetAccountInput
+      accountId: string
+      input: AccountInput
     }
   | {
-      type: 'delete-asset-account'
+      type: 'delete-account'
       workspaceId: string
-      assetAccountId: string
+      accountId: string
     }
   | {
       type: 'save-position'
       workspaceId: string
-      assetAccountId: string
+      accountId: string
       input: PositionInput
       positionId?: string
     }
   | {
       type: 'delete-position'
       workspaceId: string
-      assetAccountId: string
+      accountId: string
       positionId: string
     }
   | {
       type: 'replace-positions'
       workspaceId: string
-      assetAccountId: string
+      accountId: string
       positions: PositionInput[]
       lastSyncedAt?: string
     }
@@ -224,27 +220,27 @@ export type PortfolioCommand =
 
 export type PortfolioCommandResponse = {
   data: AppData
-  integrations: AssetAccountIntegration[]
+  integrations: AccountIntegration[]
   result?: string | null
 }
 
 export type PortfolioLoadResponse = {
   data: AppData
-  integrations: AssetAccountIntegration[]
+  integrations: AccountIntegration[]
 }
 
 export type PortfolioClientCommandResponse = Omit<
   PortfolioCommandResponse,
   'integrations'
 > & {
-  integrations: AssetAccountIntegrationView[]
+  integrations: AccountIntegrationView[]
 }
 
 export type PortfolioClientLoadResponse = Omit<
   PortfolioLoadResponse,
   'integrations'
 > & {
-  integrations: AssetAccountIntegrationView[]
+  integrations: AccountIntegrationView[]
 }
 
 export type PortfolioSyncResponse = {
@@ -281,7 +277,7 @@ export const exchangeRateProviderLabels: Record<ExchangeRateProvider, string> = 
   coinbase: 'Coinbase'
 }
 
-export const assetAccountTypeLabels: Record<AssetAccountType, string> = {
+export const accountTypeLabels: Record<AccountType, string> = {
   Futu: '富途牛牛',
   Boci: '中银国际',
   Okx: '欧易',

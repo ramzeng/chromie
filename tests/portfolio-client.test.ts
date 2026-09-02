@@ -34,21 +34,22 @@ async function createOkxPortfolio() {
     }
   )
   const workspaceId = createdWorkspace.result as string
-  const createdAccountGroup = await portfolio.execute(
+  const createdTag = await portfolio.execute(
     {
-      type: 'create-account-group',
+      type: 'create-tag',
       workspaceId,
-      input: { name: 'Moon' }
+      input: { name: 'Moon', color: 'blue' }
     }
   )
-  const accountGroupId = createdAccountGroup.result as string
-  const createdAssetAccount = await portfolio.execute(
+  const tagId = createdTag.result as string
+  const createdAccount = await portfolio.execute(
     {
-      type: 'create-asset-account',
+      type: 'create-account',
       workspaceId,
       input: {
         name: 'OKX',
         type: 'Okx',
+        tagIds: [tagId],
         sync: { interval: 30 },
         integration: {
           provider: 'Okx',
@@ -66,19 +67,13 @@ async function createOkxPortfolio() {
       }
     }
   )
-  const assetAccountId = createdAssetAccount.result as string
-  await portfolio.execute({
-    type: 'set-account-group-accounts',
-    workspaceId,
-    groupId: accountGroupId,
-    assetAccountIds: [assetAccountId]
-  })
-
+  const accountId = createdAccount.result as string
   return {
     portfolio,
     integrationRepository,
     workspaceId,
-    assetAccountId
+    accountId,
+    tagId
   }
 }
 
@@ -87,7 +82,7 @@ test('client portfolio responses redact credentials and preserve them on edit', 
     portfolio,
     integrationRepository,
     workspaceId,
-    assetAccountId
+    accountId
   } = await createOkxPortfolio()
   const state = await loadPortfolioClientState(portfolio)
   const serializedState = JSON.stringify(state)
@@ -106,22 +101,23 @@ test('client portfolio responses redact credentials and preserve them on edit', 
   assert.equal(portfolio.inspectBackup(JSON.stringify(backup))?.workspace.id, workspaceId)
   assert.deepEqual(state.integrations, [
     {
-      assetAccountId,
+      accountId,
       provider: 'Okx',
       credentialConfigured: true
     }
   ])
 
   const workspace = state.data.workspaces.find((item) => item.id === workspaceId)!
-  const assetAccount = workspace.assetAccounts.find((item) => item.id === assetAccountId)!
+  const account = workspace.accounts.find((item) => item.id === accountId)!
   const result = await executePortfolioClientCommand(portfolio, {
-    type: 'update-asset-account',
+    type: 'update-account',
     workspaceId,
-    assetAccountId,
+    accountId,
     input: {
       name: 'OKX 长期账户',
       type: 'Okx',
-      sync: assetAccount.sync,
+      sync: account.sync,
+      tagIds: account.tagIds,
       integration: {
         provider: 'Okx',
         api: { credential: { mode: 'keep' } }
@@ -135,6 +131,68 @@ test('client portfolio responses redact credentials and preserve them on edit', 
   assert.match(integrationRepository.content ?? '', /passphrase-secret/)
 })
 
+test('tags on synchronized positions survive subsequent refreshes', async () => {
+  const { portfolio, workspaceId, accountId, tagId } = await createOkxPortfolio()
+  const syncedAt = '2026-09-02T08:00:00.000Z'
+
+  await portfolio.execute({
+    type: 'replace-positions',
+    workspaceId,
+    accountId,
+    positions: [
+      {
+        market: 'CC',
+        symbol: 'BTC',
+        name: 'Bitcoin',
+        currency: 'USD',
+        quantity: 1,
+        price: 100
+      }
+    ],
+    lastSyncedAt: syncedAt
+  })
+  const initialState = await portfolio.load()
+  const positionId = initialState.data.workspaces[0].accounts[0].positions[0].id
+  await portfolio.execute({
+    type: 'set-position-tags',
+    workspaceId,
+    accountId,
+    positionId,
+    tagIds: [tagId]
+  })
+
+  await portfolio.execute({
+    type: 'replace-positions',
+    workspaceId,
+    accountId,
+    positions: [
+      {
+        market: 'CC',
+        symbol: 'BTC',
+        name: 'Bitcoin',
+        currency: 'USD',
+        quantity: 2,
+        price: 110
+      }
+    ],
+    lastSyncedAt: '2026-09-02T08:05:00.000Z'
+  })
+
+  const refreshedState = await portfolio.load()
+  const refreshedPosition = refreshedState.data.workspaces[0].accounts[0].positions[0]
+  assert.equal(refreshedPosition.quantity, 2)
+  assert.deepEqual(refreshedPosition.tagIds, [tagId])
+
+  await portfolio.execute({ type: 'delete-tag', workspaceId, tagId })
+  const stateAfterDelete = await portfolio.load()
+  assert.deepEqual(stateAfterDelete.data.workspaces[0].tags, [])
+  assert.deepEqual(stateAfterDelete.data.workspaces[0].accounts[0].tagIds, [])
+  assert.deepEqual(
+    stateAfterDelete.data.workspaces[0].accounts[0].positions[0].tagIds,
+    []
+  )
+})
+
 test('华盛交易密码 stays in secure integration state and is redacted from clients', async () => {
   const portfolioRepository = new MemoryRepository()
   const integrationRepository = new MemoryRepository()
@@ -145,7 +203,7 @@ test('华盛交易密码 stays in secure integration state and is redacted from 
   })
   const workspaceId = workspace.result as string
   const account = await portfolio.execute({
-    type: 'create-asset-account',
+    type: 'create-account',
     workspaceId,
     input: {
       name: '华盛通',
@@ -164,13 +222,13 @@ test('华盛交易密码 stays in secure integration state and is redacted from 
       }
     }
   })
-  const assetAccountId = account.result as string
+  const accountId = account.result as string
 
   const state = await loadPortfolioClientState(portfolio)
   assert.equal(JSON.stringify(state).includes('trading-password-secret'), false)
   assert.deepEqual(state.integrations, [
     {
-      assetAccountId,
+      accountId,
       provider: 'Hstong',
       gateway: {
         host: '127.0.0.1',
@@ -182,9 +240,9 @@ test('华盛交易密码 stays in secure integration state and is redacted from 
   assert.match(integrationRepository.content ?? '', /trading-password-secret/)
 
   await executePortfolioClientCommand(portfolio, {
-    type: 'update-asset-account',
+    type: 'update-account',
     workspaceId,
-    assetAccountId,
+    accountId,
     input: {
       name: '华盛通长期账户',
       type: 'Hstong',
@@ -202,7 +260,7 @@ test('华盛交易密码 stays in secure integration state and is redacted from 
   assert.match(integrationRepository.content ?? '', /trading-password-secret/)
 })
 
-test('legacy holder backups are rejected after the one-time migration boundary', async () => {
+test('pre-tag portfolio data is rejected without compatibility migration', async () => {
   const portfolioRepository = new MemoryRepository()
   const integrationRepository = new MemoryRepository()
   const legacyWorkspace = {
@@ -212,9 +270,9 @@ test('legacy holder backups are rejected after the one-time migration boundary',
     exchangeRateProvider: 'coinbase',
     exchangeRateRefreshIntervalMinutes: 15,
     holders: [{ id: 'holder-1', name: '家庭' }],
-    assetAccounts: [
+    accounts: [
       {
-        id: 'asset-account-1',
+        id: 'account-1',
         name: '银行卡',
         type: 'General',
         holderId: 'holder-1',

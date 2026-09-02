@@ -8,6 +8,6 @@
   </defs>
   <rect width="600" height="600" fill="#f7f7f5"/>
   <rect x="600" width="600" height="600" fill="#151515"/>
-  <image href="chromie-logo-knot-v7.svg" x="70" y="70" width="460" height="460"/>
-  <image href="chromie-logo-knot-v7.svg" x="670" y="70" width="460" height="460" filter="url(#invert)"/>
+  <image href="chromie-logo-knot.svg" x="70" y="70" width="460" height="460"/>
+  <image href="chromie-logo-knot.svg" x="670" y="70" width="460" height="460" filter="url(#invert)"/>
 </svg>

@@ -86,7 +86,7 @@ function setDevelopmentAppIcon(): void {
   if (process.platform !== 'darwin' || app.isPackaged) return
 
   const icon = nativeImage.createFromPath(
-    join(__dirname, '../../resources/chromie-app-icon-knot-v7.png')
+    join(__dirname, '../../resources/chromie-app-icon-knot.png')
   )
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }

@@ -92,13 +92,13 @@ export function registerDesktopIpc(
     return executePortfolioClientCommand(portfolio, command)
   })
   ipcMain.handle(
-    'portfolio:sync-asset-account',
-    (event, workspaceId: unknown, assetAccountId: unknown) => {
+    'portfolio:sync-account',
+    (event, workspaceId: unknown, accountId: unknown) => {
       assertTrustedSender(event, validateSender)
-      if (typeof workspaceId !== 'string' || typeof assetAccountId !== 'string') {
+      if (typeof workspaceId !== 'string' || typeof accountId !== 'string') {
         throw new Error('资产账户同步请求无效')
       }
-      return portfolio.syncAssetAccount(workspaceId, assetAccountId)
+      return portfolio.syncAccount(workspaceId, accountId)
     }
   )
   ipcMain.handle('portfolio:inspect-backup', (event, content: unknown) => {

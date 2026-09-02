@@ -54,9 +54,9 @@ declare global {
       portfolio?: {
         load: () => Promise<PortfolioClientLoadResponse>
         execute: (command: PortfolioCommand) => Promise<PortfolioClientCommandResponse>
-        syncAssetAccount: (
+        syncAccount: (
           workspaceId: string,
-          assetAccountId: string
+          accountId: string
         ) => Promise<PortfolioSyncResponse>
         onChanged: (listener: () => void) => () => void
         inspectBackup: (content: string) => Promise<WorkspaceBackup | null>

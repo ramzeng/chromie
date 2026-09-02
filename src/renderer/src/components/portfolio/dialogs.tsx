@@ -13,7 +13,6 @@ import {
   Copy,
   Download,
   ExternalLink,
-  FolderTree,
   Plus,
   SlidersHorizontal,
   Trash2,
@@ -24,14 +23,19 @@ import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import {
   Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
   ComboboxContent,
   ComboboxEmpty,
   ComboboxInput,
   ComboboxItem,
-  ComboboxList
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
+  useComboboxAnchor
 } from '@/components/ui/combobox'
 import {
   Dialog,
@@ -78,6 +82,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Spinner } from '@/components/ui/spinner'
 import { Switch } from '@/components/ui/switch'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   Table,
   TableBody,
@@ -88,10 +93,11 @@ import {
 } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
 import type { McpAccessSettings, McpConnectionSettings } from '@/lib/mcp'
+import { TagColorDot } from './tag-badge'
 import { AccountTypeIcon } from './view-helpers'
 import {
   BASE_CURRENCIES,
-  assetAccountTypeLabels,
+  accountTypeLabels,
   defaultCurrencyByMarket,
   DEFAULT_BASE_CURRENCY,
   DEFAULT_EXCHANGE_RATE_PROVIDER,
@@ -103,25 +109,27 @@ import {
   DEFAULT_IBKR_GATEWAY_HOST,
   DEFAULT_IBKR_GATEWAY_PORT,
   DEFAULT_SYNC_INTERVAL,
+  DEFAULT_TAG_COLOR,
   exchangeRateProviderLabels,
   EXCHANGE_RATE_PROVIDERS,
   MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   marketMeta,
   marketOrder,
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
-  type AssetAccount,
-  type AssetAccountIntegrationView,
-  type AssetAccountInput,
-  type AssetAccountType,
+  TAG_COLORS,
+  tagColorLabels,
+  type Account,
+  type AccountIntegrationView,
+  type AccountInput,
+  type AccountType,
   type BaseCurrency,
   type ExchangeRateProvider,
-  type AccountGroup,
-  type AccountGroupInput,
   type Market,
   type Position,
-  type PositionGroup,
-  type PositionGroupInput,
   type PositionInput,
+  type Tag,
+  type TagColor,
+  type TagInput,
   type Workspace,
   type WorkspaceInput,
   type WorkspaceSettingsInput
@@ -192,7 +200,7 @@ const DISABLED_MCP_ACCESS: McpAccessSettings = {
   allowWrite: false
 }
 
-const ASSET_ACCOUNT_TYPES: readonly AssetAccountType[] = [
+const ACCOUNT_TYPES: readonly AccountType[] = [
   'Futu',
   'Hstong',
   'Ibkr',
@@ -208,6 +216,338 @@ const ASSET_ACCOUNT_TYPES: readonly AssetAccountType[] = [
 const POSITION_CURRENCIES = [
   ...new Set([...BASE_CURRENCIES, ...Object.values(defaultCurrencyByMarket)])
 ].filter((currency) => currency !== 'USDT')
+
+function defaultAccountName(type: AccountType): string {
+  return `我的${accountTypeLabels[type]}`
+}
+
+function randomTagColor(): TagColor {
+  const color = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)]
+  return color ?? DEFAULT_TAG_COLOR
+}
+
+function TagSelector({
+  tags,
+  selectedIds,
+  onSelectedIdsChange,
+  onCreateTag
+}: {
+  tags: Tag[]
+  selectedIds: string[]
+  onSelectedIdsChange: (tagIds: string[]) => void
+  onCreateTag: (input: TagInput) => Promise<string>
+}) {
+  const fieldId = useId()
+  const anchor = useComboboxAnchor()
+  const [open, setOpen] = useState(false)
+  const [tagDialogOpen, setTagDialogOpen] = useState(false)
+  const tagIds = tags.map((tag) => tag.id)
+
+  function findTag(tagId: string): Tag | undefined {
+    return tags.find((tag) => tag.id === tagId)
+  }
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={fieldId}>标签</FieldLabel>
+      <Combobox
+        multiple
+        autoHighlight
+        items={tagIds}
+        value={selectedIds}
+        open={open}
+        onOpenChange={setOpen}
+        onValueChange={onSelectedIdsChange}
+        itemToStringLabel={(tagId) => findTag(tagId)?.name ?? ''}
+        itemToStringValue={(tagId) => tagId}
+        filter={(tagId, query) =>
+          (findTag(tagId)?.name ?? '')
+            .toLocaleLowerCase()
+            .includes(query.trim().toLocaleLowerCase())
+        }
+      >
+        <ComboboxChips ref={anchor}>
+          <ComboboxValue>
+            {(values: string[]) => (
+              <>
+                {values.map((tagId) => {
+                  const tag = findTag(tagId)
+                  return tag ? (
+                    <ComboboxChip key={tagId}>
+                      <TagColorDot color={tag.color} />
+                      {tag.name}
+                    </ComboboxChip>
+                  ) : null
+                })}
+                <ComboboxChipsInput
+                  id={fieldId}
+                  placeholder={selectedIds.length ? undefined : '选择标签…'}
+                />
+              </>
+            )}
+          </ComboboxValue>
+          <ComboboxTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label="选择标签"
+              />
+            }
+          />
+        </ComboboxChips>
+        <ComboboxContent anchor={anchor}>
+          {tags.length > 0 && (
+            <>
+              <ComboboxEmpty>未找到标签</ComboboxEmpty>
+              <ComboboxList>
+                {(tagId: string) => {
+                  const tag = findTag(tagId)
+                  return tag ? (
+                    <ComboboxItem key={tagId} value={tagId}>
+                      <TagColorDot color={tag.color} />
+                      {tag.name}
+                    </ComboboxItem>
+                  ) : null
+                }}
+              </ComboboxList>
+              <Separator />
+            </>
+          )}
+          <div className="p-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full justify-start"
+              onClick={() => {
+                setOpen(false)
+                setTagDialogOpen(true)
+              }}
+            >
+              <Plus data-icon="inline-start" />
+              添加标签
+            </Button>
+          </div>
+        </ComboboxContent>
+      </Combobox>
+      <TagDialog
+        open={tagDialogOpen}
+        onOpenChange={setTagDialogOpen}
+        onSubmit={async (input) => {
+          const tagId = await onCreateTag(input)
+          if (!selectedIds.includes(tagId)) {
+            onSelectedIdsChange([...selectedIds, tagId])
+          }
+        }}
+      />
+    </Field>
+  )
+}
+
+export function TagDialog({
+  open,
+  onOpenChange,
+  tag,
+  onSubmit
+}: BaseDialogProps & {
+  tag?: Tag
+  onSubmit: (input: TagInput) => Promise<void>
+}) {
+  const [name, setName] = useState('')
+  const [color, setColor] = useState<TagColor>()
+  const [error, setError] = useState('')
+  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
+    useSubmissionGuard()
+
+  useEffect(() => {
+    if (!open) return
+    setName(tag?.name ?? '')
+    setColor(tag?.color)
+    setError('')
+  }, [open, tag])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    if (submissionInFlight.current) return
+    const normalizedName = name.trim()
+    if (!normalizedName) {
+      setError('请输入名称')
+      return
+    }
+    if (!beginSubmission()) return
+    try {
+      const resolvedColor = color ?? randomTagColor()
+      setColor(resolvedColor)
+      await onSubmit({ name: normalizedName, color: resolvedColor })
+      onOpenChange(false)
+    } catch (submitError) {
+      reportOperationError(tag ? '更新标签失败' : '添加标签失败', submitError)
+    } finally {
+      endSubmission()
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) onOpenChange(nextOpen)
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{tag ? '编辑标签' : '添加标签'}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {tag ? '修改标签名称和颜色' : '添加可用于资产账户和持仓的标签'}
+          </DialogDescription>
+        </DialogHeader>
+        <form className="contents" onSubmit={handleSubmit}>
+          <DialogBody>
+            <FieldGroup>
+              <Field data-invalid={Boolean(error)}>
+                <FieldLabel htmlFor="tag-name">名称</FieldLabel>
+                <Input
+                  id="tag-name"
+                  value={name}
+                  aria-invalid={Boolean(error)}
+                  aria-describedby={error ? 'tag-name-error' : undefined}
+                  onChange={(event) => {
+                    setName(event.target.value)
+                    setError('')
+                  }}
+                  placeholder="输入名称"
+                  maxLength={40}
+                  autoFocus
+                />
+                {error && <FieldMessage id="tag-name-error">{error}</FieldMessage>}
+              </Field>
+              <Field>
+                <FieldLabel id="tag-color-label">颜色</FieldLabel>
+                <ToggleGroup
+                  type="single"
+                  value={color}
+                  aria-labelledby="tag-color-label"
+                  className="justify-start"
+                  onValueChange={(value) => {
+                    setColor(value ? value as TagColor : undefined)
+                  }}
+                >
+                  {TAG_COLORS.map((tagColor) => (
+                    <ToggleGroupItem
+                      key={tagColor}
+                      value={tagColor}
+                      aria-label={tagColorLabels[tagColor]}
+                      title={tagColorLabels[tagColor]}
+                      className="group size-10 min-w-10 rounded-full bg-transparent p-0 data-[state=on]:bg-transparent"
+                    >
+                      <TagColorDot
+                        color={tagColor}
+                        className="size-4 transition-shadow group-data-[state=on]:ring-2 group-data-[state=on]:ring-ring group-data-[state=on]:ring-offset-2 group-data-[state=on]:ring-offset-background"
+                      />
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </Field>
+            </FieldGroup>
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => onOpenChange(false)}
+            >
+              取消
+            </Button>
+            <Button type="submit" disabled={submitting} aria-busy={submitting}>
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting
+                ? tag
+                  ? '保存中…'
+                  : '添加中…'
+                : tag
+                  ? '保存'
+                  : '添加'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function TagAssignmentDialog({
+  open,
+  onOpenChange,
+  title,
+  tags,
+  selectedTagIds,
+  onCreateTag,
+  onSubmit
+}: BaseDialogProps & {
+  title: string
+  tags: Tag[]
+  selectedTagIds: string[]
+  onCreateTag: (input: TagInput) => Promise<string>
+  onSubmit: (tagIds: string[]) => Promise<string | null>
+}) {
+  const [tagIds, setTagIds] = useState<string[]>([])
+  const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
+
+  useEffect(() => {
+    if (open) setTagIds(selectedTagIds)
+    // Preserve edits when adding a tag refreshes the workspace in the background.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault()
+    if (!beginSubmission()) return
+    try {
+      const submitError = await onSubmit(tagIds)
+      if (submitError) {
+        reportOperationError('更新标签失败', submitError)
+        return
+      }
+      onOpenChange(false)
+    } catch (submitError) {
+      reportOperationError('更新标签失败', submitError)
+    } finally {
+      endSubmission()
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !submitting && onOpenChange(nextOpen)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <form className="contents" onSubmit={handleSubmit}>
+          <DialogBody>
+            <TagSelector
+              tags={tags}
+              selectedIds={tagIds}
+              onSelectedIdsChange={setTagIds}
+              onCreateTag={onCreateTag}
+            />
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Spinner data-icon="inline-start" />}
+              {submitting ? '保存中…' : '保存'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function McpSettingsSection({
   connection,
@@ -300,112 +640,6 @@ function McpSettingsSection({
         </div>
       )}
     </section>
-  )
-}
-
-export function AccountGroupDialog({
-  open,
-  onOpenChange,
-  group,
-  onSubmit
-}: BaseDialogProps & {
-  group?: AccountGroup
-  onSubmit: (input: AccountGroupInput) => Promise<void>
-}) {
-  const [name, setName] = useState('')
-  const [error, setError] = useState('')
-  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
-    useSubmissionGuard()
-
-  useEffect(() => {
-    if (!open) return
-    setName(group?.name ?? '')
-    setError('')
-  }, [group, open])
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault()
-    if (submissionInFlight.current) return
-    const normalizedName = name.trim()
-    if (!normalizedName) {
-      setError('请输入账户分组名称')
-      return
-    }
-    if (!beginSubmission()) return
-    try {
-      await onSubmit({ name: normalizedName })
-      onOpenChange(false)
-    } catch (submitError) {
-      reportOperationError(
-        group ? '更新账户分组失败' : '创建账户分组失败',
-        submitError
-      )
-    } finally {
-      endSubmission()
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!submitting) onOpenChange(nextOpen)
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{group ? '编辑账户分组' : '新建账户分组'}</DialogTitle>
-          <DialogDescription className="sr-only">把多个资产账户汇总到一起查看</DialogDescription>
-        </DialogHeader>
-        <form className="contents" onSubmit={handleSubmit}>
-          <DialogBody>
-            <FieldGroup>
-              <Field data-invalid={Boolean(error)}>
-                <FieldLabel htmlFor="account-group-name" className="sr-only">
-                  账户分组名称
-                </FieldLabel>
-                <Input
-                  id="account-group-name"
-                  aria-invalid={Boolean(error)}
-                  aria-describedby={error ? 'account-group-name-error' : undefined}
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.target.value)
-                    setError('')
-                  }}
-                  placeholder="输入账户分组名称"
-                  autoFocus
-                  maxLength={40}
-                />
-                {error && (
-                  <FieldMessage id="account-group-name-error">{error}</FieldMessage>
-                )}
-              </Field>
-            </FieldGroup>
-          </DialogBody>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => onOpenChange(false)}
-            >
-              取消
-            </Button>
-            <Button type="submit" disabled={submitting} aria-busy={submitting}>
-              {submitting && <Spinner data-icon="inline-start" />}
-              {submitting
-                ? group
-                  ? '保存中…'
-                  : '创建中…'
-                : group
-                  ? '保存'
-                  : '创建'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }
 
@@ -1077,538 +1311,19 @@ export function WorkspaceSettingsDialog({
   )
 }
 
-export function GroupAccountsDialog({
-  open,
-  onOpenChange,
-  group,
-  assetAccounts,
-  accountGroups,
-  onSubmit
-}: BaseDialogProps & {
-  group: AccountGroup
-  assetAccounts: AssetAccount[]
-  accountGroups: AccountGroup[]
-  onSubmit: (assetAccountIds: string[]) => Promise<string | null>
-}) {
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [query, setQuery] = useState('')
-  const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
-  const checkboxIdPrefix = useId()
-
-  useEffect(() => {
-    if (!open) return
-    setSelectedIds(group.assetAccountIds)
-    setQuery('')
-    // Background account syncs should not discard selections being edited.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.id, open])
-
-  const normalizedQuery = query.trim().toLowerCase()
-  const visibleAccounts = normalizedQuery
-    ? assetAccounts.filter((assetAccount) =>
-        [assetAccount.name, assetAccountTypeLabels[assetAccount.type]].some((value) =>
-          value.toLowerCase().includes(normalizedQuery)
-        )
-      )
-    : assetAccounts
-  const assignedGroupByAccountId = new Map(
-    accountGroups.flatMap((accountGroup) =>
-      accountGroup.id === group.id
-        ? []
-        : accountGroup.assetAccountIds.map(
-            (assetAccountId) => [assetAccountId, accountGroup.name] as const
-          )
-    )
-  )
-
-  function setAccountSelected(assetAccountId: string, selected: boolean): void {
-    if (assignedGroupByAccountId.has(assetAccountId)) return
-    setSelectedIds((current) =>
-      selected
-        ? current.includes(assetAccountId)
-          ? current
-          : [...current, assetAccountId]
-        : current.filter((item) => item !== assetAccountId)
-    )
-  }
-
-  async function handleSubmit(): Promise<void> {
-    if (!beginSubmission()) return
-    try {
-      const submitError = await onSubmit(selectedIds)
-      if (submitError) {
-        reportOperationError('更新账户分组失败', submitError)
-        return
-      }
-      onOpenChange(false)
-    } catch (submitError) {
-      reportOperationError('更新账户分组失败', submitError)
-    } finally {
-      endSubmission()
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!submitting) onOpenChange(nextOpen)
-      }}
-    >
-      <DialogContent className="max-h-[88vh] max-w-xl">
-        <DialogHeader>
-          <DialogTitle>管理“{group.name}”的资产账户</DialogTitle>
-          <DialogDescription>
-            每个资产账户只能加入一个账户分组，已属于其他分组的资产账户不可选择
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid content-start gap-4">
-          {assetAccounts.length > 0 && (
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索资产账户名称或类型"
-              autoFocus
-            />
-          )}
-          <div className="min-h-28 rounded-sm border bg-muted/10">
-          {visibleAccounts.length ? (
-            <div className="grid gap-1 p-3">
-              {visibleAccounts.map((assetAccount) => {
-                const selected = selectedIds.includes(assetAccount.id)
-                const assignedGroupName = assignedGroupByAccountId.get(assetAccount.id)
-                return (
-                  <Label
-                    key={assetAccount.id}
-                    htmlFor={`${checkboxIdPrefix}-${assetAccount.id}`}
-                    className={cn(
-                      'flex items-center gap-3 rounded-sm px-3 py-2.5 transition-colors',
-                      assignedGroupName
-                        ? 'cursor-not-allowed opacity-55'
-                        : 'cursor-pointer hover:bg-muted/70'
-                    )}
-                  >
-                    <Checkbox
-                      id={`${checkboxIdPrefix}-${assetAccount.id}`}
-                      checked={selected}
-                      disabled={Boolean(assignedGroupName)}
-                      onCheckedChange={(checked) => {
-                        if (checked !== 'indeterminate') {
-                          setAccountSelected(assetAccount.id, checked)
-                        }
-                      }}
-                    />
-                    <AccountTypeIcon type={assetAccount.type} className="size-7" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {assetAccount.name}
-                      </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {assetAccountTypeLabels[assetAccount.type]} · {assetAccount.positions.length} 项持仓
-                      </span>
-                    </span>
-                    {assignedGroupName && (
-                      <span className="max-w-40 shrink-0 truncate text-xs text-muted-foreground">
-                        已在 {assignedGroupName}
-                      </span>
-                    )}
-                  </Label>
-                )
-              })}
-            </div>
-          ) : (
-            <Empty className="min-h-32 px-6 py-8 md:p-8">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <FolderTree data-icon="inline-start" />
-                </EmptyMedia>
-                <EmptyTitle>
-                  {assetAccounts.length ? '没有匹配的资产账户' : '暂无可选资产账户'}
-                </EmptyTitle>
-                <EmptyDescription>
-                  {assetAccounts.length ? '请尝试调整搜索关键词' : '请先添加资产账户'}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
-          </div>
-        </DialogBody>
-        <DialogFooter className="items-center sm:justify-between">
-          <p className="text-xs text-muted-foreground">
-            已选择 {selectedIds.length} 个资产账户
-          </p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => onOpenChange(false)}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              disabled={submitting}
-              aria-busy={submitting}
-              onClick={() => void handleSubmit()}
-            >
-              {submitting && <Spinner data-icon="inline-start" />}
-              {submitting ? '保存中…' : '保存'}
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-export function PositionGroupDialog({
-  open,
-  onOpenChange,
-  group,
-  onSubmit
-}: BaseDialogProps & {
-  group?: PositionGroup
-  onSubmit: (input: PositionGroupInput) => Promise<void>
-}) {
-  const [name, setName] = useState('')
-  const [error, setError] = useState('')
-  const { submitting, submissionInFlight, beginSubmission, endSubmission } =
-    useSubmissionGuard()
-
-  useEffect(() => {
-    if (!open) return
-    setName(group?.name ?? '')
-    setError('')
-  }, [group, open])
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault()
-    if (submissionInFlight.current) return
-    if (!name.trim()) {
-      setError('请输入持仓分组名称')
-      return
-    }
-    if (!beginSubmission()) return
-    try {
-      await onSubmit({ name })
-      onOpenChange(false)
-    } catch (submitError) {
-      reportOperationError(group ? '更新持仓分组失败' : '创建持仓分组失败', submitError)
-    } finally {
-      endSubmission()
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!submitting) onOpenChange(nextOpen)
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{group ? '编辑持仓分组' : '新建持仓分组'}</DialogTitle>
-          <DialogDescription className="sr-only">
-            把不同资产账户中的持仓汇总到一起查看
-          </DialogDescription>
-        </DialogHeader>
-        <form className="contents" onSubmit={handleSubmit}>
-          <DialogBody>
-            <FieldGroup>
-              <Field data-invalid={Boolean(error)}>
-                <FieldLabel htmlFor="position-group-name" className="sr-only">
-                  持仓分组名称
-                </FieldLabel>
-                <Input
-                  id="position-group-name"
-                  aria-invalid={Boolean(error)}
-                  aria-describedby={error ? 'position-group-name-error' : undefined}
-                  value={name}
-                  onChange={(event) => {
-                    setName(event.target.value)
-                    setError('')
-                  }}
-                  placeholder="例如：长期持有"
-                  autoFocus
-                  maxLength={40}
-                />
-                {error && (
-                  <FieldMessage id="position-group-name-error">{error}</FieldMessage>
-                )}
-              </Field>
-            </FieldGroup>
-          </DialogBody>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => onOpenChange(false)}
-            >
-              取消
-            </Button>
-            <Button type="submit" disabled={submitting} aria-busy={submitting}>
-              {submitting && <Spinner data-icon="inline-start" />}
-              {submitting
-                ? group
-                  ? '保存中…'
-                  : '创建中…'
-                : group
-                  ? '保存'
-                  : '创建'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-export function GroupPositionsDialog({
-  open,
-  onOpenChange,
-  group,
-  assetAccounts,
-  accountGroups,
-  positionGroups,
-  onSubmit
-}: BaseDialogProps & {
-  group: PositionGroup
-  assetAccounts: AssetAccount[]
-  accountGroups: AccountGroup[]
-  positionGroups: PositionGroup[]
-  onSubmit: (positionIds: string[]) => Promise<string | null>
-}) {
-  const [selectedKeys, setSelectedKeys] = useState<string[]>([])
-  const [query, setQuery] = useState('')
-  const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
-  const checkboxIdPrefix = useId()
-
-  useEffect(() => {
-    if (!open) return
-    setSelectedKeys(group.positionIds)
-    setQuery('')
-    // Only reset when the dialog opens or switches to another group. Background
-    // account syncs should not discard selections that are still being edited.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [group.id, open])
-
-  const normalizedQuery = query.trim().toLowerCase()
-  const visibleAccounts = assetAccounts.flatMap((account) => {
-    const positions = normalizedQuery
-      ? account.positions.filter((position) =>
-          [
-            account.name,
-            position.symbol,
-            position.name,
-            marketMeta[position.market].label,
-            position.currency
-          ].some((value) => value.toLowerCase().includes(normalizedQuery))
-        )
-      : account.positions
-    return positions.length ? [{ account, positions }] : []
-  })
-  const positionCount = assetAccounts.reduce(
-    (total, account) => total + account.positions.length,
-    0
-  )
-  const assignedGroupByPositionId = new Map(
-    positionGroups.flatMap((positionGroup) =>
-      positionGroup.id === group.id
-        ? []
-        : positionGroup.positionIds.map(
-            (positionId) => [positionId, positionGroup.name] as const
-          )
-    )
-  )
-  const accountGroupByAssetAccountId = new Map(
-    accountGroups.flatMap((accountGroup) =>
-      accountGroup.assetAccountIds.map(
-        (assetAccountId) => [assetAccountId, accountGroup.name] as const
-      )
-    )
-  )
-
-  function setPositionSelected(positionId: string, selected: boolean): void {
-    if (assignedGroupByPositionId.has(positionId)) return
-    setSelectedKeys((current) =>
-      selected
-        ? current.includes(positionId)
-          ? current
-          : [...current, positionId]
-        : current.filter((item) => item !== positionId)
-    )
-  }
-
-  async function handleSubmit(): Promise<void> {
-    if (!beginSubmission()) return
-    try {
-      const submitError = await onSubmit(selectedKeys)
-      if (submitError) {
-        reportOperationError('保存分组持仓失败', submitError)
-        return
-      }
-      onOpenChange(false)
-    } catch (submitError) {
-      reportOperationError('保存分组持仓失败', submitError)
-    } finally {
-      endSubmission()
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!submitting) onOpenChange(nextOpen)
-      }}
-    >
-      <DialogContent className="h-[720px] max-h-[calc(100vh-2rem)] max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>管理“{group.name}”的持仓</DialogTitle>
-          <DialogDescription>
-            每个持仓只能加入一个分组，已属于其他分组的持仓不可选择
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden">
-          {positionCount > 0 && (
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索资产账户、代码或名称"
-              autoFocus
-            />
-          )}
-          <ScrollArea className="min-h-28 rounded-sm border bg-muted/10">
-          {visibleAccounts.length ? (
-            <div className="divide-y">
-              {visibleAccounts.map(({ account, positions }) => (
-                <section key={account.id} className="p-3">
-                  <div className="mb-2 flex min-w-0 items-center justify-between gap-3 px-1">
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
-                      <p className="min-w-0 truncate text-sm font-medium">
-                        {account.name}
-                      </p>
-                      <Badge
-                        variant="secondary"
-                        className="max-w-40 shrink-0 truncate"
-                      >
-                        {accountGroupByAssetAccountId.get(account.id) ?? '未分组'}
-                      </Badge>
-                    </div>
-                    <p className="shrink-0 text-xs text-muted-foreground">
-                      {positions.length} 项
-                    </p>
-                  </div>
-                  <div className="grid gap-1">
-                    {positions.map((position) => {
-                      const selected = selectedKeys.includes(position.id)
-                      const assignedGroupName = assignedGroupByPositionId.get(position.id)
-                      return (
-                        <Label
-                          key={position.id}
-                          htmlFor={`${checkboxIdPrefix}-${position.id}`}
-                          className={cn(
-                            'flex items-center gap-3 rounded-sm px-3 py-2.5 transition-colors',
-                            assignedGroupName
-                              ? 'cursor-not-allowed opacity-55'
-                              : 'cursor-pointer hover:bg-muted/70'
-                          )}
-                        >
-                          <Checkbox
-                            id={`${checkboxIdPrefix}-${position.id}`}
-                            checked={selected}
-                            disabled={Boolean(assignedGroupName)}
-                            onCheckedChange={(checked) => {
-                              if (checked !== 'indeterminate') {
-                                setPositionSelected(position.id, checked)
-                              }
-                            }}
-                          />
-                          <span className="w-10 shrink-0 font-mono text-xs text-muted-foreground">
-                            {marketMeta[position.market].shortLabel}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">
-                              {position.symbol}
-                            </span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {position.name}
-                            </span>
-                          </span>
-                          {assignedGroupName && (
-                            <span className="max-w-40 shrink-0 truncate text-right text-xs text-muted-foreground">
-                              已在 {assignedGroupName}
-                            </span>
-                          )}
-                        </Label>
-                      )
-                    })}
-                  </div>
-                </section>
-              ))}
-            </div>
-          ) : (
-            <Empty className="min-h-32 px-6 py-8 md:p-8">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <Coins data-icon="inline-start" />
-                </EmptyMedia>
-                <EmptyTitle>
-                  {positionCount ? '没有匹配的持仓' : '暂无可选持仓'}
-                </EmptyTitle>
-                <EmptyDescription>
-                  {positionCount
-                    ? '请尝试调整搜索关键词'
-                    : '请先在资产账户中添加或同步持仓'}
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
-          </ScrollArea>
-        </DialogBody>
-        <DialogFooter className="items-center sm:justify-between">
-          <p className="text-xs text-muted-foreground">已选择 {selectedKeys.length} 项持仓</p>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => onOpenChange(false)}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              disabled={submitting}
-              aria-busy={submitting}
-              onClick={() => void handleSubmit()}
-            >
-              {submitting && <Spinner data-icon="inline-start" />}
-              {submitting ? '保存中…' : '保存'}
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 export function ImportBackupDialog({
   open,
   onOpenChange,
   workspaceName,
-  assetAccountCount,
-  groupCount,
+  accountCount,
+  tagCount,
   positionCount,
   snapshotCount,
   onConfirm
 }: BaseDialogProps & {
   workspaceName: string
-  assetAccountCount: number
-  groupCount: number
+  accountCount: number
+  tagCount: number
   positionCount: number
   snapshotCount: number
   onConfirm: () => void | Promise<void>
@@ -1637,7 +1352,7 @@ export function ImportBackupDialog({
         <DialogHeader>
           <DialogTitle>导入“{workspaceName}”？</DialogTitle>
           <DialogDescription>
-            包含 {assetAccountCount} 个资产账户、{groupCount} 个持仓分组、{positionCount}{' '}
+            包含 {accountCount} 个资产账户、{tagCount} 个标签、{positionCount}{' '}
             项持仓和 {snapshotCount} 个历史快照，将作为新工作区导入
           </DialogDescription>
         </DialogHeader>
@@ -1721,19 +1436,24 @@ export function ExportBackupDialog({
   )
 }
 
-export function AssetAccountDialog({
+export function AccountDialog({
   open,
   onOpenChange,
   account,
   integration,
+  tags,
+  onCreateTag,
   onSubmit
 }: BaseDialogProps & {
-  account?: AssetAccount
-  integration?: AssetAccountIntegrationView
-  onSubmit: (input: AssetAccountInput) => Promise<void>
+  account?: Account
+  integration?: AccountIntegrationView
+  tags: Tag[]
+  onCreateTag: (input: TagInput) => Promise<string>
+  onSubmit: (input: AccountInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
-  const [type, setType] = useState<AssetAccountType>('Futu')
+  const [tagIds, setTagIds] = useState<string[]>([])
+  const [type, setType] = useState<AccountType>('Futu')
   const [autoSync, setAutoSync] = useState(false)
   const [syncHost, setSyncHost] = useState(DEFAULT_FUTU_OPEND_HOST)
   const [syncPort, setSyncPort] = useState(String(DEFAULT_FUTU_OPEND_PORT))
@@ -1771,7 +1491,8 @@ export function AssetAccountDialog({
 
   useEffect(() => {
     if (!open) return
-    setName(account?.name ?? assetAccountTypeLabels[account?.type ?? 'Futu'])
+    setName(account?.name ?? defaultAccountName(account?.type ?? 'Futu'))
+    setTagIds(account?.tagIds ?? [])
     setType(account?.type ?? 'Futu')
     setAutoSync(Boolean(account?.sync && integration))
     setSyncHost(
@@ -1824,10 +1545,10 @@ export function AssetAccountDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.id, open])
 
-  function handleAccountTypeChange(nextType: AssetAccountType): void {
+  function handleAccountTypeChange(nextType: AccountType): void {
     setName((currentName) =>
-      !currentName.trim() || currentName === assetAccountTypeLabels[type]
-        ? assetAccountTypeLabels[nextType]
+      !currentName.trim() || currentName === defaultAccountName(type)
+        ? defaultAccountName(nextType)
         : currentName
     )
     setType(nextType)
@@ -1956,6 +1677,7 @@ export function AssetAccountDialog({
       await onSubmit({
           name: name.trim(),
           type,
+          tagIds,
           ...(syncEnabled
             ? {
               sync: {
@@ -2069,35 +1791,35 @@ export function AssetAccountDialog({
         <DialogHeader>
           <DialogTitle>{account ? '编辑资产账户' : '添加资产账户'}</DialogTitle>
           <DialogDescription className="sr-only">
-            设置资产账户名称、类型和同步来源
+            设置资产账户名称、类型、标签和同步来源
           </DialogDescription>
         </DialogHeader>
         <form
           className="contents"
           aria-invalid={Boolean(error)}
-          aria-describedby={error ? 'asset-account-error' : undefined}
+          aria-describedby={error ? 'account-error' : undefined}
           onSubmit={handleSubmit}
         >
           <DialogBody>
           <FieldGroup className="gap-4">
           <Field>
-            <FieldLabel htmlFor="asset-account-type">账户类型</FieldLabel>
+            <FieldLabel htmlFor="account-type">账户类型</FieldLabel>
             <Combobox
-              items={ASSET_ACCOUNT_TYPES}
+              items={ACCOUNT_TYPES}
               value={type}
               onValueChange={(nextType) => {
                 if (nextType) handleAccountTypeChange(nextType)
               }}
-              itemToStringLabel={(accountType) => assetAccountTypeLabels[accountType]}
+              itemToStringLabel={(accountType) => accountTypeLabels[accountType]}
               itemToStringValue={(accountType) => accountType}
               filter={(accountType, query) =>
-                `${accountType} ${assetAccountTypeLabels[accountType]}`
+                `${accountType} ${accountTypeLabels[accountType]}`
                   .toLocaleLowerCase()
                   .includes(query.trim().toLocaleLowerCase())
               }
             >
               <ComboboxInput
-                id="asset-account-type"
+                id="account-type"
                 className="w-full"
                 placeholder="搜索账户类型…"
                 autoFocus
@@ -2105,10 +1827,10 @@ export function AssetAccountDialog({
               <ComboboxContent>
                 <ComboboxEmpty>未找到账户类型</ComboboxEmpty>
                 <ComboboxList>
-                  {(accountType: AssetAccountType) => (
+                  {(accountType: AccountType) => (
                     <ComboboxItem key={accountType} value={accountType}>
                       <AccountTypeIcon type={accountType} className="size-4" />
-                      <span>{assetAccountTypeLabels[accountType]}</span>
+                      <span>{accountTypeLabels[accountType]}</span>
                     </ComboboxItem>
                   )}
                 </ComboboxList>
@@ -2116,9 +1838,9 @@ export function AssetAccountDialog({
             </Combobox>
           </Field>
           <Field>
-            <FieldLabel htmlFor="asset-account-name">账户名称</FieldLabel>
+            <FieldLabel htmlFor="account-name">账户名称</FieldLabel>
             <Input
-              id="asset-account-name"
+              id="account-name"
               value={name}
               onChange={(event) => {
                 setName(event.target.value)
@@ -2128,11 +1850,17 @@ export function AssetAccountDialog({
               maxLength={50}
             />
           </Field>
+          <TagSelector
+            tags={tags}
+            selectedIds={tagIds}
+            onSelectedIdsChange={setTagIds}
+            onCreateTag={onCreateTag}
+          />
           {supportsAutoSync && (
             <Field className="flex-row items-center justify-between gap-4 rounded-sm border bg-muted/20 px-4 py-3.5">
-              <FieldLabel htmlFor="asset-account-auto-sync">自动同步</FieldLabel>
+              <FieldLabel htmlFor="account-auto-sync">自动同步</FieldLabel>
               <Switch
-                id="asset-account-auto-sync"
+                id="account-auto-sync"
                 checked={autoSync}
                 onCheckedChange={(checked) => {
                   setAutoSync(checked)
@@ -2149,9 +1877,9 @@ export function AssetAccountDialog({
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="asset-account-sync-host">地址</FieldLabel>
+                  <FieldLabel htmlFor="account-sync-host">地址</FieldLabel>
                   <Input
-                    id="asset-account-sync-host"
+                    id="account-sync-host"
                     value={syncHost}
                     onChange={(event) => {
                       setSyncHost(event.target.value)
@@ -2162,9 +1890,9 @@ export function AssetAccountDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="asset-account-sync-port">端口</FieldLabel>
+                  <FieldLabel htmlFor="account-sync-port">端口</FieldLabel>
                   <Input
-                    id="asset-account-sync-port"
+                    id="account-sync-port"
                     type="number"
                     value={syncPort}
                     onChange={(event) => {
@@ -2179,9 +1907,9 @@ export function AssetAccountDialog({
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="asset-account-sync-key">密钥</FieldLabel>
+                  <FieldLabel htmlFor="account-sync-key">密钥</FieldLabel>
                   <Input
-                    id="asset-account-sync-key"
+                    id="account-sync-key"
                     type="password"
                     value={syncKey}
                     onChange={(event) => {
@@ -2200,9 +1928,9 @@ export function AssetAccountDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="asset-account-sync-interval">间隔（秒）</FieldLabel>
+                  <FieldLabel htmlFor="account-sync-interval">间隔（秒）</FieldLabel>
                   <Input
-                    id="asset-account-sync-interval"
+                    id="account-sync-interval"
                     type="number"
                     value={syncInterval}
                     onChange={(event) => {
@@ -2224,9 +1952,9 @@ export function AssetAccountDialog({
                 <OfficialIntegrationDocsLink provider="Okx" />
               </div>
               <Field>
-                <FieldLabel htmlFor="asset-account-okx-api-key">API Key</FieldLabel>
+                <FieldLabel htmlFor="account-okx-api-key">API Key</FieldLabel>
                 <Input
-                  id="asset-account-okx-api-key"
+                  id="account-okx-api-key"
                   value={okxApiKey}
                   onChange={(event) => {
                     setOkxApiKey(event.target.value)
@@ -2243,9 +1971,9 @@ export function AssetAccountDialog({
               </Field>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="asset-account-okx-secret-key">Secret Key</FieldLabel>
+                  <FieldLabel htmlFor="account-okx-secret-key">Secret Key</FieldLabel>
                   <Input
-                    id="asset-account-okx-secret-key"
+                    id="account-okx-secret-key"
                     type="password"
                     value={okxSecretKey}
                     onChange={(event) => {
@@ -2262,9 +1990,9 @@ export function AssetAccountDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="asset-account-okx-passphrase">Passphrase</FieldLabel>
+                  <FieldLabel htmlFor="account-okx-passphrase">Passphrase</FieldLabel>
                   <Input
-                    id="asset-account-okx-passphrase"
+                    id="account-okx-passphrase"
                     type="password"
                     value={okxPassphrase}
                     onChange={(event) => {
@@ -2282,9 +2010,9 @@ export function AssetAccountDialog({
                 </Field>
               </div>
               <Field className="max-w-72">
-                <FieldLabel htmlFor="asset-account-okx-sync-interval">间隔（秒）</FieldLabel>
+                <FieldLabel htmlFor="account-okx-sync-interval">间隔（秒）</FieldLabel>
                 <Input
-                  id="asset-account-okx-sync-interval"
+                  id="account-okx-sync-interval"
                   type="number"
                   value={syncInterval}
                   onChange={(event) => {
@@ -2306,9 +2034,9 @@ export function AssetAccountDialog({
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="asset-account-ibkr-host">地址</FieldLabel>
+                  <FieldLabel htmlFor="account-ibkr-host">地址</FieldLabel>
                   <Input
-                    id="asset-account-ibkr-host"
+                    id="account-ibkr-host"
                     value={ibkrGatewayHost}
                     onChange={(event) => {
                       setIbkrGatewayHost(event.target.value)
@@ -2319,9 +2047,9 @@ export function AssetAccountDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="asset-account-ibkr-port">端口</FieldLabel>
+                  <FieldLabel htmlFor="account-ibkr-port">端口</FieldLabel>
                   <Input
-                    id="asset-account-ibkr-port"
+                    id="account-ibkr-port"
                     type="number"
                     value={ibkrGatewayPort}
                     onChange={(event) => {
@@ -2335,9 +2063,9 @@ export function AssetAccountDialog({
                 </Field>
               </div>
               <Field className="max-w-72">
-                <FieldLabel htmlFor="asset-account-ibkr-sync-interval">间隔（秒）</FieldLabel>
+                <FieldLabel htmlFor="account-ibkr-sync-interval">间隔（秒）</FieldLabel>
                 <Input
-                  id="asset-account-ibkr-sync-interval"
+                  id="account-ibkr-sync-interval"
                   type="number"
                   value={syncInterval}
                   onChange={(event) => {
@@ -2360,9 +2088,9 @@ export function AssetAccountDialog({
               <FieldGroup className="gap-3">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field>
-                    <FieldLabel htmlFor="asset-account-hstong-host">地址</FieldLabel>
+                    <FieldLabel htmlFor="account-hstong-host">地址</FieldLabel>
                     <Input
-                      id="asset-account-hstong-host"
+                      id="account-hstong-host"
                       value={hstongGatewayHost}
                       onChange={(event) => {
                         setHstongGatewayHost(event.target.value)
@@ -2373,9 +2101,9 @@ export function AssetAccountDialog({
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="asset-account-hstong-port">端口</FieldLabel>
+                    <FieldLabel htmlFor="account-hstong-port">端口</FieldLabel>
                     <Input
-                      id="asset-account-hstong-port"
+                      id="account-hstong-port"
                       type="number"
                       value={hstongGatewayPort}
                       onChange={(event) => {
@@ -2390,11 +2118,11 @@ export function AssetAccountDialog({
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field>
-                    <FieldLabel htmlFor="asset-account-hstong-password">
+                    <FieldLabel htmlFor="account-hstong-password">
                       交易密码（可选）
                     </FieldLabel>
                     <Input
-                      id="asset-account-hstong-password"
+                      id="account-hstong-password"
                       type="password"
                       value={hstongTradingPassword}
                       onChange={(event) => {
@@ -2411,11 +2139,11 @@ export function AssetAccountDialog({
                     />
                   </Field>
                   <Field>
-                    <FieldLabel htmlFor="asset-account-hstong-sync-interval">
+                    <FieldLabel htmlFor="account-hstong-sync-interval">
                       间隔（秒）
                     </FieldLabel>
                     <Input
-                      id="asset-account-hstong-sync-interval"
+                      id="account-hstong-sync-interval"
                       type="number"
                       value={syncInterval}
                       onChange={(event) => {
@@ -2438,9 +2166,9 @@ export function AssetAccountDialog({
                 <OfficialIntegrationDocsLink provider="Binance" />
               </div>
               <Field>
-                <FieldLabel htmlFor="asset-account-binance-api-key">API Key</FieldLabel>
+                <FieldLabel htmlFor="account-binance-api-key">API Key</FieldLabel>
                 <Input
-                  id="asset-account-binance-api-key"
+                  id="account-binance-api-key"
                   value={binanceApiKey}
                   onChange={(event) => {
                     setBinanceApiKey(event.target.value)
@@ -2456,9 +2184,9 @@ export function AssetAccountDialog({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="asset-account-binance-secret-key">Secret Key</FieldLabel>
+                <FieldLabel htmlFor="account-binance-secret-key">Secret Key</FieldLabel>
                 <Input
-                  id="asset-account-binance-secret-key"
+                  id="account-binance-secret-key"
                   type="password"
                   value={binanceSecretKey}
                   onChange={(event) => {
@@ -2475,9 +2203,9 @@ export function AssetAccountDialog({
                 />
               </Field>
               <Field className="max-w-72">
-                <FieldLabel htmlFor="asset-account-binance-sync-interval">间隔（秒）</FieldLabel>
+                <FieldLabel htmlFor="account-binance-sync-interval">间隔（秒）</FieldLabel>
                 <Input
-                  id="asset-account-binance-sync-interval"
+                  id="account-binance-sync-interval"
                   type="number"
                   value={syncInterval}
                   onChange={(event) => {
@@ -2491,7 +2219,7 @@ export function AssetAccountDialog({
               </Field>
             </div>
           )}
-          {error && <FieldMessage id="asset-account-error">{error}</FieldMessage>}
+          {error && <FieldMessage id="account-error">{error}</FieldMessage>}
           </FieldGroup>
           </DialogBody>
           <DialogFooter>
@@ -2524,9 +2252,13 @@ export function PositionDialog({
   open,
   onOpenChange,
   position,
+  tags,
+  onCreateTag,
   onSubmit
 }: BaseDialogProps & {
   position?: Position
+  tags: Tag[]
+  onCreateTag: (input: TagInput) => Promise<string>
   onSubmit: (input: PositionInput) => Promise<string | null>
 }) {
   const [market, setMarket] = useState<Market>('US')
@@ -2535,6 +2267,7 @@ export function PositionDialog({
   const [currency, setCurrency] = useState('USD')
   const [quantity, setQuantity] = useState('')
   const [price, setPrice] = useState('')
+  const [tagIds, setTagIds] = useState<string[]>([])
   const [error, setError] = useState<{
     field: 'identity' | 'quantity' | 'price'
     message: string
@@ -2550,6 +2283,7 @@ export function PositionDialog({
     setCurrency(position?.currency ?? 'USD')
     setQuantity(position ? String(position.quantity) : '')
     setPrice(position?.price === undefined ? '' : String(position.price))
+    setTagIds(position?.tagIds ?? [])
     setError(null)
     // Preserve edits across background sync refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2592,7 +2326,8 @@ export function PositionDialog({
         name,
         currency,
         quantity: parsedQuantity,
-        price: parsedPrice
+        price: parsedPrice,
+        tagIds
       })
       if (submitError) {
         reportOperationError(position ? '更新持仓失败' : '添加持仓失败', submitError)
@@ -2617,7 +2352,7 @@ export function PositionDialog({
         <DialogHeader>
           <DialogTitle>{position ? '编辑持仓' : '添加持仓'}</DialogTitle>
           <DialogDescription className="sr-only">
-            设置持仓市场、代码、币种、数量和当前价格
+            设置持仓市场、代码、币种、数量、当前价格和标签
           </DialogDescription>
         </DialogHeader>
         <form className="contents" onSubmit={handleSubmit}>
@@ -2767,6 +2502,12 @@ export function PositionDialog({
               )}
             </Field>
           </div>
+          <TagSelector
+            tags={tags}
+            selectedIds={tagIds}
+            onSelectedIdsChange={setTagIds}
+            onCreateTag={onCreateTag}
+          />
           </FieldGroup>
           </DialogBody>
           <DialogFooter>

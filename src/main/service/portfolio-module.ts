@@ -4,9 +4,8 @@ import { createHash } from 'node:crypto'
 import {
   DEFAULT_MCP_ACCESS_SETTINGS,
   createWorkspaceInputSchema,
-  createAssetAccountInputSchema,
-  createAccountGroupInputSchema,
-  createPositionGroupInputSchema,
+  createAccountInputSchema,
+  createTagInputSchema,
   createPositionInputSchema,
   createSnapshotInputSchema,
   getWorkspaceInputSchema,
@@ -16,13 +15,12 @@ import {
   listPositionsInputSchema,
   mcpToolInputSchemas,
   refreshExchangeRatesInputSchema,
-  replaceAccountGroupMembersInputSchema,
-  replacePositionGroupMembersInputSchema,
-  syncAssetAccountInputSchema,
+  setAccountTagsInputSchema,
+  setPositionTagsInputSchema,
+  syncAccountInputSchema,
   updateWorkspaceInputSchema,
-  updateAssetAccountInputSchema,
-  updateAccountGroupInputSchema,
-  updatePositionGroupInputSchema,
+  updateAccountInputSchema,
+  updateTagInputSchema,
   updatePositionInputSchema,
   type McpAccessSettings,
   type McpToolArguments,
@@ -33,11 +31,11 @@ import {
   DEFAULT_EXCHANGE_RATE_PROVIDER,
   type ExchangeRateSnapshot
 } from '../../shared/exchange-rates'
-import type { AssetAccountIntegration } from '../../shared/integrations'
+import type { AccountIntegration } from '../../shared/integrations'
 import {
   type AppData,
-  type AssetAccount,
-  type AssetAccountInput,
+  type Account,
+  type AccountInput,
   type PortfolioCommand,
   type PortfolioCommandResponse,
   type PortfolioLoadResponse,
@@ -81,9 +79,9 @@ export interface PortfolioModuleOperations extends PortfolioOperations {
     rawArguments: unknown,
     access?: McpAccessSettings
   ): Promise<McpToolSuccess>
-  syncAssetAccount(
+  syncAccount(
     workspaceId: string,
-    assetAccountId: string
+    accountId: string
   ): Promise<PortfolioSyncResponse>
 }
 
@@ -102,18 +100,16 @@ type WorkspaceView = {
 const WRITE_TOOLS = new Set<McpToolName>([
   'chromie_create_workspace',
   'chromie_update_workspace',
-  'chromie_create_account_group',
-  'chromie_update_account_group',
-  'chromie_replace_account_group_members',
-  'chromie_create_asset_account',
-  'chromie_update_asset_account',
+  'chromie_create_tag',
+  'chromie_update_tag',
+  'chromie_set_account_tags',
+  'chromie_set_position_tags',
+  'chromie_create_account',
+  'chromie_update_account',
   'chromie_create_position',
   'chromie_update_position',
-  'chromie_create_position_group',
-  'chromie_update_position_group',
-  'chromie_replace_position_group_members',
   'chromie_create_snapshot',
-  'chromie_sync_asset_account',
+  'chromie_sync_account',
   'chromie_refresh_exchange_rates'
 ])
 
@@ -157,9 +153,8 @@ function positionCursorScope(
       query: input.query?.toLocaleLowerCase() ?? null,
       market: input.market ?? null,
       currency: input.currency ?? null,
-      asset_account_id: input.asset_account_id ?? null,
-      account_group_id: input.account_group_id ?? null,
-      position_group_id: input.position_group_id ?? null
+      account_id: input.account_id ?? null,
+      tag_id: input.tag_id ?? null
     }))
     .digest('base64url')
     .slice(0, 22)
@@ -198,33 +193,33 @@ function requireWorkspace(data: AppData, workspaceId: string): Workspace {
   return workspace
 }
 
-function requireAssetAccount(
+function requireAccount(
   workspace: Workspace,
-  assetAccountId: string
-): AssetAccount {
-  const assetAccount = workspace.assetAccounts.find((item) => item.id === assetAccountId)
-  if (!assetAccount) {
+  accountId: string
+): Account {
+  const account = workspace.accounts.find((item) => item.id === accountId)
+  if (!account) {
     throw new McpOperationError('NOT_FOUND', '没有找到对应的资产账户')
   }
-  return assetAccount
+  return account
 }
 
 function safeIntegrationStatus(
-  assetAccount: AssetAccount,
-  integration: AssetAccountIntegration | undefined
+  account: Account,
+  integration: AccountIntegration | undefined
 ) {
   return {
-    capable: assetAccount.type === 'Futu' ||
-      assetAccount.type === 'Okx' ||
-      assetAccount.type === 'Ibkr' ||
-      assetAccount.type === 'Hstong' ||
-      assetAccount.type === 'Binance',
-    configured: Boolean(assetAccount.sync && integration),
-    ...(assetAccount.sync
+    capable: account.type === 'Futu' ||
+      account.type === 'Okx' ||
+      account.type === 'Ibkr' ||
+      account.type === 'Hstong' ||
+      account.type === 'Binance',
+    configured: Boolean(account.sync && integration),
+    ...(account.sync
       ? {
-          interval_seconds: assetAccount.sync.interval,
-          ...(assetAccount.sync.lastSyncedAt
-            ? { last_synced_at: assetAccount.sync.lastSyncedAt }
+          interval_seconds: account.sync.interval,
+          ...(account.sync.lastSyncedAt
+            ? { last_synced_at: account.sync.lastSyncedAt }
             : {})
         }
       : {}),
@@ -234,7 +229,7 @@ function safeIntegrationStatus(
 
 function safeWorkspace(
   workspace: Workspace,
-  integrations: AssetAccountIntegration[],
+  integrations: AccountIntegration[],
   includePositions: boolean
 ) {
   return {
@@ -244,35 +239,42 @@ function safeWorkspace(
     exchange_rate_provider: workspace.exchangeRateProvider,
     exchange_rate_refresh_interval_minutes:
       workspace.exchangeRateRefreshIntervalMinutes,
-    account_groups: workspace.accountGroups.map((accountGroup) => ({
-      id: accountGroup.id,
-      name: accountGroup.name,
-      asset_account_ids: [...accountGroup.assetAccountIds]
-    })),
-    asset_accounts: workspace.assetAccounts.map((assetAccount) => ({
-      id: assetAccount.id,
-      name: assetAccount.name,
-      type: assetAccount.type,
+    tags: workspace.tags.map((tag) => ({ ...tag })),
+    accounts: workspace.accounts.map((account) => ({
+      id: account.id,
+      name: account.name,
+      type: account.type,
       sync: safeIntegrationStatus(
-        assetAccount,
-        integrations.find((item) => item.assetAccountId === assetAccount.id)
+        account,
+        integrations.find((item) => item.accountId === account.id)
       ),
-      position_count: assetAccount.positions.length,
+      tag_ids: [...account.tagIds],
+      position_count: account.positions.length,
       ...(includePositions
-        ? { positions: assetAccount.positions.map((position) => ({ ...position })) }
+        ? {
+            positions: account.positions.map(safePosition)
+          }
         : {})
-    })),
-    position_groups: workspace.positionGroups.map((group) => ({
-      id: group.id,
-      name: group.name,
-      position_ids: [...group.positionIds]
     }))
   }
 }
 
+function safePosition(position: Position) {
+  return {
+    id: position.id,
+    market: position.market,
+    symbol: position.symbol,
+    name: position.name,
+    currency: position.currency,
+    quantity: position.quantity,
+    ...(position.price === undefined ? {} : { price: position.price }),
+    tag_ids: [...position.tagIds]
+  }
+}
+
 function integrationInput(
-  integration: AssetAccountIntegration
-): AssetAccountInput['integration'] {
+  integration: AccountIntegration
+): AccountInput['integration'] {
   if (integration.provider === 'Futu') {
     return {
       provider: 'Futu',
@@ -396,46 +398,38 @@ export class PortfolioModule implements PortfolioModuleOperations {
           return await this.createWorkspace(createWorkspaceInputSchema.parse(parsed.data))
         case 'chromie_update_workspace':
           return await this.updateWorkspace(updateWorkspaceInputSchema.parse(parsed.data))
-        case 'chromie_create_account_group':
-          return await this.createAccountGroup(
-            createAccountGroupInputSchema.parse(parsed.data)
+        case 'chromie_create_tag':
+          return await this.createTag(
+            createTagInputSchema.parse(parsed.data)
           )
-        case 'chromie_update_account_group':
-          return await this.updateAccountGroup(
-            updateAccountGroupInputSchema.parse(parsed.data)
+        case 'chromie_update_tag':
+          return await this.updateTag(
+            updateTagInputSchema.parse(parsed.data)
           )
-        case 'chromie_replace_account_group_members':
-          return await this.replaceAccountGroupMembers(
-            replaceAccountGroupMembersInputSchema.parse(parsed.data)
+        case 'chromie_set_account_tags':
+          return await this.setAccountTags(
+            setAccountTagsInputSchema.parse(parsed.data)
           )
-        case 'chromie_create_asset_account':
-          return await this.createAssetAccount(
-            createAssetAccountInputSchema.parse(parsed.data)
+        case 'chromie_set_position_tags':
+          return await this.setPositionTags(
+            setPositionTagsInputSchema.parse(parsed.data)
           )
-        case 'chromie_update_asset_account':
-          return await this.updateAssetAccount(
-            updateAssetAccountInputSchema.parse(parsed.data)
+        case 'chromie_create_account':
+          return await this.createAccount(
+            createAccountInputSchema.parse(parsed.data)
+          )
+        case 'chromie_update_account':
+          return await this.updateAccount(
+            updateAccountInputSchema.parse(parsed.data)
           )
         case 'chromie_create_position':
           return await this.createPosition(createPositionInputSchema.parse(parsed.data))
         case 'chromie_update_position':
           return await this.updatePosition(updatePositionInputSchema.parse(parsed.data))
-        case 'chromie_create_position_group':
-          return await this.createPositionGroup(
-            createPositionGroupInputSchema.parse(parsed.data)
-          )
-        case 'chromie_update_position_group':
-          return await this.updatePositionGroup(
-            updatePositionGroupInputSchema.parse(parsed.data)
-          )
-        case 'chromie_replace_position_group_members':
-          return await this.replacePositionGroupMembers(
-            replacePositionGroupMembersInputSchema.parse(parsed.data)
-          )
         case 'chromie_create_snapshot':
           return await this.createSnapshot(createSnapshotInputSchema.parse(parsed.data))
-        case 'chromie_sync_asset_account':
-          return await this.syncForMcp(syncAssetAccountInputSchema.parse(parsed.data))
+        case 'chromie_sync_account':
+          return await this.syncForMcp(syncAccountInputSchema.parse(parsed.data))
         case 'chromie_refresh_exchange_rates':
           return await this.refreshExchangeRates(
             refreshExchangeRatesInputSchema.parse(parsed.data)
@@ -443,17 +437,17 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }
   }
 
-  async syncAssetAccount(
+  async syncAccount(
     workspaceId: string,
-    assetAccountId: string
+    accountId: string
   ): Promise<PortfolioSyncResponse> {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, workspaceId)
-    const assetAccount = requireAssetAccount(workspace, assetAccountId)
+    const account = requireAccount(workspace, accountId)
     const integration = state.integrations.find(
-      (item) => item.assetAccountId === assetAccountId
+      (item) => item.accountId === accountId
     )
-    if (!assetAccount.sync || !integration) {
+    if (!account.sync || !integration) {
       throw new McpOperationError(
         'SYNC_NOT_CONFIGURED',
         '资产账户尚未在 Chromie 中配置自动同步'
@@ -462,32 +456,32 @@ export class PortfolioModule implements PortfolioModuleOperations {
 
     try {
       let result: { positions: PositionInput[]; syncedAt: string }
-      if (integration.provider === 'Futu' && assetAccount.type === 'Futu') {
+      if (integration.provider === 'Futu' && account.type === 'Futu') {
         result = await this.desktop.syncPositions({
           provider: 'futu',
           options: { ...integration.websocket }
         })
-      } else if (integration.provider === 'Ibkr' && assetAccount.type === 'Ibkr') {
+      } else if (integration.provider === 'Ibkr' && account.type === 'Ibkr') {
         result = await this.desktop.syncPositions({
           provider: 'ibkr',
           options: { ...integration.gateway }
         })
       } else if (
         integration.provider === 'Hstong' &&
-        assetAccount.type === 'Hstong'
+        account.type === 'Hstong'
       ) {
         result = await this.desktop.syncPositions({
           provider: 'hstong',
           options: { ...integration.gateway }
         })
-      } else if (integration.provider === 'Okx' && assetAccount.type === 'Okx') {
+      } else if (integration.provider === 'Okx' && account.type === 'Okx') {
         result = await this.desktop.syncPositions({
           provider: 'okx',
           options: { ...integration.api }
         })
       } else if (
         integration.provider === 'Binance' &&
-        assetAccount.type === 'Binance'
+        account.type === 'Binance'
       ) {
         result = await this.desktop.syncPositions({
           provider: 'binance',
@@ -503,7 +497,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
       await this.portfolio.execute({
         type: 'replace-positions',
         workspaceId,
-        assetAccountId,
+        accountId,
         positions: result.positions,
         lastSyncedAt: result.syncedAt
       })
@@ -565,7 +559,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const state = await this.portfolio.load()
     const exchangeRates = await this.desktop.loadExchangeRates()
     const workspaces = state.data.workspaces.map((workspace) => {
-      const positions = workspace.assetAccounts.flatMap((item) => item.positions)
+      const positions = workspace.accounts.flatMap((item) => item.positions)
       const valuation = valuePositions(
         positions,
         workspace.baseCurrency,
@@ -575,9 +569,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
         id: workspace.id,
         name: workspace.name,
         base_currency: workspace.baseCurrency,
-        account_group_count: workspace.accountGroups.length,
-        asset_account_count: workspace.assetAccounts.length,
-        position_group_count: workspace.positionGroups.length,
+        tag_count: workspace.tags.length,
+        account_count: workspace.accounts.length,
         position_count: positions.length,
         snapshot_count: state.data.snapshots.filter(
           (snapshot) => snapshot.workspaceId === workspace.id
@@ -617,9 +610,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const state = await this.portfolio.load()
     const resolved = await this.resolveView(state, input.workspace_id, input.view)
     const { workspace, exchangeRates } = resolved
-    const allPositions = workspace.assetAccounts.flatMap((item) => item.positions)
+    const allPositions = workspace.accounts.flatMap((item) => item.positions)
     const total = valuePositions(allPositions, workspace.baseCurrency, exchangeRates?.rates)
-    const positionById = new Map(allPositions.map((position) => [position.id, position]))
     let rawRows: Array<{
       id: string
       name: string
@@ -627,31 +619,21 @@ export class PortfolioModule implements PortfolioModuleOperations {
       originalCurrency?: string
     }>
 
-    if (input.group_by === 'asset_account') {
-      rawRows = workspace.assetAccounts.map((item) => ({
+    if (input.group_by === 'account') {
+      rawRows = workspace.accounts.map((item) => ({
         id: item.id,
         name: item.name,
         positions: item.positions
       }))
-    } else if (input.group_by === 'account_group') {
-      const assetAccountById = new Map(
-        workspace.assetAccounts.map((assetAccount) => [assetAccount.id, assetAccount] as const)
-      )
-      rawRows = workspace.accountGroups.map((group) => ({
-        id: group.id,
-        name: group.name,
-        positions: group.assetAccountIds.flatMap(
-          (assetAccountId) => assetAccountById.get(assetAccountId)?.positions ?? []
+    } else if (input.group_by === 'tag') {
+      rawRows = workspace.tags.map((tag) => ({
+        id: tag.id,
+        name: tag.name,
+        positions: workspace.accounts.flatMap((account) =>
+          account.positions.filter((position) =>
+            account.tagIds.includes(tag.id) || position.tagIds.includes(tag.id)
+          )
         )
-      }))
-    } else if (input.group_by === 'position_group') {
-      rawRows = workspace.positionGroups.map((group) => ({
-        id: group.id,
-        name: group.name,
-        positions: group.positionIds.flatMap((positionId) => {
-          const position = positionById.get(positionId)
-          return position ? [position] : []
-        })
       }))
     } else {
       const positionsByCurrency = new Map<string, Position[]>()
@@ -739,32 +721,15 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const state = await this.portfolio.load()
     const resolved = await this.resolveView(state, input.workspace_id, input.view)
     const workspace = resolved.workspace
-    const accountGroupByAssetAccountId = new Map(
-      workspace.accountGroups.flatMap((accountGroup) =>
-        accountGroup.assetAccountIds.map(
-          (assetAccountId) => [assetAccountId, accountGroup] as const
-        )
-      )
-    )
-    const groupsByPositionId = new Map(
-      workspace.positionGroups.flatMap((group) =>
-        group.positionIds.map((positionId) => [positionId, group] as const)
-      )
-    )
+    const tagById = new Map(workspace.tags.map((tag) => [tag.id, tag] as const))
     const normalizedQuery = input.query?.toLocaleLowerCase()
-    const rows = workspace.assetAccounts.flatMap((assetAccount) => {
-      if (input.asset_account_id && input.asset_account_id !== assetAccount.id) return []
-      if (
-        input.account_group_id &&
-        input.account_group_id !== accountGroupByAssetAccountId.get(assetAccount.id)?.id
-      ) {
-        return []
-      }
-      return assetAccount.positions.flatMap((position) => {
-        const group = groupsByPositionId.get(position.id)
+    const rows = workspace.accounts.flatMap((account) => {
+      if (input.account_id && input.account_id !== account.id) return []
+      return account.positions.flatMap((position) => {
         if (
-          input.position_group_id &&
-          group?.id !== input.position_group_id
+          input.tag_id &&
+          !account.tagIds.includes(input.tag_id) &&
+          !position.tagIds.includes(input.tag_id)
         ) {
           return []
         }
@@ -774,24 +739,28 @@ export class PortfolioModule implements PortfolioModuleOperations {
           normalizedQuery &&
           !position.symbol.toLocaleLowerCase().includes(normalizedQuery) &&
           !position.name.toLocaleLowerCase().includes(normalizedQuery) &&
-          !assetAccount.name.toLocaleLowerCase().includes(normalizedQuery)
+          !account.name.toLocaleLowerCase().includes(normalizedQuery)
         ) return []
         return [{
-          cursorKey: JSON.stringify([assetAccount.id, position.id]),
+          cursorKey: JSON.stringify([account.id, position.id]),
           value: {
-            ...position,
-            asset_account: { id: assetAccount.id, name: assetAccount.name },
-            account_group: (() => {
-              const accountGroup = accountGroupByAssetAccountId.get(assetAccount.id)
-              return accountGroup
-                ? {
-                    id: accountGroup.id,
-                    name: accountGroup.name,
-                    asset_account_ids: [...accountGroup.assetAccountIds]
-                  }
-                : null
-            })(),
-            position_group: group ? { id: group.id, name: group.name } : null,
+            id: position.id,
+            market: position.market,
+            symbol: position.symbol,
+            name: position.name,
+            currency: position.currency,
+            quantity: position.quantity,
+            ...(position.price === undefined ? {} : { price: position.price }),
+            tag_ids: [...position.tagIds],
+            account: { id: account.id, name: account.name },
+            tags: position.tagIds.flatMap((tagId) => {
+              const tag = tagById.get(tagId)
+              return tag ? [{ ...tag }] : []
+            }),
+            account_tags: account.tagIds.flatMap((tagId) => {
+              const tag = tagById.get(tagId)
+              return tag ? [{ ...tag }] : []
+            }),
             valuation: positionValue(
               position,
               workspace.baseCurrency,
@@ -834,9 +803,9 @@ export class PortfolioModule implements PortfolioModuleOperations {
       .map((snapshot) => ({
         id: snapshot.id,
         created_at: snapshot.createdAt,
-        asset_account_count: snapshot.workspace.assetAccounts.length,
-        position_group_count: snapshot.workspace.positionGroups.length,
-        position_count: snapshot.workspace.assetAccounts.reduce(
+        account_count: snapshot.workspace.accounts.length,
+        tag_count: snapshot.workspace.tags.length,
+        position_count: snapshot.workspace.accounts.reduce(
           (count, item) => count + item.positions.length,
           0
         ),
@@ -884,120 +853,133 @@ export class PortfolioModule implements PortfolioModuleOperations {
     })
   }
 
-  private async createAccountGroup(
-    input: McpToolArguments['chromie_create_account_group']
+  private async createTag(
+    input: McpToolArguments['chromie_create_tag']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     requireWorkspace(state.data, input.workspace_id)
     const response = await this.portfolio.execute({
-      type: 'create-account-group',
+      type: 'create-tag',
       workspaceId: input.workspace_id,
-      input: { name: input.name }
+      input: { name: input.name, color: input.color }
     })
     if (typeof response.result !== 'string') {
-      throw new Error('创建账户分组后无法读取结果')
+      throw new Error('添加标签后无法读取结果')
     }
-    return success(`已创建账户分组“${input.name}”`, {
-      account_group: {
-        id: response.result,
-        name: input.name,
-        asset_account_ids: []
-      }
+    return success(`已添加标签“${input.name}”`, {
+      tag: { id: response.result, name: input.name, color: input.color }
     })
   }
 
-  private async updateAccountGroup(
-    input: McpToolArguments['chromie_update_account_group']
+  private async updateTag(
+    input: McpToolArguments['chromie_update_tag']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, input.workspace_id)
-    const existing = workspace.accountGroups.find(
-      (accountGroup) => accountGroup.id === input.account_group_id
-    )
+    const existing = workspace.tags.find((tag) => tag.id === input.tag_id)
     if (!existing) {
-      throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
+      throw new McpOperationError('NOT_FOUND', '没有找到对应的标签')
     }
     await this.portfolio.execute({
-      type: 'update-account-group',
+      type: 'update-tag',
       workspaceId: workspace.id,
-      groupId: existing.id,
-      input: { name: input.name }
+      tagId: existing.id,
+      input: { name: input.name, color: input.color }
     })
-    return success(`已更新账户分组“${input.name}”`, {
-      account_group: {
-        id: existing.id,
-        name: input.name,
-        asset_account_ids: [...existing.assetAccountIds]
-      }
+    return success(`已更新标签“${input.name}”`, {
+      tag: { id: existing.id, name: input.name, color: input.color }
     })
   }
 
-  private async replaceAccountGroupMembers(
-    input: McpToolArguments['chromie_replace_account_group_members']
+  private async setAccountTags(
+    input: McpToolArguments['chromie_set_account_tags']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, input.workspace_id)
-    if (!workspace.accountGroups.some((group) => group.id === input.account_group_id)) {
-      throw new McpOperationError('NOT_FOUND', '没有找到对应的账户分组')
-    }
+    requireAccount(workspace, input.account_id)
     const response = await this.portfolio.execute({
-      type: 'set-account-group-accounts',
+      type: 'set-account-tags',
       workspaceId: workspace.id,
-      groupId: input.account_group_id,
-      assetAccountIds: input.asset_account_ids
+      accountId: input.account_id,
+      tagIds: input.tag_ids
     })
     assertCommandResult(response)
-    return success(`账户分组现包含 ${input.asset_account_ids.length} 个资产账户`, {
-      account_group_id: input.account_group_id,
-      asset_account_ids: input.asset_account_ids
+    return success('资产账户标签已更新', {
+      account_id: input.account_id,
+      tag_ids: input.tag_ids
     })
   }
 
-  private async createAssetAccount(
-    input: McpToolArguments['chromie_create_asset_account']
+  private async setPositionTags(
+    input: McpToolArguments['chromie_set_position_tags']
+  ): Promise<McpToolSuccess> {
+    const state = await this.portfolio.load()
+    const workspace = requireWorkspace(state.data, input.workspace_id)
+    const account = requireAccount(workspace, input.account_id)
+    if (!account.positions.some((position) => position.id === input.position_id)) {
+      throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓')
+    }
+    const response = await this.portfolio.execute({
+      type: 'set-position-tags',
+      workspaceId: workspace.id,
+      accountId: account.id,
+      positionId: input.position_id,
+      tagIds: input.tag_ids
+    })
+    assertCommandResult(response)
+    return success('持仓标签已更新', {
+      position_id: input.position_id,
+      tag_ids: input.tag_ids
+    })
+  }
+
+  private async createAccount(
+    input: McpToolArguments['chromie_create_account']
   ): Promise<McpToolSuccess> {
     const response = await this.portfolio.execute({
-      type: 'create-asset-account',
+      type: 'create-account',
       workspaceId: input.workspace_id,
       input: {
         name: input.name,
-        type: input.type
+        type: input.type,
+        tagIds: input.tag_ids
       }
     })
     return success(`已创建资产账户“${input.name}”`, {
-      asset_account_id: response.result
+      account_id: response.result
     })
   }
 
-  private async updateAssetAccount(
-    input: McpToolArguments['chromie_update_asset_account']
+  private async updateAccount(
+    input: McpToolArguments['chromie_update_account']
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, input.workspace_id)
-    const assetAccount = requireAssetAccount(workspace, input.asset_account_id)
+    const account = requireAccount(workspace, input.account_id)
     const integration = state.integrations.find(
-      (item) => item.assetAccountId === assetAccount.id
+      (item) => item.accountId === account.id
     )
-    const nextType = input.type ?? assetAccount.type
-    if (integration && nextType !== assetAccount.type) {
+    const nextType = input.type ?? account.type
+    if (integration && nextType !== account.type) {
       throw new McpOperationError(
         'VALIDATION_ERROR',
         '已配置自动同步的资产账户不能通过 MCP 修改类型，请在 Chromie 中操作'
       )
     }
     await this.portfolio.execute({
-      type: 'update-asset-account',
+      type: 'update-account',
       workspaceId: workspace.id,
-      assetAccountId: assetAccount.id,
+      accountId: account.id,
       input: {
-        name: input.name ?? assetAccount.name,
+        name: input.name ?? account.name,
         type: nextType,
-        sync: assetAccount.sync,
+        sync: account.sync,
+        tagIds: input.tag_ids ?? account.tagIds,
         ...(integration ? { integration: integrationInput(integration) } : {})
       }
     })
-    return success(`已更新资产账户“${input.name ?? assetAccount.name}”`, {
-      asset_account_id: assetAccount.id
+    return success(`已更新资产账户“${input.name ?? account.name}”`, {
+      account_id: account.id
     })
   }
 
@@ -1006,8 +988,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, input.workspace_id)
-    const assetAccount = requireAssetAccount(workspace, input.asset_account_id)
-    if (assetAccount.sync) {
+    const account = requireAccount(workspace, input.account_id)
+    if (account.sync) {
       throw new McpOperationError('READ_ONLY', '自动同步的资产账户不能手动修改持仓')
     }
     const positionInput: PositionInput = {
@@ -1016,12 +998,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
       name: input.name,
       currency: input.currency,
       quantity: input.quantity,
+      tagIds: input.tag_ids,
       ...(input.price === null || input.price === undefined
         ? {}
         : { price: input.price })
     }
-    const position = await this.persistPosition(workspace, assetAccount, positionInput)
-    return success(`已创建持仓 ${position.symbol}`, { position })
+    const position = await this.persistPosition(workspace, account, positionInput)
+    return success(`已创建持仓 ${position.symbol}`, { position: safePosition(position) })
   }
 
   private async updatePosition(
@@ -1029,11 +1012,11 @@ export class PortfolioModule implements PortfolioModuleOperations {
   ): Promise<McpToolSuccess> {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, input.workspace_id)
-    const assetAccount = requireAssetAccount(workspace, input.asset_account_id)
-    if (assetAccount.sync) {
+    const account = requireAccount(workspace, input.account_id)
+    if (account.sync) {
       throw new McpOperationError('READ_ONLY', '自动同步的资产账户不能手动修改持仓')
     }
-    const existing = assetAccount.positions.find(
+    const existing = account.positions.find(
       (position) => position.id === input.position_id
     )
     if (!existing) {
@@ -1045,6 +1028,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
       name: input.name ?? existing.name,
       currency: input.currency ?? existing.currency,
       quantity: input.quantity ?? existing.quantity,
+      tagIds: input.tag_ids ?? existing.tagIds,
       ...(
         input.price === null
           ? {}
@@ -1057,30 +1041,30 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }
     const position = await this.persistPosition(
       workspace,
-      assetAccount,
+      account,
       positionInput,
       existing.id
     )
-    return success(`已更新持仓 ${position.symbol}`, { position })
+    return success(`已更新持仓 ${position.symbol}`, { position: safePosition(position) })
   }
 
   private async persistPosition(
     workspace: Workspace,
-    assetAccount: AssetAccount,
+    account: Account,
     positionInput: PositionInput,
     positionId?: string
   ): Promise<Position> {
     const response = await this.portfolio.execute({
       type: 'save-position',
       workspaceId: workspace.id,
-      assetAccountId: assetAccount.id,
+      accountId: account.id,
       input: positionInput,
       ...(positionId ? { positionId } : {})
     })
     assertCommandResult(response)
     const stored = response.data.workspaces
       .find((item) => item.id === workspace.id)
-      ?.assetAccounts.find((item) => item.id === assetAccount.id)
+      ?.accounts.find((item) => item.id === account.id)
       ?.positions.find((position) =>
         positionId
           ? position.id === positionId
@@ -1089,72 +1073,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
       )
     if (!stored) throw new Error('保存持仓后无法读取结果')
     return stored
-  }
-
-  private async createPositionGroup(
-    input: McpToolArguments['chromie_create_position_group']
-  ): Promise<McpToolSuccess> {
-    const state = await this.portfolio.load()
-    requireWorkspace(state.data, input.workspace_id)
-    const response = await this.portfolio.execute({
-      type: 'create-position-group',
-      workspaceId: input.workspace_id,
-      input: { name: input.name }
-    })
-    if (typeof response.result !== 'string') {
-      throw new Error('创建持仓分组后无法读取结果')
-    }
-    return success(`已创建持仓分组“${input.name}”`, {
-      position_group_id: response.result
-    })
-  }
-
-  private async updatePositionGroup(
-    input: McpToolArguments['chromie_update_position_group']
-  ): Promise<McpToolSuccess> {
-    const state = await this.portfolio.load()
-    const workspace = requireWorkspace(state.data, input.workspace_id)
-    if (
-      !workspace.positionGroups.some(
-        (group) => group.id === input.position_group_id
-      )
-    ) {
-      throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
-    }
-    await this.portfolio.execute({
-      type: 'update-position-group',
-      workspaceId: input.workspace_id,
-      groupId: input.position_group_id,
-      input: { name: input.name }
-    })
-    return success(`已更新持仓分组“${input.name}”`, {
-      position_group_id: input.position_group_id
-    })
-  }
-
-  private async replacePositionGroupMembers(
-    input: McpToolArguments['chromie_replace_position_group_members']
-  ): Promise<McpToolSuccess> {
-    const state = await this.portfolio.load()
-    const workspace = requireWorkspace(state.data, input.workspace_id)
-    if (
-      !workspace.positionGroups.some(
-        (group) => group.id === input.position_group_id
-      )
-    ) {
-      throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓分组')
-    }
-    const response = await this.portfolio.execute({
-      type: 'set-position-group-positions',
-      workspaceId: input.workspace_id,
-      groupId: input.position_group_id,
-      positionIds: input.position_ids
-    })
-    assertCommandResult(response)
-    return success(`持仓分组现包含 ${input.position_ids.length} 项持仓`, {
-      position_group_id: input.position_group_id,
-      position_ids: input.position_ids
-    })
   }
 
   private async createSnapshot(
@@ -1178,14 +1096,14 @@ export class PortfolioModule implements PortfolioModuleOperations {
   }
 
   private async syncForMcp(
-    input: McpToolArguments['chromie_sync_asset_account']
+    input: McpToolArguments['chromie_sync_account']
   ): Promise<McpToolSuccess> {
-    const result = await this.syncAssetAccount(
+    const result = await this.syncAccount(
       input.workspace_id,
-      input.asset_account_id
+      input.account_id
     )
     return success(`已同步 ${result.positionCount} 项持仓`, {
-      asset_account_id: input.asset_account_id,
+      account_id: input.account_id,
       position_count: result.positionCount,
       synced_at: result.syncedAt
     })

@@ -88,8 +88,8 @@ export function TimeMachine({
       snapshot
     }))
   ].map((row) => {
-    const positions = row.workspace.assetAccounts.flatMap(
-      (assetAccount) => assetAccount.positions
+    const positions = row.workspace.accounts.flatMap(
+      (account) => account.positions
     )
     return {
       ...row,
@@ -114,8 +114,8 @@ export function TimeMachine({
     }
     if (sort.key === 'accounts') {
       return compareOptionalNumbers(
-        left.workspace.assetAccounts.length,
-        right.workspace.assetAccounts.length,
+        left.workspace.accounts.length,
+        right.workspace.accounts.length,
         sort.direction
       )
     }
@@ -243,7 +243,7 @@ export function TimeMachine({
                     {row.createdAt ? formatLastSyncedAt(row.createdAt) : '当前数据'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {row.workspace.assetAccounts.length}
+                    {row.workspace.accounts.length}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {row.positionCount}

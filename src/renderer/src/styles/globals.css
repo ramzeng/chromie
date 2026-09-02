@@ -35,6 +35,13 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-tag-gray: var(--tag-gray);
+  --color-tag-red: var(--tag-red);
+  --color-tag-orange: var(--tag-orange);
+  --color-tag-yellow: var(--tag-yellow);
+  --color-tag-green: var(--tag-green);
+  --color-tag-blue: var(--tag-blue);
+  --color-tag-purple: var(--tag-purple);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -77,6 +84,13 @@
   --sidebar-accent-foreground: #dedfe2;
   --sidebar-border: rgb(255 255 255 / 7%);
   --sidebar-ring: #72757c;
+  --tag-gray: #98989d;
+  --tag-red: #ff453a;
+  --tag-orange: #ff9f0a;
+  --tag-yellow: #ffd60a;
+  --tag-green: #30d158;
+  --tag-blue: #0a84ff;
+  --tag-purple: #bf5af2;
 }
 
 * {

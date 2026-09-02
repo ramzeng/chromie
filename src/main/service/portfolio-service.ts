@@ -18,38 +18,38 @@ import {
   DEFAULT_IBKR_GATEWAY_PORT,
   DEFAULT_SYNC_INTERVAL,
   EMPTY_PORTFOLIO_DATA,
+  TAG_COLORS,
   marketMeta,
   type WorkspaceBackup,
-  type AccountGroup,
-  type AccountGroupInput,
   type BaseCurrency,
   type AppData,
-  type AssetAccount,
-  type AssetAccountInput,
-  type AssetAccountSync,
-  type AssetAccountType,
+  type Account,
+  type AccountInput,
+  type AccountSync,
+  type AccountType,
   type Market,
   type PortfolioCommand,
   type PortfolioCommandResponse,
   type PortfolioLoadResponse,
   type WorkspaceSnapshot,
   type Position,
-  type PositionGroup,
-  type PositionGroupInput,
   type PositionInput,
+  type Tag,
+  type TagColor,
+  type TagInput,
   type Workspace,
   type WorkspaceInput,
   type WorkspaceSettingsInput
 } from '../../shared/portfolio'
 import {
   EMPTY_INTEGRATION_DATA,
-  type AssetAccountIntegration,
+  type AccountIntegration,
   type IntegrationData
 } from '../../shared/integrations'
 import type { IntegrationRepository } from '../repository/integration-repository'
 import type { PortfolioRepository } from '../repository/portfolio-repository'
 
-function normalizeAssetAccountName(value: string): string {
+function normalizeAccountName(value: string): string {
   return value.trim()
 }
 
@@ -130,6 +130,17 @@ function createId(): string {
   return crypto.randomUUID()
 }
 
+function normalizeTagIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return [...new Set(value.flatMap((tagId) =>
+    typeof tagId === 'string' && tagId.trim() ? [tagId.trim()] : []
+  ))]
+}
+
+function isTagColor(value: unknown): value is TagColor {
+  return typeof value === 'string' && TAG_COLORS.includes(value as TagColor)
+}
+
 function normalizePosition(input: PositionInput, id?: string): Position {
   return {
     id: id?.trim() || createId(),
@@ -138,7 +149,8 @@ function normalizePosition(input: PositionInput, id?: string): Position {
     name: input.name.trim(),
     currency: input.currency.trim().toUpperCase(),
     quantity: input.quantity,
-    ...(input.price === undefined ? {} : { price: input.price })
+    ...(input.price === undefined ? {} : { price: input.price }),
+    tagIds: normalizeTagIds(input.tagIds)
   }
 }
 
@@ -150,7 +162,7 @@ function normalizeStoredMarket(value: unknown): Market | null {
     : null
 }
 
-function normalizeAssetAccountType(value: unknown): AssetAccountType | null {
+function normalizeAccountType(value: unknown): AccountType | null {
   if (typeof value !== 'string') return null
   const type = value.toLowerCase()
   if (type === 'futu') return 'Futu'
@@ -166,10 +178,10 @@ function normalizeAssetAccountType(value: unknown): AssetAccountType | null {
   return null
 }
 
-function normalizeAssetAccountSync(
+function normalizeAccountSync(
   value: unknown,
-  type: AssetAccountType
-): AssetAccountSync | undefined {
+  type: AccountType
+): AccountSync | undefined {
   if (
     type === 'Boci' ||
     type === 'Alipay' ||
@@ -193,22 +205,22 @@ function normalizeAssetAccountSync(
 
 function normalizeIntegration(
   value: unknown,
-  assetAccountId?: string
-): AssetAccountIntegration | null {
+  accountId?: string
+): AccountIntegration | null {
   if (!value || typeof value !== 'object') return null
   const integration = value as {
-    assetAccountId?: unknown
+    accountId?: unknown
     provider?: unknown
     websocket?: unknown
     gateway?: unknown
     api?: unknown
   }
-  const normalizedAssetAccountId =
-    assetAccountId ??
-    (typeof integration.assetAccountId === 'string'
-      ? integration.assetAccountId.trim()
+  const normalizedAccountId =
+    accountId ??
+    (typeof integration.accountId === 'string'
+      ? integration.accountId.trim()
       : '')
-  if (!normalizedAssetAccountId) return null
+  if (!normalizedAccountId) return null
 
   if (integration.provider === 'Futu') {
     if (!integration.websocket || typeof integration.websocket !== 'object') return null
@@ -218,7 +230,7 @@ function normalizeIntegration(
       key?: unknown
     }
     return {
-      assetAccountId: normalizedAssetAccountId,
+      accountId: normalizedAccountId,
       provider: 'Futu',
       websocket: {
         host: normalizeSyncHost(websocket.host),
@@ -234,7 +246,7 @@ function normalizeIntegration(
     if (!integration.gateway || typeof integration.gateway !== 'object') return null
     const gateway = integration.gateway as { host?: unknown; port?: unknown }
     return {
-      assetAccountId: normalizedAssetAccountId,
+      accountId: normalizedAccountId,
       provider: 'Ibkr',
       gateway: {
         host: normalizeIbkrGatewayHost(gateway.host),
@@ -251,7 +263,7 @@ function normalizeIntegration(
       tradingPassword?: unknown
     }
     return {
-      assetAccountId: normalizedAssetAccountId,
+      accountId: normalizedAccountId,
       provider: 'Hstong',
       gateway: {
         host: normalizeHstongGatewayHost(gateway.host),
@@ -282,7 +294,7 @@ function normalizeIntegration(
     }
     if (integration.provider === 'Okx') {
       return {
-        assetAccountId: normalizedAssetAccountId,
+        accountId: normalizedAccountId,
         provider: 'Okx',
         api: {
           apiKey: api.apiKey.trim().slice(0, 256),
@@ -292,7 +304,7 @@ function normalizeIntegration(
       }
     }
     return {
-      assetAccountId: normalizedAssetAccountId,
+      accountId: normalizedAccountId,
       provider: 'Binance',
       api: {
         apiKey: api.apiKey.trim().slice(0, 256),
@@ -305,14 +317,14 @@ function normalizeIntegration(
 }
 
 function resolveIntegrationInput(
-  input: AssetAccountInput['integration'],
-  assetAccountId: string,
-  existing?: AssetAccountIntegration
-): AssetAccountIntegration | null {
+  input: AccountInput['integration'],
+  accountId: string,
+  existing?: AccountIntegration
+): AccountIntegration | null {
   if (!input) return null
 
   if (input.provider === 'Ibkr') {
-    return normalizeIntegration(input, assetAccountId)
+    return normalizeIntegration(input, accountId)
   }
 
   if (input.provider === 'Futu') {
@@ -336,7 +348,7 @@ function resolveIntegrationInput(
           ...(key ? { key } : {})
         }
       },
-      assetAccountId
+      accountId
     )
   }
 
@@ -361,7 +373,7 @@ function resolveIntegrationInput(
           ...(tradingPassword ? { tradingPassword } : {})
         }
       },
-      assetAccountId
+      accountId
     )
   }
 
@@ -377,7 +389,7 @@ function resolveIntegrationInput(
       provider: input.provider,
       api: input.api.credential.value
     },
-    assetAccountId
+    accountId
   )
 }
 
@@ -386,11 +398,11 @@ function normalizeStoredIntegrationData(input: unknown): IntegrationData | null 
   const value = input as { version?: unknown; integrations?: unknown }
   if (value.version !== 1 || !Array.isArray(value.integrations)) return null
 
-  const usedAssetAccountIds = new Set<string>()
+  const usedAccountIds = new Set<string>()
   const integrations = value.integrations.flatMap((integration) => {
     const normalized = normalizeIntegration(integration)
-    if (!normalized || usedAssetAccountIds.has(normalized.assetAccountId)) return []
-    usedAssetAccountIds.add(normalized.assetAccountId)
+    if (!normalized || usedAccountIds.has(normalized.accountId)) return []
+    usedAccountIds.add(normalized.accountId)
     return [normalized]
   })
   return { version: 1, integrations }
@@ -430,8 +442,9 @@ function normalizeStoredPosition(value: unknown): Position | null {
       symbol: position.symbol,
       name: position.name,
       currency: position.currency,
-      quantity: position.quantity,
-      ...(price === undefined ? {} : { price })
+    quantity: position.quantity,
+      ...(price === undefined ? {} : { price }),
+      tagIds: normalizeTagIds(position.tagIds)
     },
     position.id
   )
@@ -474,6 +487,123 @@ function normalizeStoredExchangeRates(value: unknown): ExchangeRateSnapshot | nu
   }
 }
 
+function normalizeStoredWorkspace(value: unknown): Workspace | null {
+  if (!value || typeof value !== 'object') return null
+  const storedWorkspace = value as {
+    id?: unknown
+    name?: unknown
+    baseCurrency?: unknown
+    exchangeRateProvider?: unknown
+    exchangeRateRefreshIntervalMinutes?: unknown
+    tags?: unknown
+    accounts?: unknown
+  }
+  if (
+    typeof storedWorkspace.id !== 'string' ||
+    !storedWorkspace.id.trim() ||
+    typeof storedWorkspace.name !== 'string' ||
+    !storedWorkspace.name.trim() ||
+    !Array.isArray(storedWorkspace.accounts)
+  ) return null
+
+  const usedAccountIds = new Set<string>()
+  const usedPositionIds = new Set<string>()
+  let accounts: Account[] = storedWorkspace.accounts.flatMap((value) => {
+    if (!value || typeof value !== 'object') return []
+    const storedAccount = value as {
+      id?: unknown
+      name?: unknown
+      type?: unknown
+      sync?: unknown
+      tagIds?: unknown
+      positions?: unknown
+    }
+    const type = normalizeAccountType(storedAccount.type)
+    if (
+      typeof storedAccount.id !== 'string' ||
+      !storedAccount.id.trim() ||
+      usedAccountIds.has(storedAccount.id) ||
+      typeof storedAccount.name !== 'string' ||
+      !storedAccount.name.trim() ||
+      !type ||
+      !Array.isArray(storedAccount.positions)
+    ) return []
+
+    usedAccountIds.add(storedAccount.id)
+    const sync = normalizeAccountSync(storedAccount.sync, type)
+    return [{
+      id: storedAccount.id,
+      name: normalizeAccountName(storedAccount.name),
+      type,
+      ...(sync ? { sync } : {}),
+      tagIds: normalizeTagIds(storedAccount.tagIds),
+      positions: storedAccount.positions.flatMap((position) => {
+        const normalized = normalizeStoredPosition(position)
+        if (!normalized) return []
+        const uniquePosition = usedPositionIds.has(normalized.id)
+          ? { ...normalized, id: createId() }
+          : normalized
+        usedPositionIds.add(uniquePosition.id)
+        return [uniquePosition]
+      })
+    }]
+  })
+
+  const usedTagIds = new Set<string>()
+  const tagByNormalizedName = new Map<string, Tag>()
+  const tags: Tag[] = []
+  function addTag(rawId: unknown, rawName: unknown, rawColor: unknown): Tag | null {
+    if (typeof rawName !== 'string' || !rawName.trim() || !isTagColor(rawColor)) return null
+    const name = rawName.trim()
+    const key = name.toLocaleLowerCase()
+    const existing = tagByNormalizedName.get(key)
+    if (existing) return existing
+    const requestedId = typeof rawId === 'string' ? rawId.trim() : ''
+    const id = requestedId && !usedTagIds.has(requestedId) ? requestedId : createId()
+    const tag = { id, name, color: rawColor }
+    usedTagIds.add(id)
+    tagByNormalizedName.set(key, tag)
+    tags.push(tag)
+    return tag
+  }
+
+  if (!Array.isArray(storedWorkspace.tags)) return null
+  let hasInvalidTag = false
+  storedWorkspace.tags.forEach((value) => {
+    if (!value || typeof value !== 'object') {
+      hasInvalidTag = true
+      return
+    }
+    const storedTag = value as { id?: unknown; name?: unknown; color?: unknown }
+    if (!addTag(storedTag.id, storedTag.name, storedTag.color)) hasInvalidTag = true
+  })
+  if (hasInvalidTag) return null
+
+  const availableTagIds = new Set(tags.map((tag) => tag.id))
+  accounts = accounts.map((account) => ({
+    ...account,
+    tagIds: account.tagIds.filter((tagId) => availableTagIds.has(tagId)),
+    positions: account.positions.map((position) => ({
+      ...position,
+      tagIds: position.tagIds.filter((tagId) => availableTagIds.has(tagId))
+    }))
+  }))
+
+  return {
+    id: storedWorkspace.id,
+    name: storedWorkspace.name.trim(),
+    baseCurrency: normalizeBaseCurrency(storedWorkspace.baseCurrency),
+    exchangeRateProvider: normalizeExchangeRateProvider(
+      storedWorkspace.exchangeRateProvider
+    ),
+    exchangeRateRefreshIntervalMinutes: normalizeExchangeRateRefreshInterval(
+      storedWorkspace.exchangeRateRefreshIntervalMinutes
+    ),
+    tags,
+    accounts
+  }
+}
+
 function normalizeStoredData(input: unknown): AppData | null {
   if (!input || typeof input !== 'object') return null
   const value = input as {
@@ -486,190 +616,11 @@ function normalizeStoredData(input: unknown): AppData | null {
     value.version !== 1 ||
     !Array.isArray(value.workspaces) ||
     !Array.isArray(value.snapshots)
-  ) {
-    return null
-  }
+  ) return null
 
   const workspaces = value.workspaces.flatMap((workspace) => {
-      if (!workspace || typeof workspace !== 'object') return []
-      const storedWorkspace = workspace as {
-        id?: unknown
-        name?: unknown
-        baseCurrency?: unknown
-        exchangeRateProvider?: unknown
-        exchangeRateRefreshIntervalMinutes?: unknown
-        accountGroups?: unknown
-        assetAccounts?: unknown
-        positionGroups?: unknown
-      }
-      if (
-        typeof storedWorkspace.id !== 'string' ||
-        typeof storedWorkspace.name !== 'string' ||
-        !Array.isArray(storedWorkspace.accountGroups) ||
-        !Array.isArray(storedWorkspace.assetAccounts) ||
-        !Array.isArray(storedWorkspace.positionGroups)
-      ) {
-        return []
-      }
-      const usedPositionIds = new Set<string>()
-      const assetAccounts = storedWorkspace.assetAccounts.flatMap((assetAccount) => {
-        if (!assetAccount || typeof assetAccount !== 'object') return []
-        const storedAssetAccount = assetAccount as {
-          id?: unknown
-          name?: unknown
-          type?: unknown
-          sync?: unknown
-          positions?: unknown
-        }
-        const type = normalizeAssetAccountType(storedAssetAccount.type)
-        if (
-          typeof storedAssetAccount.id !== 'string' ||
-          typeof storedAssetAccount.name !== 'string' ||
-          !type ||
-          !Array.isArray(storedAssetAccount.positions)
-        ) {
-          return []
-        }
-        const sync = normalizeAssetAccountSync(storedAssetAccount.sync, type)
-        return [
-          {
-            id: storedAssetAccount.id,
-            name: normalizeAssetAccountName(storedAssetAccount.name),
-            type,
-            ...(sync ? { sync } : {}),
-            positions: storedAssetAccount.positions.flatMap((position) => {
-              const normalized = normalizeStoredPosition(position)
-              if (!normalized) return []
-              const uniquePosition = usedPositionIds.has(normalized.id)
-                ? { ...normalized, id: createId() }
-                : normalized
-              usedPositionIds.add(uniquePosition.id)
-              return [uniquePosition]
-            })
-          }
-        ]
-      })
-      const availableAssetAccountIds = new Set(
-        assetAccounts.map((assetAccount) => assetAccount.id)
-      )
-      const usedAccountGroupIds = new Set<string>()
-      const assignedAssetAccountIds = new Set<string>()
-      const accountGroups = storedWorkspace.accountGroups.flatMap((accountGroup) => {
-            if (!accountGroup || typeof accountGroup !== 'object') return []
-            const storedAccountGroup = accountGroup as {
-              id?: unknown
-              name?: unknown
-              assetAccountIds?: unknown
-            }
-            if (
-              typeof storedAccountGroup.id !== 'string' ||
-              !storedAccountGroup.id.trim() ||
-              usedAccountGroupIds.has(storedAccountGroup.id) ||
-              typeof storedAccountGroup.name !== 'string' ||
-              !storedAccountGroup.name.trim() ||
-              !Array.isArray(storedAccountGroup.assetAccountIds)
-            ) {
-              return []
-            }
-            const seenAssetAccountIds = new Set<string>()
-            const assetAccountIds = storedAccountGroup.assetAccountIds.flatMap(
-              (assetAccountId) => {
-                if (
-                  typeof assetAccountId !== 'string' ||
-                  !availableAssetAccountIds.has(assetAccountId) ||
-                  assignedAssetAccountIds.has(assetAccountId) ||
-                  seenAssetAccountIds.has(assetAccountId)
-                ) {
-                  return []
-                }
-                seenAssetAccountIds.add(assetAccountId)
-                assignedAssetAccountIds.add(assetAccountId)
-                return [assetAccountId]
-              }
-            )
-            usedAccountGroupIds.add(storedAccountGroup.id)
-            return [{
-              id: storedAccountGroup.id,
-              name: storedAccountGroup.name.trim(),
-              assetAccountIds
-            }]
-          })
-      const accountGroupsAreStrict =
-        accountGroups.length === storedWorkspace.accountGroups.length &&
-        storedWorkspace.accountGroups.every((accountGroup) => {
-          if (!accountGroup || typeof accountGroup !== 'object') return false
-          const storedAccountGroup = accountGroup as {
-            id?: unknown
-            assetAccountIds?: unknown
-          }
-          if (
-            typeof storedAccountGroup.id !== 'string' ||
-            !Array.isArray(storedAccountGroup.assetAccountIds)
-          ) {
-            return false
-          }
-          return accountGroups.find((group) => group.id === storedAccountGroup.id)
-            ?.assetAccountIds.length === storedAccountGroup.assetAccountIds.length
-        })
-      if (!accountGroupsAreStrict) return []
-      const availablePositionIds = new Set(
-        assetAccounts.flatMap((assetAccount) =>
-          assetAccount.positions.map((position) => position.id)
-        )
-      )
-      const assignedPositionIds = new Set<string>()
-      const positionGroups = storedWorkspace.positionGroups.flatMap((group) => {
-            if (!group || typeof group !== 'object') return []
-            const storedGroup = group as {
-              id?: unknown
-              name?: unknown
-              positionIds?: unknown
-            }
-            if (
-              typeof storedGroup.id !== 'string' ||
-              typeof storedGroup.name !== 'string' ||
-              !Array.isArray(storedGroup.positionIds)
-            ) {
-              return []
-            }
-            const seenPositionIds = new Set<string>()
-            const positionIds = storedGroup.positionIds.flatMap((positionId) => {
-              if (
-                typeof positionId !== 'string' ||
-                !availablePositionIds.has(positionId) ||
-                assignedPositionIds.has(positionId) ||
-                seenPositionIds.has(positionId)
-              ) {
-                return []
-              }
-              seenPositionIds.add(positionId)
-              assignedPositionIds.add(positionId)
-              return [positionId]
-            })
-            return [
-              {
-                id: storedGroup.id,
-                name: storedGroup.name,
-                positionIds
-              }
-            ]
-          })
-      return [
-        {
-          id: storedWorkspace.id,
-          name: storedWorkspace.name,
-          baseCurrency: normalizeBaseCurrency(storedWorkspace.baseCurrency),
-          exchangeRateProvider: normalizeExchangeRateProvider(
-            storedWorkspace.exchangeRateProvider
-          ),
-          exchangeRateRefreshIntervalMinutes: normalizeExchangeRateRefreshInterval(
-            storedWorkspace.exchangeRateRefreshIntervalMinutes
-          ),
-          accountGroups,
-          assetAccounts,
-          positionGroups
-        }
-      ]
+    const normalized = normalizeStoredWorkspace(workspace)
+    return normalized ? [normalized] : []
   })
   const activeWorkspaceId = workspaces.some(
     (workspace) => workspace.id === value.activeWorkspaceId
@@ -699,13 +650,7 @@ function normalizeStoredData(input: unknown): AppData | null {
         ) {
           return []
         }
-        const normalizedWorkspaceData = normalizeStoredData({
-          version: 1,
-          activeWorkspaceId: storedSnapshot.workspaceId,
-          workspaces: [storedSnapshot.workspace],
-          snapshots: []
-        })
-        const workspace = normalizedWorkspaceData?.workspaces[0]
+        const workspace = normalizeStoredWorkspace(storedSnapshot.workspace)
         if (!workspace || workspace.id !== storedSnapshot.workspaceId) return []
         const exchangeRates = normalizeStoredExchangeRates(storedSnapshot.exchangeRates)
         usedSnapshotIds.add(storedSnapshot.id)
@@ -748,12 +693,14 @@ function isValidBackupPosition(value: unknown): boolean {
     Boolean(position.currency.trim()) &&
     typeof position.quantity === 'number' &&
     Number.isFinite(position.quantity) &&
+    Array.isArray(position.tagIds) &&
+    position.tagIds.every((tagId) => typeof tagId === 'string' && Boolean(tagId.trim())) &&
     (position.price === undefined ||
       (typeof position.price === 'number' && Number.isFinite(position.price)))
   )
 }
 
-function isValidBackupSync(value: unknown, type: AssetAccountType): boolean {
+function isValidBackupSync(value: unknown, type: AccountType): boolean {
   if (
     type === 'Boci' ||
     type === 'Alipay' ||
@@ -764,7 +711,7 @@ function isValidBackupSync(value: unknown, type: AssetAccountType): boolean {
     return false
   }
   if (!value || typeof value !== 'object') return false
-  const sync = value as Partial<AssetAccountSync>
+  const sync = value as Partial<AccountSync>
   const hasValidLastSyncedAt =
     sync.lastSyncedAt === undefined ||
     (typeof sync.lastSyncedAt === 'string' &&
@@ -781,12 +728,13 @@ function isValidBackupSync(value: unknown, type: AssetAccountType): boolean {
 function stripIntegrationFields(workspace: Workspace): Workspace {
   return {
     ...structuredClone(workspace),
-    assetAccounts: workspace.assetAccounts.map((assetAccount) => ({
-      id: assetAccount.id,
-      name: assetAccount.name,
-      type: assetAccount.type,
-      ...(assetAccount.sync ? { sync: structuredClone(assetAccount.sync) } : {}),
-      positions: structuredClone(assetAccount.positions)
+    accounts: workspace.accounts.map((account) => ({
+      id: account.id,
+      name: account.name,
+      type: account.type,
+      ...(account.sync ? { sync: structuredClone(account.sync) } : {}),
+      tagIds: [...account.tagIds],
+      positions: structuredClone(account.positions)
     }))
   }
 }
@@ -814,34 +762,34 @@ function reconcileIntegrations(
 ): { data: AppData; integrationData: IntegrationData } {
   const accountTypes = new Map(
     data.workspaces.flatMap((workspace) =>
-      workspace.assetAccounts.map(
-        (assetAccount) => [assetAccount.id, assetAccount.type] as const
+      workspace.accounts.map(
+        (account) => [account.id, account.type] as const
       )
     )
   )
   const integrations = integrationData.integrations.filter(
-    (integration) => accountTypes.get(integration.assetAccountId) === integration.provider
+    (integration) => accountTypes.get(integration.accountId) === integration.provider
   )
   const integratedAccountIds = new Set(
-    integrations.map((integration) => integration.assetAccountId)
+    integrations.map((integration) => integration.accountId)
   )
   return {
     data: {
       ...data,
       workspaces: data.workspaces.map((workspace) => ({
         ...workspace,
-        assetAccounts: workspace.assetAccounts.map((assetAccount) => {
-          if (integratedAccountIds.has(assetAccount.id)) {
-            return assetAccount.sync
-              ? assetAccount
+        accounts: workspace.accounts.map((account) => {
+          if (integratedAccountIds.has(account.id)) {
+            return account.sync
+              ? account
               : {
-                  ...assetAccount,
+                  ...account,
                   sync: { interval: DEFAULT_SYNC_INTERVAL }
                 }
           }
-          return assetAccount.sync
-            ? { ...assetAccount, sync: undefined }
-            : assetAccount
+          return account.sync
+            ? { ...account, sync: undefined }
+            : account
         })
       }))
     },
@@ -868,103 +816,60 @@ function isValidBackupWorkspace(value: unknown): boolean {
           MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES ||
         workspace.exchangeRateRefreshIntervalMinutes >
           MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES)) ||
-    !Array.isArray(workspace.accountGroups) ||
-    !Array.isArray(workspace.assetAccounts)
+    !Array.isArray(workspace.tags) ||
+    !Array.isArray(workspace.accounts)
   ) {
     return false
   }
 
-  const assetAccountIds = new Set<string>()
-  const positionIds = new Set<string>()
-  const validAssetAccounts = workspace.assetAccounts.every((assetAccount) => {
-    const type = normalizeAssetAccountType(assetAccount?.type)
+  const tagIds = new Set<string>()
+  const validTags = workspace.tags.every((tag) => {
     if (
-      !assetAccount ||
-      typeof assetAccount.id !== 'string' ||
-      !assetAccount.id ||
-      assetAccountIds.has(assetAccount.id) ||
-      typeof assetAccount.name !== 'string' ||
-      !assetAccount.name.trim() ||
+      !tag ||
+      typeof tag.id !== 'string' ||
+      !tag.id.trim() ||
+      tagIds.has(tag.id) ||
+      typeof tag.name !== 'string' ||
+      !tag.name.trim() ||
+      !isTagColor(tag.color)
+    ) return false
+    tagIds.add(tag.id)
+    return true
+  })
+  if (!validTags) return false
+
+  const accountIds = new Set<string>()
+  const positionIds = new Set<string>()
+  const validAccounts = workspace.accounts.every((account) => {
+    const type = normalizeAccountType(account?.type)
+    if (
+      !account ||
+      typeof account.id !== 'string' ||
+      !account.id ||
+      accountIds.has(account.id) ||
+      typeof account.name !== 'string' ||
+      !account.name.trim() ||
       !type ||
-      !Array.isArray(assetAccount.positions) ||
-      !assetAccount.positions.every((position) => {
-        if (!isValidBackupPosition(position) || positionIds.has(position.id)) return false
+      !Array.isArray(account.tagIds) ||
+      account.tagIds.some((tagId) => !tagIds.has(tagId)) ||
+      !Array.isArray(account.positions) ||
+      !account.positions.every((position) => {
+        if (
+          !isValidBackupPosition(position) ||
+          positionIds.has(position.id) ||
+          position.tagIds.some((tagId) => !tagIds.has(tagId))
+        ) return false
         positionIds.add(position.id)
         return true
       }) ||
-      (assetAccount.sync !== undefined && !isValidBackupSync(assetAccount.sync, type))
+      (account.sync !== undefined && !isValidBackupSync(account.sync, type))
     ) {
       return false
     }
-    assetAccountIds.add(assetAccount.id)
+    accountIds.add(account.id)
     return true
   })
-  if (!validAssetAccounts) return false
-
-  const accountGroupIds = new Set<string>()
-  const assignedAssetAccountIds = new Set<string>()
-  const validAccountGroups = workspace.accountGroups.every((accountGroup) => {
-    if (
-      !accountGroup ||
-      typeof accountGroup.id !== 'string' ||
-      !accountGroup.id.trim() ||
-      accountGroupIds.has(accountGroup.id) ||
-      typeof accountGroup.name !== 'string' ||
-      !accountGroup.name.trim() ||
-      !Array.isArray(accountGroup.assetAccountIds)
-    ) {
-      return false
-    }
-    accountGroupIds.add(accountGroup.id)
-    const seenAssetAccountIds = new Set<string>()
-    return accountGroup.assetAccountIds.every((assetAccountId) => {
-      if (
-        typeof assetAccountId !== 'string' ||
-        !assetAccountIds.has(assetAccountId) ||
-        assignedAssetAccountIds.has(assetAccountId) ||
-        seenAssetAccountIds.has(assetAccountId)
-      ) {
-        return false
-      }
-      seenAssetAccountIds.add(assetAccountId)
-      assignedAssetAccountIds.add(assetAccountId)
-      return true
-    })
-  })
-  if (!validAccountGroups) return false
-
-  if (!Array.isArray(workspace.positionGroups)) return false
-
-  const groupIds = new Set<string>()
-  const assignedPositionIds = new Set<string>()
-  return workspace.positionGroups.every((group) => {
-    if (
-      !group ||
-      typeof group.id !== 'string' ||
-      !group.id ||
-      groupIds.has(group.id) ||
-      typeof group.name !== 'string' ||
-      !group.name.trim() ||
-      !Array.isArray(group.positionIds)
-    ) {
-      return false
-    }
-    groupIds.add(group.id)
-    const groupPositionIds = new Set<string>()
-    return group.positionIds.every((positionId) => {
-      if (
-        typeof positionId !== 'string' ||
-        !positionIds.has(positionId) ||
-        assignedPositionIds.has(positionId) ||
-        groupPositionIds.has(positionId)
-      ) {
-        return false
-      }
-      groupPositionIds.add(positionId)
-      assignedPositionIds.add(positionId)
-      return true
-    })
-  })
+  return validAccounts
 }
 
 function isValidBackupSnapshot(
@@ -1028,26 +933,19 @@ export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
     ) {
       return null
     }
-    const workspace = backup.workspace as Workspace
-    const usedSnapshotIds = new Set<string>()
+    const normalizedWorkspace = normalizeStoredWorkspace(backup.workspace)
+    if (!normalizedWorkspace) return null
     const rawSnapshots = backup.snapshots
-    if (
-      !Array.isArray(rawSnapshots) ||
-      !rawSnapshots.every((snapshot) =>
-        isValidBackupSnapshot(snapshot, workspace.id, usedSnapshotIds)
-      )
-    ) {
-      return null
-    }
+    if (!Array.isArray(rawSnapshots)) return null
     const normalized = normalizeStoredData({
-      version: 1,
-      activeWorkspaceId: workspace.id,
-      workspaces: [workspace],
+      version: backup.version,
+      activeWorkspaceId: normalizedWorkspace.id,
+      workspaces: [normalizedWorkspace],
       snapshots: rawSnapshots
     })
-    const normalizedWorkspace = normalized?.workspaces[0]
-    if (!normalizedWorkspace || normalized.snapshots.length !== rawSnapshots.length) return null
-    return { workspace: normalizedWorkspace, snapshots: normalized.snapshots }
+    const workspace = normalized?.workspaces[0]
+    if (!workspace || normalized.snapshots.length !== rawSnapshots.length) return null
+    return { workspace, snapshots: normalized.snapshots }
   } catch {
     return null
   }
@@ -1074,21 +972,21 @@ function createPortfolioOperations(
       )
     : []
 
-  function setAssetAccountIntegration(
-    assetAccountId: string,
-    integration: AssetAccountIntegration | null
+  function setAccountIntegration(
+    accountId: string,
+    integration: AccountIntegration | null
   ): void {
     setIntegrationData((current) => ({
       ...current,
       integrations: integration
         ? [
             ...current.integrations.filter(
-              (item) => item.assetAccountId !== assetAccountId
+              (item) => item.accountId !== accountId
             ),
             integration
           ]
         : current.integrations.filter(
-            (item) => item.assetAccountId !== assetAccountId
+            (item) => item.accountId !== accountId
           )
     }))
   }
@@ -1133,9 +1031,8 @@ function createPortfolioOperations(
       exchangeRateProvider: DEFAULT_EXCHANGE_RATE_PROVIDER,
       exchangeRateRefreshIntervalMinutes:
         DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
-      accountGroups: [],
-      assetAccounts: [],
-      positionGroups: []
+      tags: [],
+      accounts: []
     }
     setData((current) => ({
       ...current,
@@ -1168,10 +1065,10 @@ function createPortfolioOperations(
   }
 
   function deleteWorkspace(id: string): void {
-    const deletedAssetAccountIds = new Set(
+    const deletedAccountIds = new Set(
       data.workspaces
         .find((workspace) => workspace.id === id)
-        ?.assetAccounts.map((assetAccount) => assetAccount.id) ?? []
+        ?.accounts.map((account) => account.id) ?? []
     )
     setData((current) => {
       const workspaces = current.workspaces.filter((workspace) => workspace.id !== id)
@@ -1190,429 +1087,284 @@ function createPortfolioOperations(
     setIntegrationData((current) => ({
       ...current,
       integrations: current.integrations.filter(
-        (integration) => !deletedAssetAccountIds.has(integration.assetAccountId)
+        (integration) => !deletedAccountIds.has(integration.accountId)
       )
     }))
   }
 
-  function createAccountGroup(
-    workspaceId: string,
-    input: AccountGroupInput
-  ): string {
-    const group: AccountGroup = {
-      id: createId(),
-      name: input.name.trim(),
-      assetAccountIds: []
+  function createTag(workspaceId: string, input: TagInput): string {
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
+    if (!workspace) throw new Error('没有找到对应的工作区')
+    const name = input.name.trim()
+    if (workspace.tags.some((tag) => tag.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      throw new Error(`标签“${name}”已存在`)
     }
+    const tag: Tag = { id: createId(), name, color: input.color }
     setData((current) => ({
       ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
-          ? { ...workspace, accountGroups: [...workspace.accountGroups, group] }
-          : workspace
+      workspaces: current.workspaces.map((item) =>
+        item.id === workspaceId ? { ...item, tags: [...item.tags, tag] } : item
       )
     }))
-    return group.id
+    return tag.id
   }
 
-  function updateAccountGroup(
-    workspaceId: string,
-    groupId: string,
-    input: AccountGroupInput
-  ): void {
+  function updateTag(workspaceId: string, tagId: string, input: TagInput): void {
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
+    if (!workspace?.tags.some((tag) => tag.id === tagId)) {
+      throw new Error('没有找到对应的标签')
+    }
+    const name = input.name.trim()
+    if (workspace.tags.some((tag) =>
+      tag.id !== tagId && tag.name.toLocaleLowerCase() === name.toLocaleLowerCase()
+    )) throw new Error(`标签“${name}”已存在`)
+    setData((current) => ({
+      ...current,
+      workspaces: current.workspaces.map((item) =>
+        item.id === workspaceId
+          ? {
+              ...item,
+              tags: item.tags.map((tag) =>
+                tag.id === tagId ? { ...tag, name, color: input.color } : tag
+              )
+            }
+          : item
+      )
+    }))
+  }
+
+  function deleteTag(workspaceId: string, tagId: string): void {
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) =>
         workspace.id === workspaceId
           ? {
               ...workspace,
-              accountGroups: workspace.accountGroups.map((group) =>
-                group.id === groupId ? { ...group, name: input.name.trim() } : group
-              )
+              tags: workspace.tags.filter((tag) => tag.id !== tagId),
+              accounts: workspace.accounts.map((account) => ({
+                ...account,
+                tagIds: account.tagIds.filter((id) => id !== tagId),
+                positions: account.positions.map((position) => ({
+                  ...position,
+                  tagIds: position.tagIds.filter((id) => id !== tagId)
+                }))
+              }))
             }
           : workspace
       )
     }))
   }
 
-  function deleteAccountGroup(workspaceId: string, groupId: string): void {
-    setData((current) => ({
-      ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
-          ? {
-              ...workspace,
-              accountGroups: workspace.accountGroups.filter(
-                (group) => group.id !== groupId
-              )
-            }
-          : workspace
-      )
-    }))
+  function validateTagIds(workspace: Workspace, tagIds: string[]): string[] | null {
+    const normalized = normalizeTagIds(tagIds)
+    const available = new Set(workspace.tags.map((tag) => tag.id))
+    return normalized.every((tagId) => available.has(tagId)) ? normalized : null
   }
 
-  function setAccountGroupAccounts(
+  function setAccountTags(
     workspaceId: string,
-    groupId: string,
-    assetAccountIds: string[]
+    accountId: string,
+    tagIds: string[]
   ): string | null {
-    const workspace = data.workspaces.find(
-      (workspace) => workspace.id === workspaceId
-    )
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
     if (!workspace) return '没有找到对应的工作区'
-    if (!workspace.accountGroups.some((group) => group.id === groupId)) {
-      return '没有找到对应的账户分组'
+    if (!workspace.accounts.some((account) => account.id === accountId)) {
+      return '没有找到对应的资产账户'
     }
-    const availableAssetAccountIds = new Set(
-      workspace.assetAccounts.map((workspace) => workspace.id)
-    )
-    const normalizedAssetAccountIds = [...new Set(assetAccountIds)]
-    if (
-      normalizedAssetAccountIds.some(
-        (assetAccountId) => !availableAssetAccountIds.has(assetAccountId)
-      )
-    ) {
-      return '部分资产账户已不存在，请重新选择'
-    }
-    const assignedGroupByAccountId = new Map(
-      workspace.accountGroups.flatMap((group) =>
-        group.id === groupId
-          ? []
-          : group.assetAccountIds.map(
-              (assetAccountId) => [assetAccountId, group.name] as const
-            )
-      )
-    )
-    const conflictingAccountId = normalizedAssetAccountIds.find(
-      (assetAccountId) => assignedGroupByAccountId.has(assetAccountId)
-    )
-    if (conflictingAccountId) {
-      const assetAccount = workspace.assetAccounts.find(
-        (item) => item.id === conflictingAccountId
-      )
-      return `${assetAccount?.name ?? '所选资产账户'} 已属于“${assignedGroupByAccountId.get(conflictingAccountId)}”，一个资产账户只能加入一个分组`
-    }
+    const normalized = validateTagIds(workspace, tagIds)
+    if (!normalized) return '部分标签已不存在，请重新选择'
     setData((current) => ({
       ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
+      workspaces: current.workspaces.map((item) =>
+        item.id === workspaceId
           ? {
-              ...workspace,
-              accountGroups: workspace.accountGroups.map((group) =>
-                group.id === groupId
-                  ? { ...group, assetAccountIds: normalizedAssetAccountIds }
-                  : group
+              ...item,
+              accounts: item.accounts.map((account) =>
+                account.id === accountId ? { ...account, tagIds: normalized } : account
               )
             }
-          : workspace
+          : item
       )
     }))
     return null
   }
 
-  function removeAccountFromGroup(
+  function setPositionTags(
     workspaceId: string,
-    groupId: string,
-    assetAccountId: string
-  ): void {
+    accountId: string,
+    positionId: string,
+    tagIds: string[]
+  ): string | null {
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
+    if (!workspace) return '没有找到对应的工作区'
+    const account = workspace.accounts.find((item) => item.id === accountId)
+    if (!account) return '没有找到对应的资产账户'
+    if (!account.positions.some((position) => position.id === positionId)) {
+      return '没有找到对应的持仓'
+    }
+    const normalized = validateTagIds(workspace, tagIds)
+    if (!normalized) return '部分标签已不存在，请重新选择'
     setData((current) => ({
       ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
+      workspaces: current.workspaces.map((item) =>
+        item.id === workspaceId
           ? {
-              ...workspace,
-              accountGroups: workspace.accountGroups.map((group) =>
-                group.id === groupId
+              ...item,
+              accounts: item.accounts.map((account) =>
+                account.id === accountId
                   ? {
-                      ...group,
-                      assetAccountIds: group.assetAccountIds.filter(
-                        (id) => id !== assetAccountId
+                      ...account,
+                      positions: account.positions.map((position) =>
+                        position.id === positionId
+                          ? { ...position, tagIds: normalized }
+                          : position
                       )
                     }
-                  : group
+                  : account
               )
             }
-          : workspace
-      )
-    }))
-  }
-
-  function createPositionGroup(
-    workspaceId: string,
-    input: PositionGroupInput
-  ): string {
-    const group: PositionGroup = {
-      id: createId(),
-      name: input.name.trim(),
-      positionIds: []
-    }
-    setData((current) => ({
-      ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
-          ? { ...workspace, positionGroups: [...workspace.positionGroups, group] }
-          : workspace
-      )
-    }))
-    return group.id
-  }
-
-  function updatePositionGroup(
-    workspaceId: string,
-    groupId: string,
-    input: PositionGroupInput
-  ): void {
-    setData((current) => ({
-      ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
-          ? {
-              ...workspace,
-              positionGroups: workspace.positionGroups.map((group) =>
-                group.id === groupId ? { ...group, name: input.name.trim() } : group
-              )
-            }
-          : workspace
-      )
-    }))
-  }
-
-  function deletePositionGroup(workspaceId: string, groupId: string): void {
-    setData((current) => ({
-      ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
-          ? {
-              ...workspace,
-              positionGroups: workspace.positionGroups.filter((group) => group.id !== groupId)
-            }
-          : workspace
-      )
-    }))
-  }
-
-  function setPositionGroupPositions(
-    workspaceId: string,
-    groupId: string,
-    positionIds: string[]
-  ): string | null {
-    const workspace = data.workspaces.find(
-      (workspace) => workspace.id === workspaceId
-    )
-    if (!workspace) return '没有找到对应的工作区'
-    if (!workspace.positionGroups.some((group) => group.id === groupId)) {
-      return '没有找到对应的持仓分组'
-    }
-
-    const availablePositionIds = new Set(
-      workspace.assetAccounts.flatMap((workspace) =>
-        workspace.positions.map((position) => position.id)
-      )
-    )
-    const normalizedPositionIds = [...new Set(positionIds)]
-    if (normalizedPositionIds.some((positionId) => !availablePositionIds.has(positionId))) {
-      return '部分持仓已不存在，请重新选择'
-    }
-    const assignedGroupByPositionId = new Map(
-      workspace.positionGroups.flatMap((group) =>
-        group.id === groupId
-          ? []
-          : group.positionIds.map((positionId) => [positionId, group.name] as const)
-      )
-    )
-    const conflictingPositionId = normalizedPositionIds.find((positionId) =>
-      assignedGroupByPositionId.has(positionId)
-    )
-    if (conflictingPositionId) {
-      const position = workspace.assetAccounts
-        .flatMap((workspace) => workspace.positions)
-        .find((item) => item.id === conflictingPositionId)
-      return `${position?.symbol ?? '所选持仓'} 已属于“${assignedGroupByPositionId.get(conflictingPositionId)}”，一个持仓只能加入一个分组`
-    }
-
-    setData((current) => ({
-      ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
-          ? {
-              ...workspace,
-              positionGroups: workspace.positionGroups.map((group) =>
-                group.id === groupId
-                  ? { ...group, positionIds: normalizedPositionIds }
-                  : group
-              )
-            }
-          : workspace
+          : item
       )
     }))
     return null
   }
 
-  function removePositionFromGroup(
-    workspaceId: string,
-    groupId: string,
-    positionId: string
-  ): void {
-    setData((current) => ({
-      ...current,
-      workspaces: current.workspaces.map((workspace) =>
-        workspace.id === workspaceId
-          ? {
-              ...workspace,
-              positionGroups: workspace.positionGroups.map((group) =>
-                group.id === groupId
-                  ? {
-                      ...group,
-                      positionIds: group.positionIds.filter((id) => id !== positionId)
-                    }
-                  : group
-              )
-            }
-          : workspace
-      )
-    }))
-  }
-
-  function createAssetAccount(workspaceId: string, input: AssetAccountInput): string {
-    const type = normalizeAssetAccountType(input.type) ?? 'Futu'
+  function createAccount(workspaceId: string, input: AccountInput): string {
+    const type = normalizeAccountType(input.type) ?? 'Futu'
     const workspace = data.workspaces.find(
       (workspace) => workspace.id === workspaceId
     )
     if (!workspace) throw new Error('没有找到对应的工作区')
-    const assetAccountId = createId()
+    const accountId = createId()
     const integration = resolveIntegrationInput(
       input.integration,
-      assetAccountId
+      accountId
     )
     if (input.integration && (!integration || integration.provider !== type)) {
       throw new Error('同步配置与资产账户类型不匹配')
     }
     const sync = integration
-      ? (normalizeAssetAccountSync(input.sync, type) ?? {
+      ? (normalizeAccountSync(input.sync, type) ?? {
           interval: DEFAULT_SYNC_INTERVAL
         })
       : undefined
-    const assetAccount: AssetAccount = {
-      id: assetAccountId,
-      name: normalizeAssetAccountName(input.name),
+    const tagIds = validateTagIds(workspace, input.tagIds ?? [])
+    if (!tagIds) throw new Error('部分标签已不存在，请重新选择')
+    const account: Account = {
+      id: accountId,
+      name: normalizeAccountName(input.name),
       type,
       ...(sync ? { sync } : {}),
+      tagIds,
       positions: []
     }
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) =>
         workspace.id === workspaceId
-          ? { ...workspace, assetAccounts: [...workspace.assetAccounts, assetAccount] }
+          ? { ...workspace, accounts: [...workspace.accounts, account] }
           : workspace
       )
     }))
-    setAssetAccountIntegration(assetAccount.id, integration)
-    return assetAccount.id
+    setAccountIntegration(account.id, integration)
+    return account.id
   }
 
-  function updateAssetAccount(
+  function updateAccount(
     workspaceId: string,
-    assetAccountId: string,
-    input: AssetAccountInput
+    accountId: string,
+    input: AccountInput
   ): void {
-    const type = normalizeAssetAccountType(input.type) ?? 'Futu'
+    const type = normalizeAccountType(input.type) ?? 'Futu'
     const workspace = data.workspaces.find(
       (workspace) => workspace.id === workspaceId
     )
     if (!workspace) throw new Error('没有找到对应的工作区')
-    if (!workspace.assetAccounts.some((workspace) => workspace.id === assetAccountId)) {
+    if (!workspace.accounts.some((workspace) => workspace.id === accountId)) {
       throw new Error('没有找到对应的资产账户')
     }
     const existingIntegration = integrationData.integrations.find(
-      (item) => item.assetAccountId === assetAccountId
+      (item) => item.accountId === accountId
     )
     const integration = resolveIntegrationInput(
       input.integration,
-      assetAccountId,
+      accountId,
       existingIntegration
     )
     if (input.integration && (!integration || integration.provider !== type)) {
       throw new Error('同步配置与资产账户类型不匹配')
     }
     const sync = integration
-      ? (normalizeAssetAccountSync(input.sync, type) ?? {
+      ? (normalizeAccountSync(input.sync, type) ?? {
           interval: DEFAULT_SYNC_INTERVAL
         })
       : undefined
+    const existingAccount = workspace.accounts.find(
+      (account) => account.id === accountId
+    )!
+    const tagIds = validateTagIds(workspace, input.tagIds ?? existingAccount.tagIds)
+    if (!tagIds) throw new Error('部分标签已不存在，请重新选择')
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) =>
         workspace.id === workspaceId
           ? {
               ...workspace,
-              assetAccounts: workspace.assetAccounts.map((assetAccount) =>
-                assetAccount.id === assetAccountId
+              accounts: workspace.accounts.map((account) =>
+                account.id === accountId
                   ? {
-                      ...assetAccount,
-                      name: normalizeAssetAccountName(input.name),
+                      ...account,
+                      name: normalizeAccountName(input.name),
                       type,
-                      sync
+                      sync,
+                      tagIds
                     }
-                  : assetAccount
+                  : account
               )
             }
           : workspace
       )
     }))
-    setAssetAccountIntegration(assetAccountId, integration)
+    setAccountIntegration(accountId, integration)
   }
 
-  function deleteAssetAccount(workspaceId: string, assetAccountId: string): void {
+  function deleteAccount(workspaceId: string, accountId: string): void {
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) => {
         if (workspace.id !== workspaceId) return workspace
-        const deletedPositionIds = new Set(
-          workspace.assetAccounts
-            .find((assetAccount) => assetAccount.id === assetAccountId)
-            ?.positions.map((position) => position.id) ?? []
-        )
         return {
           ...workspace,
-          assetAccounts: workspace.assetAccounts.filter(
-            (assetAccount) => assetAccount.id !== assetAccountId
-          ),
-          accountGroups: workspace.accountGroups.map((group) => ({
-            ...group,
-            assetAccountIds: group.assetAccountIds.filter(
-              (id) => id !== assetAccountId
-            )
-          })),
-          positionGroups: workspace.positionGroups.map((group) => ({
-            ...group,
-            positionIds: group.positionIds.filter(
-              (positionId) => !deletedPositionIds.has(positionId)
-            )
-          }))
+          accounts: workspace.accounts.filter(
+            (account) => account.id !== accountId
+          )
         }
       })
     }))
-    setAssetAccountIntegration(assetAccountId, null)
+    setAccountIntegration(accountId, null)
   }
 
   function savePosition(
     workspaceId: string,
-    assetAccountId: string,
+    accountId: string,
     input: PositionInput,
     positionId?: string
   ): string | null {
-    const position = normalizePosition(input, positionId)
-    const assetAccount = data.workspaces
-      .find((workspace) => workspace.id === workspaceId)
-      ?.assetAccounts.find((workspace) => workspace.id === assetAccountId)
-    if (!assetAccount) return '没有找到对应的资产账户'
-    if (assetAccount.sync) return '自动同步的资产账户不能手动修改持仓'
-    if (positionId && !assetAccount.positions.some((item) => item.id === positionId)) {
+    const workspace = data.workspaces.find((item) => item.id === workspaceId)
+    const account = workspace?.accounts.find(
+      (item) => item.id === accountId
+    )
+    if (!account) return '没有找到对应的资产账户'
+    if (account.sync) return '自动同步的资产账户不能手动修改持仓'
+    if (positionId && !account.positions.some((item) => item.id === positionId)) {
       return '没有找到对应的持仓'
     }
+    const existingPosition = account.positions.find((item) => item.id === positionId)
+    const tagIds = validateTagIds(workspace!, input.tagIds ?? existingPosition?.tagIds ?? [])
+    if (!tagIds) return '部分标签已不存在，请重新选择'
+    const position = normalizePosition({ ...input, tagIds }, positionId)
 
-    const duplicate = assetAccount.positions.some(
+    const duplicate = account.positions.some(
       (item) =>
         item.id !== position.id &&
         item.market === position.market &&
@@ -1626,17 +1378,17 @@ function createPortfolioOperations(
         workspace.id === workspaceId
           ? {
               ...workspace,
-              assetAccounts: workspace.assetAccounts.map((currentAssetAccount) =>
-                currentAssetAccount.id === assetAccountId
+              accounts: workspace.accounts.map((currentAccount) =>
+                currentAccount.id === accountId
                   ? {
-                      ...currentAssetAccount,
+                      ...currentAccount,
                       positions: positionId
-                        ? currentAssetAccount.positions.map((item) =>
+                        ? currentAccount.positions.map((item) =>
                             item.id === positionId ? position : item
                           )
-                        : [...currentAssetAccount.positions, position]
+                        : [...currentAccount.positions, position]
                     }
-                  : currentAssetAccount
+                  : currentAccount
               )
             }
           : workspace
@@ -1647,33 +1399,29 @@ function createPortfolioOperations(
 
   function deletePosition(
     workspaceId: string,
-    assetAccountId: string,
+    accountId: string,
     positionId: string
   ): void {
-    const assetAccount = data.workspaces
+    const account = data.workspaces
       .find((workspace) => workspace.id === workspaceId)
-      ?.assetAccounts.find((workspace) => workspace.id === assetAccountId)
-    if (!assetAccount || assetAccount.sync) return
+      ?.accounts.find((workspace) => workspace.id === accountId)
+    if (!account || account.sync) return
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((workspace) =>
         workspace.id === workspaceId
           ? {
               ...workspace,
-              assetAccounts: workspace.assetAccounts.map((assetAccount) =>
-                assetAccount.id === assetAccountId && !assetAccount.sync
+              accounts: workspace.accounts.map((account) =>
+                account.id === accountId && !account.sync
                   ? {
-                      ...assetAccount,
-                      positions: assetAccount.positions.filter(
+                      ...account,
+                      positions: account.positions.filter(
                         (position) => position.id !== positionId
                       )
                     }
-                  : assetAccount
-              ),
-              positionGroups: workspace.positionGroups.map((group) => ({
-                ...group,
-                positionIds: group.positionIds.filter((id) => id !== positionId)
-              }))
+                  : account
+              )
             }
           : workspace
       )
@@ -1682,7 +1430,7 @@ function createPortfolioOperations(
 
   function replacePositions(
     workspaceId: string,
-    assetAccountId: string,
+    accountId: string,
     positions: PositionInput[],
     lastSyncedAt?: string
   ): void {
@@ -1690,8 +1438,8 @@ function createPortfolioOperations(
       ...current,
       workspaces: current.workspaces.map((workspace) => {
         if (workspace.id !== workspaceId) return workspace
-        const targetAccount = workspace.assetAccounts.find(
-          (assetAccount) => assetAccount.id === assetAccountId
+        const targetAccount = workspace.accounts.find(
+          (account) => account.id === accountId
         )
         if (!targetAccount) return workspace
 
@@ -1704,44 +1452,33 @@ function createPortfolioOperations(
               position.symbol.toUpperCase() === input.symbol.trim().toUpperCase() &&
               position.currency.toUpperCase() === input.currency.trim().toUpperCase()
           )
-          const position = normalizePosition(input, existing?.id)
+          const position = normalizePosition(
+            { ...input, tagIds: input.tagIds ?? existing?.tagIds ?? [] },
+            existing?.id
+          )
           usedPositionIds.add(position.id)
           return position
         })
-        const previousPositionIds = new Set(
-          targetAccount.positions.map((position) => position.id)
-        )
-        const availablePositionIds = new Set(
-          normalizedPositions.map((position) => position.id)
-        )
-
         return {
           ...workspace,
-          assetAccounts: workspace.assetAccounts.map((assetAccount) =>
-            assetAccount.id === assetAccountId
+          accounts: workspace.accounts.map((account) =>
+            account.id === accountId
               ? {
-                  ...assetAccount,
+                  ...account,
                   positions: normalizedPositions,
-                  ...(assetAccount.sync &&
+                  ...(account.sync &&
                   typeof lastSyncedAt === 'string' &&
                   Number.isFinite(Date.parse(lastSyncedAt))
                     ? {
                         sync: {
-                          ...assetAccount.sync,
+                          ...account.sync,
                           lastSyncedAt
                         }
                       }
                     : {})
                 }
-              : assetAccount
-          ),
-          positionGroups: workspace.positionGroups.map((group) => ({
-            ...group,
-            positionIds: group.positionIds.filter(
-              (positionId) =>
-                !previousPositionIds.has(positionId) || availablePositionIds.has(positionId)
-            )
-          }))
+              : account
+          )
         }
       })
     }))
@@ -1756,48 +1493,44 @@ function createPortfolioOperations(
     input: Workspace,
     snapshots: WorkspaceSnapshot[] = []
   ): string {
-    const accountGroupIdMap = new Map(
-      input.accountGroups.map(
-        (accountGroup) => [accountGroup.id, createId()] as const
+    const tagIdMap = new Map(
+      input.tags.map(
+        (tag) => [tag.id, createId()] as const
       )
     )
-    const assetAccountIdMap = new Map(
-      input.assetAccounts.map(
-        (assetAccount) => [assetAccount.id, createId()] as const
+    const accountIdMap = new Map(
+      input.accounts.map(
+        (account) => [account.id, createId()] as const
       )
     )
     const positionIdMap = new Map(
-      input.assetAccounts.flatMap((assetAccount) =>
-        assetAccount.positions.map((position) => [position.id, createId()] as const)
+      input.accounts.flatMap((account) =>
+        account.positions.map((position) => [position.id, createId()] as const)
       )
     )
     const workspace: Workspace = {
       ...input,
       id: createId(),
-      accountGroups: input.accountGroups.map((accountGroup) => ({
-        ...accountGroup,
-        id: accountGroupIdMap.get(accountGroup.id)!,
-        assetAccountIds: accountGroup.assetAccountIds.flatMap((assetAccountId) => {
-          const importedAssetAccountId = assetAccountIdMap.get(assetAccountId)
-          return importedAssetAccountId ? [importedAssetAccountId] : []
-        })
+      tags: input.tags.map((tag) => ({
+        ...tag,
+        id: tagIdMap.get(tag.id)!
       })),
-      assetAccounts: input.assetAccounts.map((assetAccount) => ({
-        ...assetAccount,
-        id: assetAccountIdMap.get(assetAccount.id)!,
+      accounts: input.accounts.map((account) => ({
+        ...account,
+        id: accountIdMap.get(account.id)!,
         sync: undefined,
-        positions: assetAccount.positions.map((position) => ({
+        tagIds: account.tagIds.flatMap((tagId) => {
+          const importedTagId = tagIdMap.get(tagId)
+          return importedTagId ? [importedTagId] : []
+        }),
+        positions: account.positions.map((position) => ({
           ...position,
-          id: positionIdMap.get(position.id)!
+          id: positionIdMap.get(position.id)!,
+          tagIds: position.tagIds.flatMap((tagId) => {
+            const importedTagId = tagIdMap.get(tagId)
+            return importedTagId ? [importedTagId] : []
+          })
         }))
-      })),
-      positionGroups: input.positionGroups.map((group) => ({
-        ...group,
-        id: createId(),
-        positionIds: group.positionIds.flatMap((positionId) => {
-          const importedPositionId = positionIdMap.get(positionId)
-          return importedPositionId ? [importedPositionId] : []
-        })
       }))
     }
     const importedSnapshots = snapshots.map((snapshot) => ({
@@ -1828,19 +1561,14 @@ function createPortfolioOperations(
     createWorkspace,
     updateWorkspace,
     deleteWorkspace,
-    createAccountGroup,
-    updateAccountGroup,
-    deleteAccountGroup,
-    setAccountGroupAccounts,
-    removeAccountFromGroup,
-    createPositionGroup,
-    updatePositionGroup,
-    deletePositionGroup,
-    setPositionGroupPositions,
-    removePositionFromGroup,
-    createAssetAccount,
-    updateAssetAccount,
-    deleteAssetAccount,
+    createTag,
+    updateTag,
+    deleteTag,
+    setAccountTags,
+    setPositionTags,
+    createAccount,
+    updateAccount,
+    deleteAccount,
     savePosition,
     deletePosition,
     replacePositions,
@@ -1943,89 +1671,57 @@ export class PortfolioService implements PortfolioOperations {
         case 'delete-workspace':
           operations.deleteWorkspace(command.id)
           break
-        case 'create-account-group':
-          result = operations.createAccountGroup(
+        case 'create-tag':
+          result = operations.createTag(command.workspaceId, command.input)
+          break
+        case 'update-tag':
+          operations.updateTag(
+            command.workspaceId,
+            command.tagId,
+            command.input
+          )
+          break
+        case 'delete-tag':
+          operations.deleteTag(command.workspaceId, command.tagId)
+          break
+        case 'set-account-tags':
+          result = operations.setAccountTags(
+            command.workspaceId,
+            command.accountId,
+            command.tagIds
+          )
+          break
+        case 'set-position-tags':
+          result = operations.setPositionTags(
+            command.workspaceId,
+            command.accountId,
+            command.positionId,
+            command.tagIds
+          )
+          break
+        case 'create-account':
+          result = operations.createAccount(
             command.workspaceId,
             command.input
           )
           break
-        case 'update-account-group':
-          operations.updateAccountGroup(
+        case 'update-account':
+          operations.updateAccount(
             command.workspaceId,
-            command.groupId,
+            command.accountId,
             command.input
           )
           break
-        case 'delete-account-group':
-          operations.deleteAccountGroup(command.workspaceId, command.groupId)
-          break
-        case 'set-account-group-accounts':
-          result = operations.setAccountGroupAccounts(
+        case 'delete-account':
+          operations.deleteAccount(
             command.workspaceId,
-            command.groupId,
-            command.assetAccountIds
-          )
-          break
-        case 'remove-account-from-group':
-          operations.removeAccountFromGroup(
-            command.workspaceId,
-            command.groupId,
-            command.assetAccountId
-          )
-          break
-        case 'create-position-group':
-          result = operations.createPositionGroup(
-            command.workspaceId,
-            command.input
-          )
-          break
-        case 'update-position-group':
-          operations.updatePositionGroup(
-            command.workspaceId,
-            command.groupId,
-            command.input
-          )
-          break
-        case 'delete-position-group':
-          operations.deletePositionGroup(command.workspaceId, command.groupId)
-          break
-        case 'set-position-group-positions':
-          result = operations.setPositionGroupPositions(
-            command.workspaceId,
-            command.groupId,
-            command.positionIds
-          )
-          break
-        case 'remove-position-from-group':
-          operations.removePositionFromGroup(
-            command.workspaceId,
-            command.groupId,
-            command.positionId
-          )
-          break
-        case 'create-asset-account':
-          result = operations.createAssetAccount(
-            command.workspaceId,
-            command.input
-          )
-          break
-        case 'update-asset-account':
-          operations.updateAssetAccount(
-            command.workspaceId,
-            command.assetAccountId,
-            command.input
-          )
-          break
-        case 'delete-asset-account':
-          operations.deleteAssetAccount(
-            command.workspaceId,
-            command.assetAccountId
+            command.accountId
           )
           break
         case 'save-position':
           result = operations.savePosition(
             command.workspaceId,
-            command.assetAccountId,
+            command.accountId,
             command.input,
             command.positionId
           )
@@ -2033,14 +1729,14 @@ export class PortfolioService implements PortfolioOperations {
         case 'delete-position':
           operations.deletePosition(
             command.workspaceId,
-            command.assetAccountId,
+            command.accountId,
             command.positionId
           )
           break
         case 'replace-positions':
           operations.replacePositions(
             command.workspaceId,
-            command.assetAccountId,
+            command.accountId,
             command.positions,
             command.lastSyncedAt
           )
@@ -2055,8 +1751,8 @@ export class PortfolioService implements PortfolioOperations {
       if (
         typeof result === 'string' &&
         (command.type === 'save-position' ||
-          command.type === 'set-account-group-accounts' ||
-          command.type === 'set-position-group-positions')
+          command.type === 'set-account-tags' ||
+          command.type === 'set-position-tags')
       ) {
         return {
           data: structuredClone(this.data),

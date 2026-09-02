@@ -34,7 +34,7 @@ import {
 } from '@/components/ui/empty'
 import {
   formatMoney,
-  type AssetAccount,
+  type Account,
   type Position
 } from '@/lib/portfolio'
 import { valuePositions } from '@/lib/valuation'
@@ -51,10 +51,11 @@ export type AssetAllocationItem = {
   id: string
   label: string
   positions: Position[]
+  color?: string
 }
 
 export function createAccountAllocationItems(
-  accounts: AssetAccount[]
+  accounts: Account[]
 ): AssetAllocationItem[] {
   return accounts.map((account) => ({
     id: account.id,
@@ -218,9 +219,9 @@ export function AssetAllocationChart({
   }
 
   const rankedItems = valuedItems
-    .flatMap(({ id, label, valuation }) => {
+    .flatMap(({ id, label, color, valuation }) => {
       const value = valuation.totalConvertedMarketValue
-      return value !== undefined && value > 0 ? [{ id, label, value }] : []
+      return value !== undefined && value > 0 ? [{ id, label, color, value }] : []
     })
     .sort((left, right) => right.value - left.value)
 
@@ -239,6 +240,7 @@ export function AssetAllocationChart({
         {
           id: 'other',
           label: '其他',
+          color: undefined,
           value: rankedItems
             .slice(chartColors.length - 1)
             .reduce((total, item) => total + item.value, 0)
@@ -247,7 +249,7 @@ export function AssetAllocationChart({
     : rankedItems
   const chartData = visibleItems.map((item, index) => ({
     ...item,
-    fill: chartColors[index]
+    fill: item.color ?? chartColors[index]
   }))
   const totalValue = chartData.reduce((total, item) => total + item.value, 0)
   const chartConfig = Object.fromEntries(

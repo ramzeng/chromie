@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./resources/chromie-logo-knot-v7.svg" alt="Chromie" width="88" />
+  <img src="./resources/chromie-logo-knot.svg" alt="Chromie" width="88" />
 </p>
 
 <h1 align="center">Chromie</h1>
@@ -10,7 +10,7 @@ Chromie 汇总券商、交易所、银行和手工账户中的资产，支持多
 
 ## 功能
 
-- 用账户分组和持仓分组整理多个工作区
+- 用统一标签整理资产账户和持仓
 - 管理 A 股、港股、美股和数字资产，按 `CNY`、`HKD` 或 `USD` 折算市值
 - 从券商与交易所只读同步，也可以手动维护账户和持仓
 - 手动创建资产快照，并导入或导出完整工作区
@@ -33,7 +33,7 @@ Chromie 汇总券商、交易所、银行和手工账户中的资产，支持多
 
 - 资产数据和同步配置经 Electron 安全存储加密后写入本机，macOS 上的密钥由 Keychain 保护
 - 汇率来自 Coinbase 公共接口，默认每 15 分钟更新一次，并在本机保留最近一次成功结果
-- 工作区备份包含账户、持仓、分组和快照，不包含连接参数与 API 凭据
+- 工作区备份包含账户、持仓、标签和快照，不包含连接参数与 API 凭据
 
 导入备份时，Chromie 会新增一个工作区，不会覆盖已有数据。查看历史快照期间，编辑和自动同步会暂停。
 
