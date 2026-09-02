@@ -168,6 +168,6 @@ test('syncs 华盛 holdings, cash and quotes through the local Gateway', async (
 test('rejects non-loopback 华盛 Gateway addresses', async () => {
   await assert.rejects(
     syncHstongPositions({ host: '192.0.2.1', port: 11111 }),
-    /仅允许连接本机地址/
+    /仅允许连接本地地址/
   )
 })

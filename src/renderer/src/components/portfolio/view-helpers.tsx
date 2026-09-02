@@ -5,6 +5,7 @@ import { BOC_ICON_DATA_URL } from '@/lib/boc-icon'
 import { BOCI_ICON_DATA_URL } from '@/lib/boci-icon'
 import { CMB_ICON_DATA_URL } from '@/lib/cmb-icon'
 import { FUTU_ICON_DATA_URL } from '@/lib/futu-icon'
+import { HSTONG_ICON_DATA_URL } from '@/lib/hstong-icon'
 import { OKX_ICON_DATA_URL } from '@/lib/okx-icon'
 import type { ExchangeRateState } from '@/lib/exchange-rates'
 import {
@@ -168,17 +169,12 @@ export function AccountTypeIcon({ type, className }: { type: string; className?:
 
   if (type === 'Hstong') {
     return (
-      <svg
-        viewBox="0 0 48 48"
+      <img
+        src={HSTONG_ICON_DATA_URL}
+        alt=""
         aria-hidden="true"
         className={cn('shrink-0 overflow-hidden rounded-sm', className)}
-      >
-        <rect width="48" height="48" rx="8" fill="#e33238" />
-        <path
-          fill="white"
-          d="M11 11h7v10h12V11h7v26h-7V27H18v10h-7V11Z"
-        />
-      </svg>
+      />
     )
   }
 

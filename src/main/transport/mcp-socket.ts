@@ -4,6 +4,7 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { dirname } from 'node:path'
 
 import {
+  DEFAULT_MCP_ACCESS_SETTINGS,
   MCP_TOOL_NAMES,
   type McpAccessSettings,
   type McpConnectionSettings,
@@ -48,10 +49,7 @@ function secureTokenMatches(actual: string, expected: string): boolean {
 export class McpSocketHost implements McpHostOperations {
   private server: Server | null = null
   private token = ''
-  private access: McpAccessSettings = {
-    enabled: false,
-    allowWrite: false
-  }
+  private access: McpAccessSettings = { ...DEFAULT_MCP_ACCESS_SETTINGS }
 
   constructor(
     private readonly module: PortfolioModuleOperations,
@@ -187,7 +185,7 @@ export class McpSocketHost implements McpHostOperations {
       typeof request.token !== 'string' ||
       !secureTokenMatches(request.token, this.token)
     ) {
-      return this.error(id, 'PERMISSION_DENIED', 'MCP 本机连接认证失败')
+      return this.error(id, 'PERMISSION_DENIED', 'MCP 本地连接认证失败')
     }
 
     try {

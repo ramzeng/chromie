@@ -49,7 +49,8 @@ import { valuePositions } from '../../shared/valuation'
 import type { DesktopOperations } from './desktop-service'
 import {
   type PortfolioChangeListener,
-  type PortfolioOperations
+  type PortfolioOperations,
+  PortfolioSyncConflictError
 } from './portfolio-service'
 
 export type McpErrorCode =
@@ -59,6 +60,7 @@ export type McpErrorCode =
   | 'NOT_FOUND'
   | 'READ_ONLY'
   | 'SYNC_NOT_CONFIGURED'
+  | 'SYNC_CONFLICT'
   | 'SYNC_FAILED'
 
 export class McpOperationError extends Error {
@@ -108,9 +110,7 @@ const WRITE_TOOLS = new Set<McpToolName>([
   'chromie_update_account',
   'chromie_create_position',
   'chromie_update_position',
-  'chromie_create_snapshot',
-  'chromie_sync_account',
-  'chromie_refresh_exchange_rates'
+  'chromie_create_snapshot'
 ])
 
 function success(summary: string, data: unknown): McpToolSuccess {
@@ -199,7 +199,7 @@ function requireAccount(
 ): Account {
   const account = workspace.accounts.find((item) => item.id === accountId)
   if (!account) {
-    throw new McpOperationError('NOT_FOUND', '没有找到对应的资产账户')
+    throw new McpOperationError('NOT_FOUND', '没有找到对应的账户')
   }
   return account
 }
@@ -326,17 +326,14 @@ function positionValue(
     ...(item?.convertedMarketValue === undefined
       ? {}
       : { converted_market_value: item.convertedMarketValue }),
-    missing_currencies: valuation.missingCurrencies
-  }
-}
-
-function assertCommandResult(response: PortfolioCommandResponse): void {
-  if (typeof response.result === 'string') {
-    throw new McpOperationError('VALIDATION_ERROR', response.result)
+    missing_currencies: valuation.missingCurrencies,
+    missing_price_count: valuation.missingPriceCount
   }
 }
 
 export class PortfolioModule implements PortfolioModuleOperations {
+  private readonly syncingAccounts = new Map<string, Promise<PortfolioSyncResponse>>()
+
   constructor(
     private readonly portfolio: PortfolioOperations,
     private readonly desktop: DesktopOperations
@@ -350,12 +347,32 @@ export class PortfolioModule implements PortfolioModuleOperations {
     return this.portfolio.execute(command)
   }
 
+  replaceSynchronizedPositions(
+    workspaceId: string,
+    accountId: string,
+    expectedIntegration: AccountIntegration,
+    positions: PositionInput[],
+    syncedAt: string
+  ): Promise<void> {
+    return this.portfolio.replaceSynchronizedPositions(
+      workspaceId,
+      accountId,
+      expectedIntegration,
+      positions,
+      syncedAt
+    )
+  }
+
   inspectBackup(content: unknown) {
     return this.portfolio.inspectBackup(content)
   }
 
   exportActiveWorkspace(): Promise<string> {
     return this.portfolio.exportActiveWorkspace()
+  }
+
+  importBackup(content: unknown): Promise<string> {
+    return this.portfolio.importBackup(content)
   }
 
   subscribe(listener: PortfolioChangeListener): () => void {
@@ -373,7 +390,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     if (!parsed.success) {
       throw new McpOperationError(
         'VALIDATION_ERROR',
-        parsed.error.issues.map((issue) => issue.message).join('；'),
+        parsed.error.issues.map((issue) => issue.message).join('，'),
         false,
         parsed.error.flatten()
       )
@@ -437,7 +454,24 @@ export class PortfolioModule implements PortfolioModuleOperations {
     }
   }
 
-  async syncAccount(
+  syncAccount(
+    workspaceId: string,
+    accountId: string
+  ): Promise<PortfolioSyncResponse> {
+    const key = `${workspaceId}\u0000${accountId}`
+    const existing = this.syncingAccounts.get(key)
+    if (existing) return existing
+
+    const pending = this.performAccountSync(workspaceId, accountId).finally(() => {
+      if (this.syncingAccounts.get(key) === pending) {
+        this.syncingAccounts.delete(key)
+      }
+    })
+    this.syncingAccounts.set(key, pending)
+    return pending
+  }
+
+  private async performAccountSync(
     workspaceId: string,
     accountId: string
   ): Promise<PortfolioSyncResponse> {
@@ -450,7 +484,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     if (!account.sync || !integration) {
       throw new McpOperationError(
         'SYNC_NOT_CONFIGURED',
-        '资产账户尚未在 Chromie 中配置自动同步'
+        '账户尚未在 Chromie 中配置自动同步'
       )
     }
 
@@ -490,17 +524,17 @@ export class PortfolioModule implements PortfolioModuleOperations {
       } else {
         throw new McpOperationError(
           'SYNC_NOT_CONFIGURED',
-          '同步配置与资产账户类型不匹配'
+          '同步配置与账户类型不匹配'
         )
       }
 
-      await this.portfolio.execute({
-        type: 'replace-positions',
+      await this.portfolio.replaceSynchronizedPositions(
         workspaceId,
         accountId,
-        positions: result.positions,
-        lastSyncedAt: result.syncedAt
-      })
+        integration,
+        result.positions,
+        result.syncedAt
+      )
       return {
         positionCount: result.positions.length,
         syncedAt: result.syncedAt
@@ -508,6 +542,9 @@ export class PortfolioModule implements PortfolioModuleOperations {
     } catch (error) {
       if (error instanceof McpOperationError) {
         throw error
+      }
+      if (error instanceof PortfolioSyncConflictError) {
+        throw new McpOperationError('SYNC_CONFLICT', error.message, true)
       }
       const message = error instanceof Error ? error.message : String(error)
       throw new McpOperationError('SYNC_FAILED', message, true)
@@ -578,7 +615,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
         ...(valuation.totalConvertedMarketValue === undefined
           ? {}
           : { total_converted_market_value: valuation.totalConvertedMarketValue }),
-        missing_currencies: valuation.missingCurrencies
+        missing_currencies: valuation.missingCurrencies,
+        missing_price_count: valuation.missingPriceCount
       }
     })
     return success(`找到 ${workspaces.length} 个工作区`, {
@@ -689,7 +727,8 @@ export class PortfolioModule implements PortfolioModuleOperations {
                   }
                 : {})
             }),
-        missing_currencies: valuation.missingCurrencies
+        missing_currencies: valuation.missingCurrencies,
+        missing_price_count: valuation.missingPriceCount
       }
     })
     rows.sort(
@@ -709,6 +748,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
           ? {}
           : { converted_market_value: total.totalConvertedMarketValue }),
         missing_currencies: total.missingCurrencies,
+        missing_price_count: total.missingPriceCount,
         complete: total.isComplete
       },
       rows
@@ -841,7 +881,9 @@ export class PortfolioModule implements PortfolioModuleOperations {
         input.exchange_rate_provider ?? workspace.exchangeRateProvider,
       exchangeRateRefreshIntervalMinutes:
         input.exchange_rate_refresh_interval_minutes ??
-        workspace.exchangeRateRefreshIntervalMinutes
+        workspace.exchangeRateRefreshIntervalMinutes,
+      stockQuoteProvider: workspace.stockQuoteProvider,
+      cryptoQuoteProvider: workspace.cryptoQuoteProvider
     }
     await this.portfolio.execute({
       type: 'update-workspace',
@@ -897,14 +939,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const state = await this.portfolio.load()
     const workspace = requireWorkspace(state.data, input.workspace_id)
     requireAccount(workspace, input.account_id)
-    const response = await this.portfolio.execute({
+    await this.portfolio.execute({
       type: 'set-account-tags',
       workspaceId: workspace.id,
       accountId: input.account_id,
       tagIds: input.tag_ids
     })
-    assertCommandResult(response)
-    return success('资产账户标签已更新', {
+    return success('账户标签已更新', {
       account_id: input.account_id,
       tag_ids: input.tag_ids
     })
@@ -919,14 +960,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
     if (!account.positions.some((position) => position.id === input.position_id)) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的持仓')
     }
-    const response = await this.portfolio.execute({
+    await this.portfolio.execute({
       type: 'set-position-tags',
       workspaceId: workspace.id,
       accountId: account.id,
       positionId: input.position_id,
       tagIds: input.tag_ids
     })
-    assertCommandResult(response)
     return success('持仓标签已更新', {
       position_id: input.position_id,
       tag_ids: input.tag_ids
@@ -945,7 +985,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         tagIds: input.tag_ids
       }
     })
-    return success(`已创建资产账户“${input.name}”`, {
+    return success(`已创建账户“${input.name}”`, {
       account_id: response.result
     })
   }
@@ -963,7 +1003,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     if (integration && nextType !== account.type) {
       throw new McpOperationError(
         'VALIDATION_ERROR',
-        '已配置自动同步的资产账户不能通过 MCP 修改类型，请在 Chromie 中操作'
+        '已配置自动同步的账户不能通过 MCP 修改类型，请在 Chromie 中操作'
       )
     }
     await this.portfolio.execute({
@@ -978,7 +1018,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
         ...(integration ? { integration: integrationInput(integration) } : {})
       }
     })
-    return success(`已更新资产账户“${input.name ?? account.name}”`, {
+    return success(`已更新账户“${input.name ?? account.name}”`, {
       account_id: account.id
     })
   }
@@ -990,7 +1030,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const workspace = requireWorkspace(state.data, input.workspace_id)
     const account = requireAccount(workspace, input.account_id)
     if (account.sync) {
-      throw new McpOperationError('READ_ONLY', '自动同步的资产账户不能手动修改持仓')
+      throw new McpOperationError('READ_ONLY', '自动同步的账户不能手动修改持仓')
     }
     const positionInput: PositionInput = {
       market: input.market,
@@ -1014,7 +1054,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     const workspace = requireWorkspace(state.data, input.workspace_id)
     const account = requireAccount(workspace, input.account_id)
     if (account.sync) {
-      throw new McpOperationError('READ_ONLY', '自动同步的资产账户不能手动修改持仓')
+      throw new McpOperationError('READ_ONLY', '自动同步的账户不能手动修改持仓')
     }
     const existing = account.positions.find(
       (position) => position.id === input.position_id
@@ -1061,7 +1101,6 @@ export class PortfolioModule implements PortfolioModuleOperations {
       input: positionInput,
       ...(positionId ? { positionId } : {})
     })
-    assertCommandResult(response)
     const stored = response.data.workspaces
       .find((item) => item.id === workspace.id)
       ?.accounts.find((item) => item.id === account.id)

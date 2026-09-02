@@ -5,7 +5,7 @@ export interface PortfolioRepository {
   save(content: string): Promise<void>
 }
 
-export class SecurePortfolioRepository implements PortfolioRepository {
+export class FilePortfolioRepository implements PortfolioRepository {
   constructor(private readonly storage: StringStore) {}
 
   load(): Promise<string | null> {

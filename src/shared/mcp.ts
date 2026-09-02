@@ -56,7 +56,7 @@ export const getWorkspaceInputSchema = z.object({
   workspace_id: id,
   view: mcpViewSchema.optional(),
   include_positions: z.boolean()
-    .describe('是否在工作区详情中内嵌持仓；默认 false，持仓较多时请使用列出持仓工具')
+    .describe('是否在工作区详情中内嵌持仓，默认为 false，持仓较多时请使用列出持仓工具')
     .optional()
     .default(false)
 }).strict()
@@ -292,7 +292,8 @@ const workspaceOutputSchema = z.object({
 const valuationOutputSchema = z.object({
   market_value: z.number().optional(),
   converted_market_value: z.number().optional(),
-  missing_currencies: z.array(z.string())
+  missing_currencies: z.array(z.string()),
+  missing_price_count: count
 }).strict()
 const errorDataSchema = z.object({
   code: z.string(),
@@ -331,7 +332,8 @@ export const mcpToolOutputSchemas = {
       position_count: count,
       snapshot_count: count,
       total_converted_market_value: z.number().optional(),
-      missing_currencies: z.array(z.string())
+      missing_currencies: z.array(z.string()),
+      missing_price_count: count
     }).strict())
   }).strict()),
   chromie_get_workspace: toolOutputSchema(z.object({
@@ -348,6 +350,7 @@ export const mcpToolOutputSchemas = {
       position_count: count,
       converted_market_value: z.number().optional(),
       missing_currencies: z.array(z.string()),
+      missing_price_count: count,
       complete: z.boolean()
     }).strict(),
     rows: z.array(z.object({
@@ -358,7 +361,8 @@ export const mcpToolOutputSchemas = {
       market_value: z.number().optional(),
       converted_market_value: z.number().optional(),
       allocation_percent: z.number().optional(),
-      missing_currencies: z.array(z.string())
+      missing_currencies: z.array(z.string()),
+      missing_price_count: count
     }).strict())
   }).strict()),
   chromie_list_positions: toolOutputSchema(z.object({
@@ -431,8 +435,8 @@ export type McpAccessSettings = {
 }
 
 export const DEFAULT_MCP_ACCESS_SETTINGS: McpAccessSettings = {
-  enabled: false,
-  allowWrite: false
+  enabled: true,
+  allowWrite: true
 }
 
 export type McpConnectionSettings = {

@@ -4,14 +4,11 @@ import type { ExchangeRateSnapshot } from '../../../shared/exchange-rates'
 import type { AccountIntegrationView } from '../../../shared/integrations'
 import {
   EMPTY_PORTFOLIO_DATA,
-  type WorkspaceBackup,
   type AppData,
   type AccountInput,
   type PortfolioCommand,
-  type WorkspaceSnapshot,
   type PositionInput,
   type TagInput,
-  type Workspace,
   type WorkspaceInput,
   type WorkspaceSettingsInput
 } from '../../../shared/portfolio'
@@ -74,7 +71,7 @@ export function usePortfolio() {
     }
   }, [])
 
-  async function execute(command: PortfolioCommand): Promise<string | null | undefined> {
+  async function execute(command: PortfolioCommand): Promise<string | undefined> {
     if (!window.desktop.portfolio) {
       throw new Error('资产数据组件尚未加载，请重启 Chromie')
     }
@@ -171,7 +168,7 @@ export function usePortfolio() {
     createAccount: (workspaceId: string, input: AccountInput) =>
       execute({ type: 'create-account', workspaceId, input }).then(
         (result) => {
-          if (typeof result !== 'string') throw new Error('创建资产账户失败')
+          if (typeof result !== 'string') throw new Error('创建账户失败')
           return result
         }
       ),
@@ -214,19 +211,6 @@ export function usePortfolio() {
         accountId,
         positionId
       }).then(() => undefined),
-    replacePositions: (
-      workspaceId: string,
-      accountId: string,
-      positions: PositionInput[],
-      lastSyncedAt?: string
-    ) =>
-      execute({
-        type: 'replace-positions',
-        workspaceId,
-        accountId,
-        positions,
-        lastSyncedAt
-      }).then(() => undefined),
     syncAccount: async (
       workspaceId: string,
       accountId: string
@@ -238,23 +222,6 @@ export function usePortfolio() {
         workspaceId,
         accountId
       )
-    },
-    importWorkspace: (workspace: Workspace, snapshots: WorkspaceSnapshot[] = []) =>
-      execute({ type: 'import-workspace', workspace, snapshots }).then((result) => {
-        if (typeof result !== 'string') throw new Error('导入工作区失败')
-        return result
-      }),
-    inspectBackup: async (content: string): Promise<WorkspaceBackup | null> => {
-      if (!window.desktop.portfolio) {
-        throw new Error('资产数据组件尚未加载，请重启 Chromie')
-      }
-      return window.desktop.portfolio.inspectBackup(content)
-    },
-    exportWorkspace: async (): Promise<string> => {
-      if (!window.desktop.portfolio) {
-        throw new Error('资产数据组件尚未加载，请重启 Chromie')
-      }
-      return window.desktop.portfolio.exportActiveWorkspace()
     }
   }
 }

@@ -11,12 +11,17 @@ import {
   useTableSort
 } from '@/components/portfolio/sortable-table-head'
 import { TableEmptyState } from '@/components/portfolio/table-empty-state'
+import {
+  TablePagination,
+  useTablePagination
+} from '@/components/portfolio/table-pagination'
 import { ValueSummaryCard } from '@/components/portfolio/value-summary-card'
-import { TagBadge } from '@/components/portfolio/tag-badge'
+import { TagBadge, UntaggedBadge } from '@/components/portfolio/tag-badge'
 import {
   AccountTypeIcon,
   MaskedAssetValue,
   formatAmount,
+  formatLastSyncedAt,
   type ExchangeRateView
 } from '@/components/portfolio/view-helpers'
 import { Button } from '@/components/ui/button'
@@ -36,6 +41,12 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@/components/ui/tooltip'
 import {
   formatMoney,
   formatNumber,
@@ -99,6 +110,19 @@ function PositionTable({
       sort.direction
     )
   )
+  const paginationResetKey = [
+    sort.key,
+    sort.direction,
+    ...positions.map((position) => position.id)
+  ].join(':')
+  const pagination = useTablePagination(
+    sortedPositions.length,
+    paginationResetKey
+  )
+  const visiblePositions = sortedPositions.slice(
+    pagination.startIndex,
+    pagination.endIndex
+  )
 
   if (positions.length === 0) {
     return <TableEmptyState>暂无持仓</TableEmptyState>
@@ -130,7 +154,7 @@ function PositionTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedPositions.map((position) => {
+          {visiblePositions.map((position) => {
             const positionValuation = valuation.byPositionId.get(position.id)
             return (
               <TableRow key={position.id}>
@@ -210,6 +234,7 @@ function PositionTable({
           })}
         </TableBody>
       </Table>
+      <TablePagination itemCount={sortedPositions.length} {...pagination} />
     </div>
   )
 }
@@ -241,6 +266,13 @@ export function AccountDetail({
   onEditPosition: (position: Position) => void
   onDeletePosition: (position: Position) => void
 }) {
+  const syncing = syncState?.status === 'syncing'
+  const syncHint = syncing
+    ? '正在同步账户数据'
+    : account.sync?.lastSyncedAt
+      ? `同步账户数据 · 上次同步于 ${formatLastSyncedAt(account.sync.lastSyncedAt)}`
+      : '同步账户数据'
+
   return (
     <PortfolioPage>
       <PortfolioPageHeader>
@@ -255,28 +287,38 @@ export function AccountDetail({
             <h1 className="truncate text-2xl font-semibold tracking-[-0.035em]">
               {account.name}
             </h1>
-            {account.tagIds.length > 0 && (
-              <div className="mt-1.5">
+            <div className="mt-1.5 min-h-6">
+              {account.tagIds.length > 0 ? (
                 <TagBadges tagIds={account.tagIds} tags={tags} />
-              </div>
-            )}
+              ) : (
+                <UntaggedBadge />
+              )}
+            </div>
           </div>
         </div>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
           {!readOnly && account.sync && (
-            <Button
-              variant="secondary"
-              onClick={() => void onSync()}
-              disabled={syncState?.status === 'syncing'}
-              aria-busy={syncState?.status === 'syncing'}
-            >
-              {syncState?.status === 'syncing' ? (
-                <Spinner data-icon="inline-start" />
-              ) : (
-                <RefreshCw data-icon="inline-start" />
-              )}
-              同步
-            </Button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void onSync()}
+                    disabled={syncing}
+                    aria-busy={syncing}
+                    aria-label={syncHint}
+                  >
+                    {syncing ? (
+                      <Spinner data-icon="inline-start" />
+                    ) : (
+                      <RefreshCw data-icon="inline-start" />
+                    )}
+                    同步
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{syncHint}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           {!readOnly && !account.sync && (
             <Button variant="secondary" onClick={onAddPosition}>

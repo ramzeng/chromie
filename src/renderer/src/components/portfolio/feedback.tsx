@@ -1,6 +1,7 @@
 import {
   CircleAlert,
   Download,
+  Eye,
   Plus,
   ShieldCheck
 } from 'lucide-react'
@@ -22,16 +23,18 @@ import { Spinner } from '@/components/ui/spinner'
 import { CHROMIE_LOGO_URL } from '@/lib/brand'
 
 export function reportPortfolioError(error: unknown, title = '操作失败'): void {
-  toast.error(title, { description: cleanErrorMessage(error) })
+  toast.error(`${title}：${cleanErrorMessage(error)}`)
 }
 
 export function EmptyWorkspace({
   onCreate,
   onImport,
+  onExploreExample,
   importing
 }: {
   onCreate: () => void
   onImport: () => void
+  onExploreExample: () => void
   importing: boolean
 }) {
   return (
@@ -46,7 +49,8 @@ export function EmptyWorkspace({
       >
         <EmptyHeader className="max-w-none">
           <EmptyMedia
-            className="mb-3 size-16 rounded-sm border border-border/70 bg-sidebar shadow-lg shadow-black/25"
+            variant="icon"
+            className="mb-3 size-16 border border-border/70 bg-sidebar shadow-lg shadow-black/25"
             aria-hidden="true"
           >
             <img className="size-11 object-contain invert" src={CHROMIE_LOGO_URL} alt="" />
@@ -77,6 +81,15 @@ export function EmptyWorkspace({
                 <Download data-icon="inline-start" />
               )}
               {importing ? '读取中…' : '导入工作区'}
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              disabled={importing}
+              onClick={onExploreExample}
+            >
+              <Eye data-icon="inline-start" />
+              体验示例工作区
             </Button>
           </div>
           <EmptyDescription className="flex items-center gap-1.5">
@@ -122,19 +135,19 @@ export function AppLoadingSkeleton() {
         data-slot="app-content"
         className="@container min-w-0 flex-1 border-l border-border bg-background"
       >
-        <div className="mx-auto w-full max-w-[96rem] px-4 pb-6 pt-8 lg:px-6">
+        <div className="mx-auto w-full max-w-[96rem] px-4 pb-6 pt-10 lg:px-6">
           <Skeleton className="h-8 w-40" />
-          <div className="mt-5 grid gap-2 @min-[36rem]:grid-cols-2 @min-[48rem]:grid-cols-3 @min-[68rem]:grid-cols-5">
-            <Skeleton className="h-[104px] w-full @min-[36rem]:col-span-2 @min-[48rem]:col-span-3 @min-[68rem]:col-span-2" />
+          <div className="mt-5 grid gap-2 @min-[36rem]:grid-cols-2 @min-[68rem]:grid-cols-4">
             <Skeleton className="h-[104px] w-full" />
             <Skeleton className="h-[104px] w-full" />
-            <Skeleton className="h-[104px] w-full @min-[36rem]:col-span-2 @min-[48rem]:col-span-1" />
+            <Skeleton className="h-[104px] w-full" />
+            <Skeleton className="h-[104px] w-full" />
           </div>
           <div className="mt-6 grid gap-3 @min-[68rem]:grid-cols-2">
             <Skeleton className="h-[300px] w-full" />
             <Skeleton className="h-[300px] w-full" />
           </div>
-          <div className="mt-6 overflow-hidden rounded-sm border p-4">
+          <div className="mt-6 overflow-hidden rounded-sm border border-border/70 bg-card p-4">
             <Skeleton className="h-8 w-full" />
             {[0, 1, 2, 3].map((item) => (
               <Skeleton key={item} className="mt-3 h-10 w-full" />
