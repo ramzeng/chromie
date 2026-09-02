@@ -1,143 +1,76 @@
-# Chromie
+<p align="center">
+  <img src="./resources/chromie-logo-knot-v7.svg" alt="Chromie" width="88" />
+</p>
 
-一个面向 macOS 的本地资产管理工具。当前支持多个工作区、资产账户以及 CN、HK、US、CC 市场持仓的本地维护。
+<h1 align="center">Chromie</h1>
 
-## 当前能力
+<p align="center">在 macOS 上统一管理分散的资产，数据留在本机</p>
 
-- 创建、切换、改名和删除本地工作区
-- 在工作区下管理多个资产账户
-- 在资产概览中按资产账户或持仓分组查看币种与折算市值
-- 维护持仓的市场、代码、名称、币种、数量和当前价格
-- 创建持仓分组，并混合加入任意资产账户中的持仓；每项持仓最多归属一个分组
-- 自动获取汇率，将不同币种换算为工作区本位币并统一计算持仓市值占比
-- 手动维护支付宝资产账户及其持仓
-- 手动维护中银国际、招商银行、中国银行和通用资产账户及其持仓
-- 通过本机 Futu OpenD 自动同步富途牛牛港美股持仓和分币种现金
-- 通过本机 IBKR Client Portal Gateway 自动同步盈透证券持仓和分币种现金
-- 通过本机华盛 OpenAPI Gateway 自动同步华盛通港股、美股、A 股通持仓和分币种现金
-- 通过 OKX 只读 API 自动同步交易账户和资金账户资产
-- 通过币安只读 API 自动同步现货账户和资金钱包资产
-- 单独导出和导入工作区
-- 手动创建资产快照，在当前数据与只读历史快照之间切换
-- 通过本机 MCP 协议让 Agent 在授权范围内查询和维护资产数据
+Chromie 汇总券商、交易所、银行和手工账户中的资产，支持多工作区、多币种折算、历史快照和受控的 MCP 访问。
+
+## 功能
+
+- 用账户分组和持仓分组整理多个工作区
+- 管理 A 股、港股、美股和数字资产，按 `CNY`、`HKD` 或 `USD` 折算市值
+- 从券商与交易所只读同步，也可以手动维护账户和持仓
+- 手动创建资产快照，并导入或导出完整工作区
+- 允许本机 Agent 在授权范围内查询和维护资产数据
+
+## 支持的账户
+
+| 账户 | 接入方式 | 同步内容 |
+| --- | --- | --- |
+| 富途牛牛 | Futu OpenD，默认 `127.0.0.1:33333` | 港美股持仓与分币种现金 |
+| 盈透证券 | Client Portal Gateway，默认 `127.0.0.1:5000` | 证券持仓与分币种现金 |
+| 华盛通 | [OpenAPI Gateway](https://quant-open.hstong.com/api-docs/introduction/guidelines.html)，默认 `127.0.0.1:11111` | 港股、美股、深股通、沪股通持仓与现金 |
+| 欧易 | 只读 API Key | 交易账户与资金账户资产 |
+| 币安 | 只读 HMAC API Key | 现货账户与资金钱包资产 |
+| 支付宝、中银国际、招商银行、中国银行、通用账户 | 手动维护 | 自行录入的持仓与价格 |
+
+自动同步默认每 30 秒执行一次。盈透证券与华盛通只允许连接本机 Gateway，交易所 API Key 也应只保留读取权限。Chromie 不提供下单、划转或提现功能。
+
+## 数据与备份
+
+- 资产数据和同步配置经 Electron 安全存储加密后写入本机，macOS 上的密钥由 Keychain 保护
+- 汇率来自 Coinbase 公共接口，默认每 15 分钟更新一次，并在本机保留最近一次成功结果
+- 工作区备份包含账户、持仓、分组和快照，不包含连接参数与 API 凭据
+
+导入备份时，Chromie 会新增一个工作区，不会覆盖已有数据。查看历史快照期间，编辑和自动同步会暂停。
 
 ## MCP 协议
 
-在工作区菜单中打开“工作区设置”，切换到“MCP 协议”页面即可启用。MCP 协议默认关闭；首次启用后仍为只读模式，开启写入权限后才能编辑数据或联网同步。页面会生成当前安装环境可直接使用的 MCP 协议客户端配置。
+在“工作区设置”中启用 MCP 协议后，Agent 可以查询工作区、资产概览、持仓、快照和同步状态。开启写入权限后，还可以修改本地资产数据、触发同步和更新汇率。
 
-Chromie 必须保持运行。MCP 协议客户端启动的 `--mcp` 辅助进程只负责 stdio 协议，并通过当前用户可访问的本机 Unix Socket 调用正在运行的 Chromie；资产文件、交易平台凭据和汇率缓存始终由 Electron main 进程持有。
+MCP 协议默认关闭，首次启用时仍为只读模式。它不提供删除工具，也不会读取或返回同步凭据。使用期间 Chromie 必须保持运行，辅助进程只负责 stdio 与本机 Unix Socket 之间的转发。
 
-当前提供以下能力：
+## 从源码运行
 
-- 列出和读取工作区、历史快照及脱敏后的同步状态
-- 按资产账户、账户分组、持仓分组或币种生成资产概览
-- 列出和搜索持仓，并读取市值、市值占比和缺失汇率
-- 创建和修改工作区、账户分组、资产账户、持仓、分组及快照
-- 使用 Chromie 中已有的凭据同步持仓或更新汇率
-
-写操作由主进程顺序执行。历史快照始终只读；MCP 协议不提供删除能力，也不接受、读取或返回 API Key、Secret Key、Passphrase 等同步凭据。
-
-## 资产快照
-
-工作区侧栏中的“时间机器”会打开快照列表，用于创建快照并切换当前数据和历史快照。快照会保存当前工作区结构、持仓价格以及当时可用的汇率；查看历史快照时，编辑和自动同步会暂停，返回当前数据后恢复正常。
-
-快照仅保存在本机，可单独删除，也会随工作区备份一起导出和导入。快照不包含同步连接参数或 API 凭据。
-
-## 富途牛牛同步
-
-先启动 Futu OpenD 并开启 WebSocket 服务。资产账户选择富途牛牛并开启自动同步后，可填写 Futu OpenD 地址、端口、密钥和同步间隔。默认连接 `127.0.0.1:33333`，开启后会立即同步，随后默认每 30 秒刷新一次。
-
-SSL 和备用密钥可在启动 Chromie 时设置：
-
-- `FUTU_OPEND_WS_SSL`
-- `FUTU_OPEND_WS_KEY`
-
-同步为只读操作，不会解锁交易或提交订单。
-
-## OKX 同步
-
-在 OKX 创建仅有读取权限的 API Key。资产账户选择欧易并开启自动同步后，填写 API Key、Secret Key、Passphrase 和同步间隔。开启后会立即同步，随后默认每 30 秒刷新一次。
-
-API 配置仅保存在本地。同步会合并交易账户和资金账户余额，不会提交订单或划转资产。
-
-## IBKR 同步
-
-先下载并启动 IBKR Client Portal Gateway，然后在浏览器访问 Gateway 登录页并完成盈透证券登录。Gateway 默认地址为 `https://localhost:5000`；macOS 上如果端口被占用，可在 Gateway 配置中修改端口，并在 Chromie 中填写相同端口。
-
-资产账户选择盈透证券并开启自动同步后，填写本机 Gateway 地址、端口和同步间隔。Chromie 仅允许连接 `127.0.0.1`、`localhost` 或 `::1`，会读取当前用户名可访问的全部账户，合并证券持仓和分币种现金，不会提交订单。
-
-Client Portal Gateway 使用自签名证书，且要求用户定期在浏览器重新认证。如果出现“尚未登录或会话已过期”，请先打开 Gateway 登录页重新登录。
-
-## 币安同步
-
-在币安创建 HMAC API Key，只保留读取权限，不要开启现货和杠杆交易、合约交易或提现权限。资产账户选择币安并开启自动同步后，填写 API Key、Secret Key 和同步间隔。
-
-API 配置仅保存在本地。同步会合并现货账户和资金钱包余额，并通过币安公开现货行情计算美元参考价格，不会提交订单、划转或提现资产。
-
-## 华盛通同步
-
-先在华盛通完成证券开户并申请 OpenAPI 权限。通过合规审核后，按照[华盛官方开通指引](https://quant-open.hstong.com/api-docs/introduction/guidelines.html)配置 RSA 密钥，再下载并启动 OpenAPI Gateway。Gateway 默认在本机 `127.0.0.1:11111` 提供 HTTP 接口。
-
-资产账户选择“华盛通”并开启自动同步后，填写本机 Gateway 地址、端口和同步间隔。交易密码为可选项：填写后 Chromie 会按华盛官方加密方式调用交易登录；留空时，需要先在 Gateway 中执行 `tradelogin`。交易密码随其他同步凭据进入系统安全存储，macOS 上由 Keychain 保护，不会出现在工作区备份或 MCP 协议响应中。
-
-同步覆盖港股、美股、深股通和沪股通，读取持仓数量及各市场可用现金，并优先通过华盛实时报价接口补齐现价。若账户没有对应行情权限，持仓仍会同步，但缺少可靠报价的标的不会伪造价格。Chromie 的华盛接入不包含下单、撤单或改单接口，并且仅允许连接 `127.0.0.1`、`localhost` 或 `::1`。
-
-## 汇率与折算市值
-
-每个工作区可以从 `CNY`、`HKD` 和 `USD` 中选择独立的本位币，默认使用 `CNY`。持仓市值继续保留原币种，折算市值通过 Coinbase 公共汇率接口自动换算，全部持仓市值占比按折算市值统一计算。
-
-应用启动后会获取最新汇率，并每 15 分钟自动更新。最近一次成功汇率缓存在本机；网络请求失败时继续使用缓存。若某个已定价持仓缺少汇率，则暂不显示整个列表的市值占比，避免产生不完整的百分比。
-
-## 数据备份与存储
-
-在工作区菜单中选择“导出工作区”，可将当前工作区生成为一个 JSON 备份文件。新设备首次打开时可直接选择“导入工作区”，也可以从工作区菜单导入。导入会先校验文件，再新增一个工作区，不会覆盖现有工作区。
-
-备份包含工作区、资产账户、账户分组、持仓分组、持仓、非敏感同步状态和历史快照，不包含连接参数或 API 凭据；导入后需要重新配置自动同步。
-
-日常资产数据与同步连接配置由 Electron main 进程分别管理，并使用系统安全存储加密后写入用户数据目录；macOS 上密钥由 Keychain 保护。汇率缓存也由 main 进程持久化，但不包含同步凭据。
-
-## 技术栈
-
-- Electron + electron-vite
-- React + TypeScript
-- Tailwind CSS v4
-- shadcn/ui
-- pnpm
-
-## 开发
+需要 macOS、Node.js 和 pnpm。
 
 ```bash
+git clone https://github.com/ramzeng/chromie.git
+cd chromie
 pnpm install
 pnpm dev
-pnpm test
 ```
 
-## 检查与构建
-
 ```bash
+pnpm test
 pnpm typecheck
-pnpm build
 pnpm build:mac
 ```
 
-`pnpm build:mac` 会在 `dist/` 下生成 macOS 安装包。正式分发前还需要配置应用图标、Apple Developer 签名与 notarization。
+`pnpm build:mac` 会在 `dist/` 下生成 macOS 安装包。正式分发仍需准备有效的 Apple Developer 签名并完成 notarization。
 
-## 目录
+## 开发
 
-```text
-src/
-├── main/             # Electron 主进程与本地应用逻辑
-│   ├── index.ts      # 应用入口、依赖组装与窗口生命周期
-│   ├── transport/    # IPC 入口
-│   ├── service/      # 资产、汇率和桌面能力的业务编排
-│   ├── repository/   # Portfolio 与汇率缓存的数据访问
-│   └── infra/        # 文件系统、交易平台、汇率等技术能力
-├── preload/          # renderer 与 main 之间的类型化安全桥接
-├── renderer/         # UI 与 React 状态投影
-└── shared/           # 跨进程命令、数据模型、类型与常量
-```
+项目使用 Electron、electron-vite、React、TypeScript、Tailwind CSS v4、shadcn/ui 和 pnpm。
 
-main 内部依赖方向为 `transport → service → repository → infra`；Service 作为
-编排层也可以直接调用 Infra。`main/index.ts` 是组合根，负责注入具体实现。
-Portfolio 的权威状态只存在于 main 进程，renderer 通过 IPC 查询并提交业务命令。
-`pnpm typecheck` 会同时检查 TypeScript 和层间依赖规则。
+| 目录 | 用途 |
+| --- | --- |
+| `src/main` | 主进程、本地数据与平台接入 |
+| `src/preload` | renderer 与主进程之间的安全桥接 |
+| `src/renderer` | React 界面与状态投影 |
+| `src/shared` | 跨进程类型、命令和数据模型 |
+
+主进程依次分为 `transport → service → repository → infra`。资产数据只在主进程中保存和修改，renderer 通过 IPC 读取数据并提交命令。
