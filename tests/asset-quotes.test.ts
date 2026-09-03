@@ -11,6 +11,7 @@ import {
   DesktopService,
   type DesktopServiceDependencies
 } from '../src/main/service/desktop-service'
+import type { AssetQuoteLookupInput } from '../src/shared/asset-quotes'
 
 test('maps mainland and Hong Kong symbols to East Money quote ids', () => {
   assert.equal(
@@ -28,6 +29,10 @@ test('maps mainland and Hong Kong symbols to East Money quote ids', () => {
   assert.equal(
     eastMoneyDirectQuoteId({ market: 'HK', symbol: '700' }),
     '116.00700'
+  )
+  assert.equal(
+    eastMoneyDirectQuoteId({ market: 'CN_OTC_FUND', symbol: '017641' }),
+    undefined
   )
   assert.equal(eastMoneyDirectQuoteId({ market: 'US', symbol: 'AAPL' }), undefined)
 })
@@ -64,6 +69,99 @@ test('extracts stock name, scaled price and market currency from East Money', as
     currency: 'CNY',
     price: 1297.5
   })
+})
+
+test('resolves an East Money OTC fund and loads its latest net asset value', async () => {
+  const requestedUrls: string[] = []
+  let fundReferer: string | null = null
+  const quote = await fetchAssetQuote(
+    { market: 'CN_OTC_FUND', symbol: '017641', provider: 'eastmoney' },
+    async (input, init) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url.startsWith('https://searchapi.eastmoney.com/')) {
+        return new Response(JSON.stringify({
+          QuotationCodeTable: {
+            Data: [{
+              Code: '017641',
+              Name: '摩根标普500指数(QDII)人民币A',
+              Classify: 'OTCFUND',
+              MktNum: '150',
+              QuoteID: '150.017641'
+            }]
+          }
+        }), { status: 200 })
+      }
+      fundReferer = new Headers(init?.headers).get('Referer')
+      return new Response(JSON.stringify({
+        Data: {
+          LSJZList: [{ DWJZ: '1.7044' }]
+        },
+        ErrCode: 0
+      }), { status: 200 })
+    }
+  )
+
+  assert.equal(requestedUrls.length, 2)
+  assert.equal(new URL(requestedUrls[0]).searchParams.has('token'), false)
+  assert.match(requestedUrls[1], /api\.fund\.eastmoney\.com\/f10\/lsjz/)
+  assert.match(requestedUrls[1], /fundCode=017641/)
+  assert.equal(fundReferer, 'https://fundf10.eastmoney.com/')
+  assert.equal(quote?.market, 'CN_OTC_FUND')
+  assert.equal(quote?.name, '摩根标普500指数(QDII)人民币A')
+  assert.equal(quote?.currency, 'CNY')
+  assert.equal(quote?.price, 1.7044)
+})
+
+test('detects the currency of an East Money OTC fund share class', async () => {
+  const quote = await fetchAssetQuote(
+    { market: 'CN_OTC_FUND', symbol: '017642', provider: 'eastmoney' },
+    async (input) => {
+      const url = String(input)
+      if (url.startsWith('https://searchapi.eastmoney.com/')) {
+        return new Response(JSON.stringify({
+          QuotationCodeTable: {
+            Data: [{
+              Code: '017642',
+              Name: '摩根标普500指数(QDII)美钞',
+              Classify: 'OTCFUND',
+              MktNum: '150',
+              QuoteID: '150.017642'
+            }]
+          }
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        Data: { LSJZList: [{ DWJZ: '0.2502' }] },
+        ErrCode: 0
+      }), { status: 200 })
+    }
+  )
+
+  assert.equal(quote?.currency, 'USD')
+  assert.equal(quote?.price, 0.2502)
+})
+
+test('rejects failed East Money OTC fund responses', async () => {
+  await assert.rejects(
+    fetchAssetQuote(
+      { market: 'CN_OTC_FUND', symbol: '017641', provider: 'eastmoney' },
+      async (input) => String(input).startsWith('https://searchapi.eastmoney.com/')
+        ? new Response(JSON.stringify({
+            QuotationCodeTable: {
+              Data: [{
+                Code: '017641',
+                Name: '摩根标普500指数(QDII)人民币A',
+                Classify: 'OTCFUND',
+                MktNum: '150',
+                QuoteID: '150.017641'
+              }]
+            }
+          }), { status: 200 })
+        : new Response(JSON.stringify({ Data: '', ErrCode: -999 }), { status: 200 })
+    ),
+    /基金行情请求失败/
+  )
 })
 
 test('resolves a US exchange before loading its East Money quote', async () => {
@@ -176,6 +274,54 @@ test('maps each market to the Yahoo Finance symbol format', () => {
   assert.equal(yahooAssetSymbol({ market: 'HK', symbol: '01810' }), '1810.HK')
   assert.equal(yahooAssetSymbol({ market: 'US', symbol: 'BRK.B' }), 'BRK-B')
   assert.equal(yahooAssetSymbol({ market: 'CC', symbol: 'btc-usdt' }), 'BTC-USD')
+  assert.equal(yahooAssetSymbol({ market: 'CN_OTC_FUND', symbol: '017641' }), undefined)
+})
+
+test('only allows East Money for mainland OTC funds', async () => {
+  await assert.rejects(
+    fetchAssetQuote(
+      { market: 'CN_OTC_FUND', symbol: '017641', provider: 'yahoo' },
+      async () => new Response('{}', { status: 200 })
+    ),
+    /行情数据源与市场不匹配/
+  )
+})
+
+test('accepts mainland OTC fund lookups at the desktop boundary', async () => {
+  let receivedMarket: string | undefined
+  let receivedProvider: string | undefined
+  const desktop = new DesktopService({
+    lookupAssetQuote: async (input: AssetQuoteLookupInput) => {
+      receivedMarket = input.market
+      receivedProvider = input.provider
+      return {
+        market: input.market,
+        symbol: input.symbol,
+        source: input.provider,
+        name: '摩根标普500指数(QDII)人民币A',
+        currency: 'CNY',
+        price: 1.7044,
+        fetchedAt: '2026-09-03T00:00:00.000Z'
+      }
+    }
+  } as unknown as DesktopServiceDependencies)
+
+  const result = await desktop.lookupAssetQuote({
+    market: 'CN_OTC_FUND',
+    symbol: '017641',
+    provider: 'eastmoney'
+  })
+  assert.equal(result.status, 'found')
+  assert.equal(receivedMarket, 'CN_OTC_FUND')
+  assert.equal(receivedProvider, 'eastmoney')
+  await assert.rejects(
+    desktop.lookupAssetQuote({
+      market: 'CN_OTC_FUND',
+      symbol: '017641',
+      provider: 'yahoo'
+    }),
+    /行情查询请求无效/
+  )
 })
 
 test('loads an editable quote from Yahoo Finance when selected', async () => {

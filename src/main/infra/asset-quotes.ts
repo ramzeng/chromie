@@ -6,7 +6,8 @@ import type {
 
 const EASTMONEY_QUOTE_URL = 'https://push2.eastmoney.com/api/qt/stock/get'
 const EASTMONEY_SEARCH_URL = 'https://searchapi.eastmoney.com/api/suggest/get'
-const EASTMONEY_SEARCH_TOKEN = 'D43BF722C8E33CBF33964D1D6CFAE909D'
+const EASTMONEY_FUND_NAV_URL = 'https://api.fund.eastmoney.com/f10/lsjz'
+const EASTMONEY_FUND_REFERER = 'https://fundf10.eastmoney.com/'
 const COINBASE_API_URL = 'https://api.coinbase.com/v2'
 const REQUEST_TIMEOUT_MS = 8_000
 
@@ -36,6 +37,15 @@ type EastMoneySearchResponse = {
   QuotationCodeTable?: {
     Data?: EastMoneySearchItem[] | null
   }
+}
+
+type EastMoneyFundNavResponse = {
+  Data?: {
+    LSJZList?: Array<{
+      DWJZ?: unknown
+    }> | null
+  } | string | null
+  ErrCode?: unknown
 }
 
 type CoinbaseCurrency = {
@@ -85,11 +95,12 @@ async function fetchJson<T>(
   url: string,
   fetchImpl: FetchLike,
   signal: AbortSignal,
-  notFoundStatuses: readonly number[] = [404]
+  notFoundStatuses: readonly number[] = [404],
+  headers: HeadersInit = {}
 ): Promise<T | null> {
   const response = await fetchImpl(url, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...headers },
     signal
   })
   if (notFoundStatuses.includes(response.status)) return null
@@ -141,6 +152,9 @@ function eastMoneyMarketMatch(
   const classify = textValue(item.Classify)
   const marketNumber = textValue(item.MktNum)
   if (market === 'CN') return marketNumber === '0' || marketNumber === '1'
+  if (market === 'CN_OTC_FUND') {
+    return marketNumber === '150' || classify === 'OTCFUND'
+  }
   if (market === 'HK') return marketNumber === '116' || classify === 'HK'
   return market === 'US' && (
     classify === 'UsStock' ||
@@ -154,16 +168,27 @@ function comparableSymbol(value: string): string {
   return value.toUpperCase().replace(/[._-]/g, '')
 }
 
+function eastMoneyFundCurrency(name: string | undefined): 'CNY' | 'HKD' | 'USD' {
+  if (name?.includes('人民币')) return 'CNY'
+  if (name && /美元|美钞|美汇/.test(name)) return 'USD'
+  if (name && /港币|港元/.test(name)) return 'HKD'
+  return 'CNY'
+}
+
 async function findEastMoneyQuoteId(
   input: AssetQuoteQuery,
   fetchImpl: FetchLike,
   signal: AbortSignal
-): Promise<{ quoteId: string; name?: string } | null> {
+): Promise<{
+  quoteId: string
+  code: string
+  name?: string
+  isOtcFund: boolean
+} | null> {
   const symbol = normalizedStockSymbol(input)
   const url = new URL(EASTMONEY_SEARCH_URL)
   url.searchParams.set('input', symbol)
   url.searchParams.set('type', '14')
-  url.searchParams.set('token', EASTMONEY_SEARCH_TOKEN)
   url.searchParams.set('count', '20')
   const response = await fetchJson<EastMoneySearchResponse>(
     url.toString(),
@@ -179,7 +204,52 @@ async function findEastMoneyQuoteId(
     )
   })
   const quoteId = textValue(match?.QuoteID)
-  return quoteId ? { quoteId, name: textValue(match?.Name) } : null
+  const code = textValue(match?.Code)
+  return quoteId && code ? {
+    quoteId,
+    code,
+    name: textValue(match?.Name),
+    isOtcFund: textValue(match?.Classify) === 'OTCFUND' ||
+      textValue(match?.MktNum) === '150'
+  } : null
+}
+
+async function fetchEastMoneyFundQuote(
+  input: AssetQuoteQuery,
+  code: string,
+  fallbackName: string | undefined,
+  fetchImpl: FetchLike,
+  signal: AbortSignal
+): Promise<AssetQuote | null> {
+  const url = new URL(EASTMONEY_FUND_NAV_URL)
+  url.searchParams.set('fundCode', code)
+  url.searchParams.set('pageIndex', '1')
+  url.searchParams.set('pageSize', '1')
+  const response = await fetchJson<EastMoneyFundNavResponse>(
+    url.toString(),
+    fetchImpl,
+    signal,
+    [404],
+    { Referer: EASTMONEY_FUND_REFERER }
+  )
+  if (response?.ErrCode !== undefined && Number(response.ErrCode) !== 0) {
+    throw new Error('基金行情请求失败')
+  }
+  const data = response?.Data
+  const price = typeof data === 'object' && data
+    ? finiteNumber(data.LSJZList?.[0]?.DWJZ)
+    : undefined
+  if (!fallbackName && price === undefined) return null
+
+  return {
+    market: input.market,
+    symbol: input.symbol.trim().toUpperCase(),
+    source: 'eastmoney',
+    ...(fallbackName ? { name: fallbackName } : {}),
+    currency: eastMoneyFundCurrency(fallbackName),
+    ...(price !== undefined ? { price } : {}),
+    fetchedAt: new Date().toISOString()
+  }
 }
 
 async function fetchEastMoneyQuote(
@@ -237,9 +307,16 @@ async function fetchEastMoneyAssetQuote(
   }
 
   const match = await findEastMoneyQuoteId(input, fetchImpl, signal)
-  return match
-    ? fetchEastMoneyQuote(input, match.quoteId, match.name, fetchImpl, signal)
-    : null
+  if (!match) return null
+  return match.isOtcFund
+    ? fetchEastMoneyFundQuote(
+        input,
+        match.code,
+        match.name,
+        fetchImpl,
+        signal
+      )
+    : fetchEastMoneyQuote(input, match.quoteId, match.name, fetchImpl, signal)
 }
 
 export function coinbaseAssetSymbol(symbol: string): string {
@@ -333,6 +410,7 @@ export function yahooAssetSymbol(input: AssetQuoteQuery): string | undefined {
     if (/^(?:4|8|92)/.test(symbol)) return `${symbol}.BJ`
     return `${symbol}.${/^(?:5|6|9)/.test(symbol) ? 'SS' : 'SZ'}`
   }
+  if (input.market === 'CN_OTC_FUND') return undefined
 
   return rawSymbol
     .replace(/^US[.:]/, '')
@@ -376,6 +454,9 @@ export async function fetchAssetQuote(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
+    if (input.market === 'CN_OTC_FUND' && input.provider !== 'eastmoney') {
+      throw new Error('行情数据源与市场不匹配')
+    }
     if (input.provider === 'yahoo') {
       return await fetchYahooAssetQuote(input, fetchImpl, controller.signal)
     }

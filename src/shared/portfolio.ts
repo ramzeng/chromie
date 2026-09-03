@@ -25,7 +25,7 @@ import type {
   AccountIntegrationView
 } from './integrations'
 
-export type Market = 'CN' | 'HK' | 'US' | 'CC'
+export type Market = 'CN' | 'CN_OTC_FUND' | 'HK' | 'US' | 'CC'
 export type BaseCurrency = 'CNY' | 'HKD' | 'USD'
 export type AccountType =
   | 'Futu'
@@ -292,10 +292,11 @@ export const accountTypeLabels: Record<AccountType, string> = {
   Boc: '中国银行'
 }
 
-export const marketOrder: readonly Market[] = ['CN', 'HK', 'US', 'CC']
+export const marketOrder: readonly Market[] = ['CN', 'CN_OTC_FUND', 'HK', 'US', 'CC']
 
 export const marketMeta: Record<Market, { label: string; shortLabel: string }> = {
   CN: { label: 'CN', shortLabel: 'CN' },
+  CN_OTC_FUND: { label: '场外基金', shortLabel: '基金' },
   HK: { label: 'HK', shortLabel: 'HK' },
   US: { label: 'US', shortLabel: 'US' },
   CC: { label: 'CC', shortLabel: 'CC' }
@@ -303,6 +304,7 @@ export const marketMeta: Record<Market, { label: string; shortLabel: string }> =
 
 export const defaultCurrencyByMarket: Record<Market, string> = {
   CN: 'CNY',
+  CN_OTC_FUND: 'CNY',
   HK: 'HKD',
   US: 'USD',
   CC: 'USD'

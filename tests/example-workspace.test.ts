@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { createExampleWorkspaceData } from '../src/shared/example-workspace'
+import { defaultCurrencyByMarket, marketMeta, marketOrder } from '../src/shared/portfolio'
 
 test('example workspace covers the main portfolio views without sync credentials', () => {
   const example = createExampleWorkspaceData(
@@ -32,6 +33,15 @@ test('example workspace covers the main portfolio views without sync credentials
     example.workspace.accounts.every((account) => account.sync === undefined),
     true
   )
+})
+
+test('exposes mainland OTC funds as a separate market', () => {
+  assert.deepEqual(marketOrder, ['CN', 'CN_OTC_FUND', 'HK', 'US', 'CC'])
+  assert.deepEqual(marketMeta.CN_OTC_FUND, {
+    label: '场外基金',
+    shortLabel: '基金'
+  })
+  assert.equal(defaultCurrencyByMarket.CN_OTC_FUND, 'CNY')
 })
 
 test('example snapshots are deterministic historical copies of the workspace', () => {

@@ -282,7 +282,69 @@ test('MCP tag and account CRUD reads and writes portfolio data', async () => {
     fullAccess
   )
   assertValidOutput('chromie_refresh_exchange_rates', refreshedRates)
+})
 
+test('allows an exchange-traded and OTC fund with the same code', async () => {
+  const module = createModule()
+  const createdWorkspace = await module.callMcpTool(
+    'chromie_create_workspace',
+    { name: '基金账户', base_currency: 'CNY' },
+    fullAccess
+  )
+  const workspaceId = dataOf<{ workspace_id: string }>(createdWorkspace).workspace_id
+  const createdAccount = await module.callMcpTool(
+    'chromie_create_account',
+    {
+      workspace_id: workspaceId,
+      name: '通用账户',
+      type: 'General'
+    },
+    fullAccess
+  )
+  const accountId = dataOf<{ account_id: string }>(createdAccount).account_id
+
+  await module.callMcpTool(
+    'chromie_create_position',
+    {
+      workspace_id: workspaceId,
+      account_id: accountId,
+      market: 'CN',
+      symbol: '161725',
+      name: '白酒基金LOF',
+      currency: 'CNY',
+      quantity: 100,
+      price: 1
+    },
+    fullAccess
+  )
+  await module.callMcpTool(
+    'chromie_create_position',
+    {
+      workspace_id: workspaceId,
+      account_id: accountId,
+      market: 'CN_OTC_FUND',
+      symbol: '161725',
+      name: '招商中证白酒指数(LOF)A',
+      currency: 'CNY',
+      quantity: 100,
+      price: 1
+    },
+    fullAccess
+  )
+
+  const listed = await module.callMcpTool(
+    'chromie_list_positions',
+    { workspace_id: workspaceId },
+    readAccess
+  )
+  const positions = dataOf<{
+    positions: Array<{ market: string; symbol: string }>
+  }>(listed).positions
+  assert.deepEqual(
+    positions.map(({ market, symbol }) => `${market}:${symbol}`).sort(),
+    ['CN:161725', 'CN_OTC_FUND:161725']
+  )
+  assertValidOutput('chromie_list_positions', listed)
 })
 
 test('position pagination uses a query-bound stable cursor', async () => {
