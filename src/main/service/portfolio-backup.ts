@@ -32,6 +32,7 @@ function isValidBackupPosition(value: unknown): boolean {
     typeof position.id === 'string' &&
     Boolean(position.id.trim()) &&
     (position.market === 'CN' ||
+      position.market === 'CN_OTC_FUND' ||
       position.market === 'US' ||
       position.market === 'HK' ||
       position.market === 'CC') &&

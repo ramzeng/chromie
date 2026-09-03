@@ -360,7 +360,7 @@ export function WorkspaceSettingsDialog({
                     <div className="grid gap-1">
                       <h3 className="text-base font-semibold">行情数据</h3>
                       <p className="text-xs leading-5 text-muted-foreground">
-                        添加或编辑持仓时，根据市场和资产代码自动填写名称、币种与当前价格
+                        添加或编辑持仓时，根据市场和资产代码自动填写名称、币种与当前价格。场外基金固定使用东方财富。
                       </p>
                     </div>
                     <div className="grid gap-2">

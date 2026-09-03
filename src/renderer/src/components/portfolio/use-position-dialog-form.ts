@@ -98,7 +98,11 @@ export function usePositionDialogForm({
         return
       }
 
-      const provider = market === 'CC' ? cryptoQuoteProvider : stockQuoteProvider
+      const provider = market === 'CN_OTC_FUND'
+        ? 'eastmoney'
+        : market === 'CC'
+          ? cryptoQuoteProvider
+          : stockQuoteProvider
       void lookup({ market, symbol: normalizedSymbol, provider })
         .then((result) => {
           if (requestId !== quoteLookupRequestRef.current) return
@@ -201,7 +205,11 @@ export function usePositionDialogForm({
     }
 
     const requestId = ++quoteLookupRequestRef.current
-    const provider = market === 'CC' ? cryptoQuoteProvider : stockQuoteProvider
+    const provider = market === 'CN_OTC_FUND'
+      ? 'eastmoney'
+      : market === 'CC'
+        ? cryptoQuoteProvider
+        : stockQuoteProvider
     setName('')
     setCurrency(defaultCurrencyByMarket[market])
     setPrice('')

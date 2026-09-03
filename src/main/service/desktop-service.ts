@@ -101,13 +101,19 @@ export class DesktopService implements DesktopOperations {
       ? request.symbol.trim().toUpperCase()
       : ''
     if (
-      (market !== 'CN' && market !== 'HK' && market !== 'US' && market !== 'CC') ||
+      (market !== 'CN' &&
+        market !== 'CN_OTC_FUND' &&
+        market !== 'HK' &&
+        market !== 'US' &&
+        market !== 'CC') ||
       !symbol ||
       symbol.length > 24 ||
       !/^[A-Z0-9.^=/:_-]+$/.test(symbol) ||
-      (market === 'CC'
-        ? !CRYPTO_QUOTE_PROVIDERS.includes(provider as CryptoQuoteProvider)
-        : !STOCK_QUOTE_PROVIDERS.includes(provider as StockQuoteProvider))
+      (market === 'CN_OTC_FUND'
+        ? provider !== 'eastmoney'
+        : market === 'CC'
+          ? !CRYPTO_QUOTE_PROVIDERS.includes(provider as CryptoQuoteProvider)
+          : !STOCK_QUOTE_PROVIDERS.includes(provider as StockQuoteProvider))
     ) {
       throw new Error('行情查询请求无效')
     }

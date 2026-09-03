@@ -258,22 +258,46 @@ export function createExampleWorkspaceData(
     {
       id: 'example-snapshot-30-days',
       daysAgo: 30,
-      priceMultipliers: { CN: 0.98, HK: 0.96, US: 0.95, CC: 0.9 }
+      priceMultipliers: {
+        CN: 0.98,
+        CN_OTC_FUND: 0.98,
+        HK: 0.96,
+        US: 0.95,
+        CC: 0.9
+      }
     },
     {
       id: 'example-snapshot-90-days',
       daysAgo: 90,
-      priceMultipliers: { CN: 0.94, HK: 0.91, US: 0.88, CC: 0.78 }
+      priceMultipliers: {
+        CN: 0.94,
+        CN_OTC_FUND: 0.94,
+        HK: 0.91,
+        US: 0.88,
+        CC: 0.78
+      }
     },
     {
       id: 'example-snapshot-180-days',
       daysAgo: 180,
-      priceMultipliers: { CN: 0.91, HK: 0.84, US: 0.82, CC: 0.64 }
+      priceMultipliers: {
+        CN: 0.91,
+        CN_OTC_FUND: 0.91,
+        HK: 0.84,
+        US: 0.82,
+        CC: 0.64
+      }
     },
     {
       id: 'example-snapshot-365-days',
       daysAgo: 365,
-      priceMultipliers: { CN: 0.86, HK: 0.76, US: 0.72, CC: 0.52 }
+      priceMultipliers: {
+        CN: 0.86,
+        CN_OTC_FUND: 0.86,
+        HK: 0.76,
+        US: 0.72,
+        CC: 0.52
+      }
     }
   ]
 

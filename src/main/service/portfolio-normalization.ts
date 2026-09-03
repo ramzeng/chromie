@@ -192,7 +192,13 @@ export function normalizePosition(input: PositionInput, id?: string): Position {
 export function normalizeStoredMarket(value: unknown): Market | null {
   if (typeof value !== 'string') return null
   const market = value.toUpperCase()
-  return market === 'CN' || market === 'US' || market === 'HK' || market === 'CC' ? market : null
+  return market === 'CN' ||
+    market === 'CN_OTC_FUND' ||
+    market === 'US' ||
+    market === 'HK' ||
+    market === 'CC'
+    ? market
+    : null
 }
 
 export function normalizeAccountType(value: unknown): AccountType | null {

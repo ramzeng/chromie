@@ -152,11 +152,9 @@ function eastMoneyMarketMatch(
 ): boolean {
   const classify = textValue(item.Classify)
   const marketNumber = textValue(item.MktNum)
-  if (market === 'CN') {
-    return marketNumber === '0' ||
-      marketNumber === '1' ||
-      marketNumber === '150' ||
-      classify === 'OTCFUND'
+  if (market === 'CN') return marketNumber === '0' || marketNumber === '1'
+  if (market === 'CN_OTC_FUND') {
+    return marketNumber === '150' || classify === 'OTCFUND'
   }
   if (market === 'HK') return marketNumber === '116' || classify === 'HK'
   return market === 'US' && (
@@ -169,6 +167,13 @@ function eastMoneyMarketMatch(
 
 function comparableSymbol(value: string): string {
   return value.toUpperCase().replace(/[._-]/g, '')
+}
+
+function eastMoneyFundCurrency(name: string | undefined): 'CNY' | 'HKD' | 'USD' {
+  if (name?.includes('人民币')) return 'CNY'
+  if (name && /美元|美钞|美汇/.test(name)) return 'USD'
+  if (name && /港币|港元/.test(name)) return 'HKD'
+  return 'CNY'
 }
 
 async function findEastMoneyQuoteId(
@@ -229,6 +234,9 @@ async function fetchEastMoneyFundQuote(
     [404],
     { Referer: EASTMONEY_FUND_REFERER }
   )
+  if (response?.ErrCode !== undefined && Number(response.ErrCode) !== 0) {
+    throw new Error('基金行情请求失败')
+  }
   const data = response?.Data
   const price = typeof data === 'object' && data
     ? finiteNumber(data.LSJZList?.[0]?.DWJZ)
@@ -240,7 +248,7 @@ async function fetchEastMoneyFundQuote(
     symbol: input.symbol.trim().toUpperCase(),
     source: 'eastmoney',
     ...(fallbackName ? { name: fallbackName } : {}),
-    currency: 'CNY',
+    currency: eastMoneyFundCurrency(fallbackName),
     ...(price !== undefined ? { price } : {}),
     fetchedAt: new Date().toISOString()
   }
@@ -290,19 +298,14 @@ async function fetchEastMoneyAssetQuote(
 ): Promise<AssetQuote | null> {
   const directQuoteId = eastMoneyDirectQuoteId(input)
   if (directQuoteId) {
-    try {
-      const directQuote = await fetchEastMoneyQuote(
-        input,
-        directQuoteId,
-        undefined,
-        fetchImpl,
-        signal
-      )
-      if (directQuote) return directQuote
-    } catch {
-      // A numeric fund code can look like a mainland stock code. East Money may
-      // close the invalid stock request, so continue with the security search.
-    }
+    const directQuote = await fetchEastMoneyQuote(
+      input,
+      directQuoteId,
+      undefined,
+      fetchImpl,
+      signal
+    )
+    if (directQuote) return directQuote
   }
 
   const match = await findEastMoneyQuoteId(input, fetchImpl, signal)
@@ -409,6 +412,7 @@ export function yahooAssetSymbol(input: AssetQuoteQuery): string | undefined {
     if (/^(?:4|8|92)/.test(symbol)) return `${symbol}.BJ`
     return `${symbol}.${/^(?:5|6|9)/.test(symbol) ? 'SS' : 'SZ'}`
   }
+  if (input.market === 'CN_OTC_FUND') return undefined
 
   return rawSymbol
     .replace(/^US[.:]/, '')
@@ -452,6 +456,9 @@ export async function fetchAssetQuote(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
+    if (input.market === 'CN_OTC_FUND' && input.provider !== 'eastmoney') {
+      throw new Error('行情数据源与市场不匹配')
+    }
     if (input.provider === 'yahoo') {
       return await fetchYahooAssetQuote(input, fetchImpl, controller.signal)
     }

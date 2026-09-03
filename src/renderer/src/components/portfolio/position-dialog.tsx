@@ -160,11 +160,13 @@ export function PositionDialog({
                       placeholder={
                         market === 'CN'
                           ? '600519'
-                          : market === 'HK'
-                            ? '00700'
-                            : market === 'US'
-                              ? 'AAPL'
-                              : 'BTC'
+                          : market === 'CN_OTC_FUND'
+                            ? '017641'
+                            : market === 'HK'
+                              ? '00700'
+                              : market === 'US'
+                                ? 'AAPL'
+                                : 'BTC'
                       }
                       autoFocus
                       maxLength={24}
