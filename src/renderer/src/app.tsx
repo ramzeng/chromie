@@ -1,15 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import {
-  ArrowLeftRight,
-  ChartSpline,
-  ChevronUp,
-  History,
-  LogOut,
-  Plus,
-  Settings
-} from 'lucide-react'
 
-import { AccountDetail } from '@/components/portfolio/account-detail'
+import { AppContent } from '@/components/portfolio/app-content'
+import { AppSidebar } from '@/components/portfolio/app-sidebar'
 import {
   AccountDialog,
   DeleteConfirmDialog,
@@ -28,40 +20,11 @@ import {
   PortfolioLoadError,
   reportPortfolioError
 } from '@/components/portfolio/feedback'
-import { Overview } from '@/components/portfolio/overview'
-import { TagDetail } from '@/components/portfolio/tag-detail'
-import {
-  AccountNavigation,
-  SELECTED_NAVIGATION_CLASS_NAME,
-  TagNavigation
-} from '@/components/portfolio/portfolio-navigation'
-import { TimeMachine } from '@/components/portfolio/time-machine'
-import {
-  ExampleWorkspaceBanner,
-  HistoricalVersionBanner
-} from '@/components/portfolio/page-shell'
-import {
-  shortSnapshotHash,
-  type ExchangeRateView
-} from '@/components/portfolio/view-helpers'
+import { shortSnapshotHash, type ExchangeRateView } from '@/components/portfolio/view-helpers'
 import { useAccountSync } from '@/hooks/use-account-sync'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import type { BackupImportPreview } from '../../shared/backup'
 import { createExampleWorkspaceData } from '../../shared/example-workspace'
-import {
-  useExchangeRates,
-  type ExchangeRateState
-} from '@/lib/exchange-rates'
-import { CHROMIE_LOGO_URL } from '@/lib/brand'
-import { cn } from '@/lib/utils'
+import { useExchangeRates, type ExchangeRateState } from '@/lib/exchange-rates'
 import {
   type Account,
   type AccountInput,
@@ -139,13 +102,13 @@ export function App(): React.JSX.Element {
   const [workspaceDialog, setWorkspaceDialog] = useState<WorkspaceDialogState>({ open: false })
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false)
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false)
-  const [workspaceSettingsSection, setWorkspaceSettingsSection] =
-    useState<'basic' | 'currency' | 'quotes'>('basic')
+  const [workspaceSettingsSection, setWorkspaceSettingsSection] = useState<
+    'basic' | 'currency' | 'quotes'
+  >('basic')
   const [accountDialog, setAccountDialog] = useState<AccountDialogState>({ open: false })
   const [positionDialog, setPositionDialog] = useState<PositionDialogState>({ open: false })
   const [tagDialog, setTagDialog] = useState<TagDialogState>({ open: false })
-  const [tagAssignmentTarget, setTagAssignmentTarget] =
-    useState<TagAssignmentTarget>(null)
+  const [tagAssignmentTarget, setTagAssignmentTarget] = useState<TagAssignmentTarget>(null)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
   const [pendingImport, setPendingImport] = useState<PendingImport>(null)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
@@ -172,11 +135,8 @@ export function App(): React.JSX.Element {
   const activeWorkspace = selectedSnapshot?.workspace ?? latestWorkspace
   const readOnly = viewingExampleWorkspace || Boolean(selectedSnapshot)
   const selectedAccount =
-    activeWorkspace?.accounts.find(
-      (account) => account.id === selectedAccountId
-    ) ?? null
-  const selectedTag =
-    activeWorkspace?.tags.find((tag) => tag.id === selectedTagId) ?? null
+    activeWorkspace?.accounts.find((account) => account.id === selectedAccountId) ?? null
+  const selectedTag = activeWorkspace?.tags.find((tag) => tag.id === selectedTagId) ?? null
   useEffect(() => {
     if (persistedWorkspace) setViewingExampleWorkspace(false)
   }, [persistedWorkspace?.id])
@@ -313,9 +273,7 @@ export function App(): React.JSX.Element {
     }
   }
 
-  async function submitWorkspaceSettings(
-    input: WorkspaceSettingsInput
-  ): Promise<void> {
+  async function submitWorkspaceSettings(input: WorkspaceSettingsInput): Promise<void> {
     if (!activeWorkspace || readOnly) return
     await portfolio.updateWorkspace(activeWorkspace.id, input)
     toast.success('工作区设置已保存')
@@ -458,323 +416,119 @@ export function App(): React.JSX.Element {
     }
   })()
 
-  const workspaceSwitcher = viewingExampleWorkspace
-    ? (
-        <Button
-          variant="ghost"
-          className="h-auto w-full justify-start gap-3 px-2 py-2"
-          title="退出示例工作区"
-          onClick={() => setViewingExampleWorkspace(false)}
-        >
-          <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
-            {activeWorkspace.name.trim().slice(0, 1).toUpperCase()}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
-            {activeWorkspace.name}
-          </span>
-          <LogOut data-icon="inline-end" />
-        </Button>
-      )
-    : (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="h-auto w-full justify-start gap-3 px-2 py-2"
-            >
-              <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
-                {activeWorkspace.name.trim().slice(0, 1).toUpperCase()}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
-                {activeWorkspace.name}
-              </span>
-              <ChevronUp data-icon="inline-end" className="text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className="w-[var(--radix-dropdown-menu-trigger-width)]"
-            side="top"
-            align="start"
-          >
-            <DropdownMenuGroup>
-              <DropdownMenuItem onSelect={() => setWorkspaceDialog({ open: true })}>
-                <Plus />
-                新建工作区
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setWorkspaceSwitcherOpen(true)}>
-                <ArrowLeftRight />
-                切换工作区
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )
-
   return (
     <div className="flex h-screen min-h-[600px] overflow-hidden bg-sidebar">
       <div className="window-drag fixed inset-x-0 top-0 z-40 h-2" />
-      <aside
-        data-slot="app-sidebar"
-        className="flex w-64 shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
-      >
-        <div className="flex h-full w-64 min-w-64 flex-col overflow-hidden">
-          <div className="window-drag shrink-0 pt-8">
-            <div className="flex h-10 items-center gap-2 px-4">
-              <span className="grid size-6 shrink-0 place-items-center">
-                <img
-                  className="size-6 object-contain invert"
-                  src={CHROMIE_LOGO_URL}
-                  alt=""
-                  aria-hidden="true"
-                />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold tracking-[-0.02em]">
-                Chromie
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="-mr-1 shrink-0"
-                disabled={readOnly}
-                aria-label="工作区设置"
-                title={
-                  viewingExampleWorkspace
-                    ? '示例工作区为只读'
-                    : selectedSnapshot
-                      ? '历史版本中无法修改工作区设置'
-                      : '工作区设置'
-                }
-                onClick={() => {
-                  setWorkspaceSettingsSection('basic')
-                  setWorkspaceSettingsOpen(true)
-                }}
-              >
-                <Settings data-icon="icon-only" />
-              </Button>
-            </div>
-          </div>
-
-          <ScrollArea className="min-h-0 flex-1">
-            <nav className="px-3 pb-4 pt-2">
-              <div className="mb-4 grid gap-1">
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    'w-full justify-start px-3 font-normal',
-                    !selectedAccountId &&
-                      !selectedTag &&
-                      !showTimeMachine &&
-                      cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
-                  )}
-                  onClick={() => {
-                    setShowTimeMachine(false)
-                    setSelectedAccountId(null)
-                    setSelectedTagId(null)
-                  }}
-                >
-                  <ChartSpline />
-                  资产概览
-                </Button>
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    'w-full justify-start px-3 font-normal',
-                    showTimeMachine && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
-                  )}
-                  onClick={() => {
-                    setShowTimeMachine(true)
-                    setSelectedAccountId(null)
-                    setSelectedTagId(null)
-                  }}
-                >
-                  <History />
-                  时间机器
-                </Button>
-              </div>
-
-              <div className="mb-2 flex items-center gap-1">
-                <p className="flex h-7 min-w-0 flex-1 items-center px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                  账户
-                </p>
-                {!readOnly && (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label="添加账户"
-                    title="添加账户"
-                    onClick={() => setAccountDialog({ open: true })}
-                  >
-                    <Plus data-icon="icon-only" />
-                  </Button>
-                )}
-              </div>
-              <AccountNavigation
-                key={activeWorkspace.id}
-                accounts={activeWorkspace.accounts}
-                readOnly={readOnly}
-                selectedAccountId={selectedAccountId}
-                onSelect={(account) => {
-                  setShowTimeMachine(false)
-                  setSelectedTagId(null)
-                  setSelectedAccountId(account.id)
-                }}
-                onEdit={(account) => setAccountDialog({ open: true, account })}
-                onDelete={(account) => setDeleteTarget({ kind: 'account', account })}
-              />
-              {readOnly && !activeWorkspace.accounts.length && (
-                <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">
-                  暂无账户
-                </p>
-              )}
-
-              <div className="mb-2 mt-5 flex items-center gap-1">
-                <p className="flex h-7 min-w-0 flex-1 items-center px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                  标签
-                </p>
-                {!readOnly && (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label="添加标签"
-                    title="添加标签"
-                    onClick={() => setTagDialog({ open: true })}
-                  >
-                    <Plus data-icon="icon-only" />
-                  </Button>
-                )}
-              </div>
-              <TagNavigation
-                key={`${activeWorkspace.id}:${selectedSnapshot?.id ?? 'latest'}`}
-                tags={activeWorkspace.tags}
-                readOnly={readOnly}
-                selectedTagId={selectedTag?.id ?? null}
-                onSelect={(tag) => {
-                  setShowTimeMachine(false)
-                  setSelectedAccountId(null)
-                  setSelectedTagId(tag.id)
-                }}
-                onEdit={(tag) => setTagDialog({ open: true, tag })}
-                onDelete={(tag) => setDeleteTarget({ kind: 'tag', tag })}
-              />
-              {!activeWorkspace.tags.length && (
-                <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">
-                  暂无标签
-                </p>
-              )}
-            </nav>
-          </ScrollArea>
-
-          <div className="px-3 py-3">
-            {workspaceSwitcher}
-          </div>
-        </div>
-      </aside>
-
-      <div
-        data-slot="app-content"
-        className="flex min-w-0 flex-1 flex-col overflow-hidden border-l border-border bg-background"
-      >
-        <ScrollArea className="min-h-0 min-w-0 flex-1">
-          <main
-            className={cn(
-              'min-h-full transition-colors',
-              selectedSnapshot && 'bg-muted/10'
-            )}
-            aria-label={
-              viewingExampleWorkspace
-                ? '示例工作区，只读'
-                : selectedSnapshot
-                  ? '历史快照，只读'
-                  : undefined
-            }
-          >
-        {viewingExampleWorkspace && (
-          <ExampleWorkspaceBanner
-            onExit={() => setViewingExampleWorkspace(false)}
-          />
-        )}
-        {selectedSnapshot && !showTimeMachine && (
-          <HistoricalVersionBanner
-            snapshotId={selectedSnapshot.id}
-            createdAt={selectedSnapshot.createdAt}
-            onReturnLatest={() => setSelectedSnapshotId(null)}
-            className={viewingExampleWorkspace ? 'pt-3' : undefined}
-          />
-        )}
-        {showTimeMachine ? (
-          <TimeMachine
-            workspace={latestWorkspace ?? activeWorkspace}
-            snapshots={activeSnapshots}
-            readOnly={viewingExampleWorkspace}
-            selectedSnapshotId={selectedSnapshotId}
-            liveExchangeRates={currentExchangeRates}
-            creating={creatingSnapshot}
-            onCreate={createCurrentSnapshot}
-            onViewLatest={() => {
-              setSelectedSnapshotId(null)
-              setShowTimeMachine(false)
-            }}
-            onViewSnapshot={(snapshotId) => {
-              setSelectedSnapshotId(snapshotId)
-              setShowTimeMachine(false)
-            }}
-            onDeleteSnapshot={(snapshot) =>
-              setDeleteTarget({ kind: 'snapshot', snapshot })
-            }
-          />
-        ) : selectedTag ? (
-          <TagDetail
-            workspace={activeWorkspace}
-            tag={selectedTag}
-            exchangeRates={exchangeRates}
-            onOpenAccount={(accountId) => {
-              setSelectedTagId(null)
-              setSelectedAccountId(accountId)
-            }}
-          />
-        ) : selectedAccount ? (
-          <AccountDetail
-            account={selectedAccount}
-            tags={activeWorkspace.tags}
-            readOnly={readOnly}
-            baseCurrency={activeWorkspace.baseCurrency}
-            exchangeRates={exchangeRates}
-            onAddPosition={() =>
-              setPositionDialog({ open: true, accountId: selectedAccount.id })
-            }
-            onEditAccount={() =>
-              setAccountDialog({ open: true, account: selectedAccount })
-            }
-            onSync={() => syncAccount(selectedAccount.id)}
-            syncState={syncStates[selectedAccount.id]}
-            onManagePositionTags={(position) =>
-              setTagAssignmentTarget({ accountId: selectedAccount.id, position })
-            }
-            onEditPosition={(position) =>
-              setPositionDialog({
-                open: true,
-                accountId: selectedAccount.id,
-                position
-              })
-            }
-            onDeletePosition={(position) =>
-              setDeleteTarget({ kind: 'position', account: selectedAccount, position })
-            }
-          />
-        ) : (
-          <Overview
-            workspace={activeWorkspace}
-            exchangeRates={exchangeRates}
-            onOpenAccount={(accountId) => {
-              setSelectedTagId(null)
-              setSelectedAccountId(accountId)
-            }}
-          />
-        )}
-          </main>
-        </ScrollArea>
-      </div>
+      <AppSidebar
+        workspace={activeWorkspace}
+        readOnly={readOnly}
+        viewingExampleWorkspace={viewingExampleWorkspace}
+        selectedSnapshotId={selectedSnapshot?.id ?? null}
+        selectedAccountId={selectedAccountId}
+        selectedTagId={selectedTag?.id ?? null}
+        showTimeMachine={showTimeMachine}
+        onExitExampleWorkspace={() => setViewingExampleWorkspace(false)}
+        onOpenWorkspaceSettings={() => {
+          setWorkspaceSettingsSection('basic')
+          setWorkspaceSettingsOpen(true)
+        }}
+        onShowOverview={() => {
+          setShowTimeMachine(false)
+          setSelectedAccountId(null)
+          setSelectedTagId(null)
+        }}
+        onShowTimeMachine={() => {
+          setShowTimeMachine(true)
+          setSelectedAccountId(null)
+          setSelectedTagId(null)
+        }}
+        onAddAccount={() => setAccountDialog({ open: true })}
+        onSelectAccount={(account) => {
+          setShowTimeMachine(false)
+          setSelectedTagId(null)
+          setSelectedAccountId(account.id)
+        }}
+        onEditAccount={(account) => setAccountDialog({ open: true, account })}
+        onDeleteAccount={(account) => setDeleteTarget({ kind: 'account', account })}
+        onAddTag={() => setTagDialog({ open: true })}
+        onSelectTag={(tag) => {
+          setShowTimeMachine(false)
+          setSelectedAccountId(null)
+          setSelectedTagId(tag.id)
+        }}
+        onEditTag={(tag) => setTagDialog({ open: true, tag })}
+        onDeleteTag={(tag) => setDeleteTarget({ kind: 'tag', tag })}
+        onCreateWorkspace={() => setWorkspaceDialog({ open: true })}
+        onSwitchWorkspace={() => setWorkspaceSwitcherOpen(true)}
+      />
+      <AppContent
+        workspace={activeWorkspace}
+        latestWorkspace={latestWorkspace}
+        activeSnapshots={activeSnapshots}
+        selectedSnapshot={selectedSnapshot}
+        selectedSnapshotId={selectedSnapshotId}
+        selectedAccount={selectedAccount}
+        selectedTag={selectedTag}
+        viewingExampleWorkspace={viewingExampleWorkspace}
+        showTimeMachine={showTimeMachine}
+        readOnly={readOnly}
+        exchangeRates={exchangeRates}
+        liveExchangeRates={currentExchangeRates}
+        creatingSnapshot={creatingSnapshot}
+        syncState={selectedAccount ? syncStates[selectedAccount.id] : undefined}
+        onExitExampleWorkspace={() => setViewingExampleWorkspace(false)}
+        onReturnLatest={() => setSelectedSnapshotId(null)}
+        onCreateSnapshot={createCurrentSnapshot}
+        onViewLatest={() => {
+          setSelectedSnapshotId(null)
+          setShowTimeMachine(false)
+        }}
+        onViewSnapshot={(snapshotId) => {
+          setSelectedSnapshotId(snapshotId)
+          setShowTimeMachine(false)
+        }}
+        onDeleteSnapshot={(snapshot) => setDeleteTarget({ kind: 'snapshot', snapshot })}
+        onOpenAccount={(accountId) => {
+          setSelectedTagId(null)
+          setSelectedAccountId(accountId)
+        }}
+        onAddPosition={() => {
+          if (selectedAccount) {
+            setPositionDialog({ open: true, accountId: selectedAccount.id })
+          }
+        }}
+        onEditAccount={() => {
+          if (selectedAccount) {
+            setAccountDialog({ open: true, account: selectedAccount })
+          }
+        }}
+        onSyncAccount={async () => {
+          if (selectedAccount) await syncAccount(selectedAccount.id)
+        }}
+        onManagePositionTags={(position) => {
+          if (selectedAccount) {
+            setTagAssignmentTarget({ accountId: selectedAccount.id, position })
+          }
+        }}
+        onEditPosition={(position) => {
+          if (selectedAccount) {
+            setPositionDialog({
+              open: true,
+              accountId: selectedAccount.id,
+              position
+            })
+          }
+        }}
+        onDeletePosition={(position) => {
+          if (selectedAccount) {
+            setDeleteTarget({
+              kind: 'position',
+              account: selectedAccount,
+              position
+            })
+          }
+        }}
+      />
 
       <WorkspaceDialog
         open={workspaceDialog.open}
@@ -800,9 +554,7 @@ export function App(): React.JSX.Element {
         initialSection={workspaceSettingsSection}
         onSubmit={submitWorkspaceSettings}
         onRequestExport={() => setExportDialogOpen(true)}
-        onRequestDelete={() =>
-          setDeleteTarget({ kind: 'workspace', workspace: activeWorkspace })
-        }
+        onRequestDelete={() => setDeleteTarget({ kind: 'workspace', workspace: activeWorkspace })}
       />
       <AccountDialog
         open={accountDialog.open}
