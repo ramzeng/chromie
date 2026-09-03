@@ -1,8 +1,7 @@
-<p align="center">
-  <img src="./resources/chromie-logo-knot.svg" alt="Chromie" width="88" />
-</p>
-
-<h1 align="center">Chromie</h1>
+<h1 align="center">
+  <img src="./resources/chromie-logo-knot.svg" alt="Chromie" width="72" /><br />
+  Chromie
+</h1>
 
 <p align="center">在 macOS 上管理分散的资产，数据保存在本地</p>
 
