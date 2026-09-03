@@ -9,6 +9,7 @@ export type PositionValuationSummary = {
   byPositionId: Map<string, PositionValuation>
   totalConvertedMarketValue?: number
   missingCurrencies: string[]
+  missingPriceCount: number
   isComplete: boolean
 }
 
@@ -57,9 +58,11 @@ export function valuePositions(
   const missingCurrencies = new Set<string>()
   let total = 0
   let hasConvertedValue = false
+  let missingPriceCount = 0
 
   positions.forEach((position) => {
     if (position.price === undefined) {
+      missingPriceCount += 1
       byPositionId.set(position.id, {})
       return
     }
@@ -94,6 +97,7 @@ export function valuePositions(
     byPositionId,
     ...(hasConvertedValue ? { totalConvertedMarketValue: total } : {}),
     missingCurrencies: missing,
-    isComplete: missing.length === 0
+    missingPriceCount,
+    isComplete: missing.length === 0 && missingPriceCount === 0
   }
 }

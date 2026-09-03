@@ -17,7 +17,7 @@ class MemorySettingsRepository {
   }
 }
 
-test('MCP settings default to disabled and normalize dependent permissions', async () => {
+test('MCP settings default to enabled with write access and normalize independently', async () => {
   const repository = new MemorySettingsRepository()
   const service = new McpSettingsService(repository)
 
@@ -37,21 +37,23 @@ test('MCP settings default to disabled and normalize dependent permissions', asy
       enabled: false,
       allowWrite: true
     }),
-    DEFAULT_MCP_ACCESS_SETTINGS
+    {
+      enabled: false,
+      allowWrite: true
+    }
   )
 
   repository.content = JSON.stringify({
-    enabled: true,
-    allowWrite: true,
+    enabled: false,
     allowDelete: true
   })
   assert.deepEqual(await service.load(), {
-    enabled: true,
+    enabled: false,
     allowWrite: true
   })
 })
 
-test('malformed MCP settings fail closed', async () => {
+test('malformed MCP settings fall back to enabled write access', async () => {
   const repository = new MemorySettingsRepository()
   repository.content = '{invalid json'
   const service = new McpSettingsService(repository)

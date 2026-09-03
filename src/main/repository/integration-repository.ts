@@ -5,7 +5,7 @@ export interface IntegrationRepository {
   save(content: string): Promise<void>
 }
 
-export class SecureIntegrationRepository implements IntegrationRepository {
+export class FileIntegrationRepository implements IntegrationRepository {
   constructor(private readonly storage: StringStore) {}
 
   load(): Promise<string | null> {

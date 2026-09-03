@@ -1,19 +1,28 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, nativeImage, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, nativeImage, nativeTheme, net, shell } from 'electron'
 
 import { exportBackup, importBackup } from './infra/backup'
 import { syncBinancePositions } from './infra/binance'
 import { fetchExchangeRates } from './infra/exchange-rates'
-import { PlainTextFileStore, SecureFileStore } from './infra/file-store'
+import {
+  ensurePrivateDirectory,
+  PlainTextFileStore
+} from './infra/file-store'
 import { syncFutuPositions } from './infra/futu'
 import { syncIbkrPositions } from './infra/ibkr'
 import { syncHstongPositions } from './infra/hstong'
 import { syncOkxPositions } from './infra/okx'
+import { fetchAssetQuote } from './infra/asset-quotes'
+import {
+  resolveStoragePath,
+  StorageLocationService
+} from './infra/storage-location'
 import { FileExchangeRateRepository } from './repository/exchange-rate-repository'
-import { SecureIntegrationRepository } from './repository/integration-repository'
+import { FileIntegrationRepository } from './repository/integration-repository'
 import { FileMcpSettingsRepository } from './repository/mcp-settings-repository'
-import { SecurePortfolioRepository } from './repository/portfolio-repository'
+import { FilePortfolioRepository } from './repository/portfolio-repository'
+import { FilePortfolioStateRepository } from './repository/portfolio-state-repository'
 import { DesktopService } from './service/desktop-service'
 import { ExchangeRateService } from './service/exchange-rate-service'
 import { McpSettingsService } from './service/mcp-settings-service'
@@ -25,9 +34,8 @@ import { McpSocketHost, type McpHostOperations } from './transport/mcp-socket'
 app.setName('Chromie')
 
 const mcpMode = process.argv.includes('--mcp')
-const userDataPath = app.getPath('userData')
-const mcpSocketPath = join(userDataPath, 'mcp.sock')
-const mcpTokenPath = join(userDataPath, 'mcp-token')
+const defaultDataPath = join(app.getPath('home'), '.chromie')
+const storageSettingsPath = join(app.getPath('userData'), 'storage-location.json')
 
 const trustedWebContentsIds = new Set<number>()
 
@@ -86,28 +94,36 @@ function setDevelopmentAppIcon(): void {
   if (process.platform !== 'darwin' || app.isPackaged) return
 
   const icon = nativeImage.createFromPath(
-    join(__dirname, '../../resources/chromie-app-icon-knot-v7.png')
+    join(__dirname, '../../resources/chromie-app-icon-knot.png')
   )
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
 
-async function startApplication(): Promise<void> {
-  const portfolioRepository = new SecurePortfolioRepository(
-    new SecureFileStore(join(userDataPath, 'portfolio.secure'))
+async function startApplication(
+  dataPath: string,
+  storageLocationService: StorageLocationService
+): Promise<void> {
+  const mcpSocketPath = join(dataPath, 'mcp.sock')
+  const mcpTokenPath = join(dataPath, 'mcp-token')
+
+  const portfolioRepository = new FilePortfolioRepository(
+    new PlainTextFileStore(join(dataPath, 'portfolio.json'))
   )
-  const integrationRepository = new SecureIntegrationRepository(
-    new SecureFileStore(join(userDataPath, 'integrations.secure'))
+  const integrationRepository = new FileIntegrationRepository(
+    new PlainTextFileStore(join(dataPath, 'integrations.json'))
   )
-  const exchangeRateRepository = new FileExchangeRateRepository(
-    new PlainTextFileStore(join(userDataPath, 'exchange-rates.json'))
-  )
-  const mcpSettingsRepository = new FileMcpSettingsRepository(
-    new PlainTextFileStore(join(userDataPath, 'mcp-settings.json'))
-  )
-  const portfolioService = new PortfolioService(
+  const portfolioStateRepository = new FilePortfolioStateRepository(
+    new PlainTextFileStore(join(dataPath, 'portfolio-state.json')),
     portfolioRepository,
     integrationRepository
   )
+  const exchangeRateRepository = new FileExchangeRateRepository(
+    new PlainTextFileStore(join(dataPath, 'exchange-rates.json'))
+  )
+  const mcpSettingsRepository = new FileMcpSettingsRepository(
+    new PlainTextFileStore(join(dataPath, 'mcp-settings.json'))
+  )
+  const portfolioService = new PortfolioService(portfolioStateRepository)
   const exchangeRateService = new ExchangeRateService(exchangeRateRepository)
   const desktopService = new DesktopService({
     syncFutuPositions,
@@ -118,6 +134,7 @@ async function startApplication(): Promise<void> {
     fetchExchangeRates: (provider) =>
       exchangeRateService.refresh(provider, { fetch: fetchExchangeRates }),
     loadExchangeRates: (legacyContent) => exchangeRateService.load(legacyContent),
+    lookupAssetQuote: (input) => fetchAssetQuote(input, net.fetch),
     exportBackup,
     importBackup
   })
@@ -133,13 +150,18 @@ async function startApplication(): Promise<void> {
       args: app.isPackaged ? ['--mcp'] : [app.getAppPath(), '--mcp']
     }
   )
-  await mcpHost.initialize()
   activeMcpHost = mcpHost
+  try {
+    await mcpHost.initialize()
+  } catch (error) {
+    console.error('MCP 服务初始化失败，桌面应用将继续启动', error)
+  }
 
   registerDesktopIpc(
     desktopService,
     portfolioModule,
     mcpHost,
+    storageLocationService,
     (sender) => trustedWebContentsIds.has(sender.id)
   )
   createWindow()
@@ -151,8 +173,13 @@ async function startApplication(): Promise<void> {
 
 let activeMcpHost: McpHostOperations | null = null
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   nativeTheme.themeSource = 'dark'
+  const storageSettings = new PlainTextFileStore(storageSettingsPath)
+  const dataPath = await resolveStoragePath(storageSettings, defaultDataPath)
+  await ensurePrivateDirectory(dataPath, dataPath === defaultDataPath)
+  const mcpSocketPath = join(dataPath, 'mcp.sock')
+  const mcpTokenPath = join(dataPath, 'mcp-token')
   if (mcpMode) {
     void import('./mcp-server').then(({ runChromieMcpServer }) => {
       runChromieMcpServer({
@@ -164,7 +191,13 @@ app.whenReady().then(() => {
     return
   }
   setDevelopmentAppIcon()
-  void startApplication()
+  await startApplication(
+    dataPath,
+    new StorageLocationService(dataPath, defaultDataPath, storageSettings)
+  )
+}).catch((error) => {
+  console.error('Chromie 启动失败', error)
+  app.quit()
 })
 
 app.on('window-all-closed', () => {

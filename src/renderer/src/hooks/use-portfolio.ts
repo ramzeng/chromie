@@ -1,18 +1,14 @@
 import { useEffect, useState } from 'react'
 
 import type { ExchangeRateSnapshot } from '../../../shared/exchange-rates'
-import type { AssetAccountIntegrationView } from '../../../shared/integrations'
+import type { AccountIntegrationView } from '../../../shared/integrations'
 import {
   EMPTY_PORTFOLIO_DATA,
-  type WorkspaceBackup,
-  type AccountGroupInput,
   type AppData,
-  type AssetAccountInput,
+  type AccountInput,
   type PortfolioCommand,
-  type WorkspaceSnapshot,
-  type PositionGroupInput,
   type PositionInput,
-  type Workspace,
+  type TagInput,
   type WorkspaceInput,
   type WorkspaceSettingsInput
 } from '../../../shared/portfolio'
@@ -24,7 +20,7 @@ function cleanIpcError(error: unknown): string {
 
 export function usePortfolio() {
   const [data, setData] = useState<AppData>(() => structuredClone(EMPTY_PORTFOLIO_DATA))
-  const [integrations, setIntegrations] = useState<AssetAccountIntegrationView[]>([])
+  const [integrations, setIntegrations] = useState<AccountIntegrationView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refreshError, setRefreshError] = useState('')
@@ -75,7 +71,7 @@ export function usePortfolio() {
     }
   }, [])
 
-  async function execute(command: PortfolioCommand): Promise<string | null | undefined> {
+  async function execute(command: PortfolioCommand): Promise<string | undefined> {
     if (!window.desktop.portfolio) {
       throw new Error('资产数据组件尚未加载，请重启 Chromie')
     }
@@ -102,9 +98,9 @@ export function usePortfolio() {
     workspaces: data.workspaces,
     activeWorkspace,
     activeSnapshots,
-    getAssetAccountIntegration: (assetAccountId: string) =>
+    getAccountIntegration: (accountId: string) =>
       integrations.find(
-        (integration) => integration.assetAccountId === assetAccountId
+        (integration) => integration.accountId === accountId
       ),
     setActiveWorkspace: (id: string) =>
       execute({ type: 'set-active-workspace', id }).then(() => undefined),
@@ -126,175 +122,106 @@ export function usePortfolio() {
       execute({ type: 'update-workspace', id, input }).then(() => undefined),
     deleteWorkspace: (id: string) =>
       execute({ type: 'delete-workspace', id }).then(() => undefined),
-    createAccountGroup: (workspaceId: string, input: AccountGroupInput) =>
-      execute({ type: 'create-account-group', workspaceId, input }).then(
+    createTag: (workspaceId: string, input: TagInput) =>
+      execute({ type: 'create-tag', workspaceId, input }).then(
         (result) => {
-          if (typeof result !== 'string') throw new Error('创建账户分组失败')
+          if (typeof result !== 'string') throw new Error('添加标签失败')
           return result
         }
       ),
-    updateAccountGroup: (
+    updateTag: (
       workspaceId: string,
-      groupId: string,
-      input: AccountGroupInput
+      tagId: string,
+      input: TagInput
     ) =>
-      execute({ type: 'update-account-group', workspaceId, groupId, input }).then(
+      execute({ type: 'update-tag', workspaceId, tagId, input }).then(
         () => undefined
       ),
-    deleteAccountGroup: (workspaceId: string, groupId: string) =>
-      execute({ type: 'delete-account-group', workspaceId, groupId }).then(
+    deleteTag: (workspaceId: string, tagId: string) =>
+      execute({ type: 'delete-tag', workspaceId, tagId }).then(
         () => undefined
       ),
-    setAccountGroupAccounts: (
+    setAccountTags: (
       workspaceId: string,
-      groupId: string,
-      assetAccountIds: string[]
+      accountId: string,
+      tagIds: string[]
     ) =>
       execute({
-        type: 'set-account-group-accounts',
+        type: 'set-account-tags',
         workspaceId,
-        groupId,
-        assetAccountIds
+        accountId,
+        tagIds
       }).then((result) => result ?? null),
-    removeAccountFromGroup: (
+    setPositionTags: (
       workspaceId: string,
-      groupId: string,
-      assetAccountId: string
+      accountId: string,
+      positionId: string,
+      tagIds: string[]
     ) =>
       execute({
-        type: 'remove-account-from-group',
+        type: 'set-position-tags',
         workspaceId,
-        groupId,
-        assetAccountId
-      }).then(() => undefined),
-    createPositionGroup: (workspaceId: string, input: PositionGroupInput) =>
-      execute({ type: 'create-position-group', workspaceId, input }).then(
-        (result) => {
-          if (typeof result !== 'string') throw new Error('创建持仓分组失败')
-          return result
-        }
-      ),
-    updatePositionGroup: (
-      workspaceId: string,
-      groupId: string,
-      input: PositionGroupInput
-    ) =>
-      execute({ type: 'update-position-group', workspaceId, groupId, input }).then(
-        () => undefined
-      ),
-    deletePositionGroup: (workspaceId: string, groupId: string) =>
-      execute({ type: 'delete-position-group', workspaceId, groupId }).then(
-        () => undefined
-      ),
-    setPositionGroupPositions: (
-      workspaceId: string,
-      groupId: string,
-      positionIds: string[]
-    ) =>
-      execute({
-        type: 'set-position-group-positions',
-        workspaceId,
-        groupId,
-        positionIds
+        accountId,
+        positionId,
+        tagIds
       }).then((result) => result ?? null),
-    removePositionFromGroup: (
-      workspaceId: string,
-      groupId: string,
-      positionId: string
-    ) =>
-      execute({
-        type: 'remove-position-from-group',
-        workspaceId,
-        groupId,
-        positionId
-      }).then(() => undefined),
-    createAssetAccount: (workspaceId: string, input: AssetAccountInput) =>
-      execute({ type: 'create-asset-account', workspaceId, input }).then(
+    createAccount: (workspaceId: string, input: AccountInput) =>
+      execute({ type: 'create-account', workspaceId, input }).then(
         (result) => {
-          if (typeof result !== 'string') throw new Error('创建资产账户失败')
+          if (typeof result !== 'string') throw new Error('创建账户失败')
           return result
         }
       ),
-    updateAssetAccount: (
+    updateAccount: (
       workspaceId: string,
-      assetAccountId: string,
-      input: AssetAccountInput
+      accountId: string,
+      input: AccountInput
     ) =>
       execute({
-        type: 'update-asset-account',
+        type: 'update-account',
         workspaceId,
-        assetAccountId,
+        accountId,
         input
       }).then(() => undefined),
-    deleteAssetAccount: (workspaceId: string, assetAccountId: string) =>
-      execute({ type: 'delete-asset-account', workspaceId, assetAccountId }).then(
+    deleteAccount: (workspaceId: string, accountId: string) =>
+      execute({ type: 'delete-account', workspaceId, accountId }).then(
         () => undefined
       ),
     savePosition: (
       workspaceId: string,
-      assetAccountId: string,
+      accountId: string,
       input: PositionInput,
       positionId?: string
     ) =>
       execute({
         type: 'save-position',
         workspaceId,
-        assetAccountId,
+        accountId,
         input,
         positionId
       }).then((result) => result ?? null),
     deletePosition: (
       workspaceId: string,
-      assetAccountId: string,
+      accountId: string,
       positionId: string
     ) =>
       execute({
         type: 'delete-position',
         workspaceId,
-        assetAccountId,
+        accountId,
         positionId
       }).then(() => undefined),
-    replacePositions: (
+    syncAccount: async (
       workspaceId: string,
-      assetAccountId: string,
-      positions: PositionInput[],
-      lastSyncedAt?: string
-    ) =>
-      execute({
-        type: 'replace-positions',
-        workspaceId,
-        assetAccountId,
-        positions,
-        lastSyncedAt
-      }).then(() => undefined),
-    syncAssetAccount: async (
-      workspaceId: string,
-      assetAccountId: string
+      accountId: string
     ) => {
-      if (!window.desktop.portfolio?.syncAssetAccount) {
+      if (!window.desktop.portfolio?.syncAccount) {
         throw new Error('资产同步组件尚未加载，请重启 Chromie')
       }
-      return window.desktop.portfolio.syncAssetAccount(
+      return window.desktop.portfolio.syncAccount(
         workspaceId,
-        assetAccountId
+        accountId
       )
-    },
-    importWorkspace: (workspace: Workspace, snapshots: WorkspaceSnapshot[] = []) =>
-      execute({ type: 'import-workspace', workspace, snapshots }).then((result) => {
-        if (typeof result !== 'string') throw new Error('导入工作区失败')
-        return result
-      }),
-    inspectBackup: async (content: string): Promise<WorkspaceBackup | null> => {
-      if (!window.desktop.portfolio) {
-        throw new Error('资产数据组件尚未加载，请重启 Chromie')
-      }
-      return window.desktop.portfolio.inspectBackup(content)
-    },
-    exportWorkspace: async (): Promise<string> => {
-      if (!window.desktop.portfolio) {
-        throw new Error('资产数据组件尚未加载，请重启 Chromie')
-      }
-      return window.desktop.portfolio.exportActiveWorkspace()
     }
   }
 }

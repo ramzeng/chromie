@@ -1,4 +1,16 @@
-import type { BackupExportResult, BackupImportResult } from '../../shared/backup'
+import type { BackupExportResult } from '../../shared/backup'
+import type { BackupFileImportResult } from '../infra/backup'
+import type {
+  AssetQuote,
+  AssetQuoteLookupInput,
+  AssetQuoteLookupResult
+} from '../../shared/asset-quotes'
+import {
+  CRYPTO_QUOTE_PROVIDERS,
+  STOCK_QUOTE_PROVIDERS,
+  type CryptoQuoteProvider,
+  type StockQuoteProvider
+} from '../../shared/asset-quotes'
 import type {
   BinanceSyncOptions,
   BinanceSyncResult
@@ -36,16 +48,18 @@ export type DesktopServiceDependencies = {
   syncHstongPositions: (options?: HstongSyncOptions) => Promise<HstongSyncResult>
   fetchExchangeRates: (provider: ExchangeRateProvider) => Promise<ExchangeRateSnapshot>
   loadExchangeRates: (legacyContent?: unknown) => Promise<ExchangeRateSnapshot | null>
+  lookupAssetQuote?: (input: AssetQuoteLookupInput) => Promise<AssetQuote | null>
   exportBackup: (ownerId: number, content: unknown) => Promise<BackupExportResult>
-  importBackup: (ownerId: number) => Promise<BackupImportResult>
+  importBackup: (ownerId: number) => Promise<BackupFileImportResult>
 }
 
 export interface DesktopOperations {
   syncPositions(request: AssetSyncRequest): Promise<AssetSyncResult>
   loadExchangeRates(legacyContent?: unknown): Promise<ExchangeRateSnapshot | null>
   fetchExchangeRates(provider: unknown): Promise<ExchangeRateSnapshot>
+  lookupAssetQuote?(input: unknown): Promise<AssetQuoteLookupResult>
   exportBackup(ownerId: number, content: unknown): Promise<BackupExportResult>
-  importBackup(ownerId: number): Promise<BackupImportResult>
+  importBackup(ownerId: number): Promise<BackupFileImportResult>
 }
 
 export class DesktopService implements DesktopOperations {
@@ -78,11 +92,44 @@ export class DesktopService implements DesktopOperations {
     return this.dependencies.fetchExchangeRates(selectedProvider as ExchangeRateProvider)
   }
 
+  async lookupAssetQuote(input: unknown): Promise<AssetQuoteLookupResult> {
+    if (!input || typeof input !== 'object') throw new Error('行情查询请求无效')
+    const request = input as Partial<AssetQuoteLookupInput>
+    const market = request.market
+    const provider = request.provider
+    const symbol = typeof request.symbol === 'string'
+      ? request.symbol.trim().toUpperCase()
+      : ''
+    if (
+      (market !== 'CN' && market !== 'HK' && market !== 'US' && market !== 'CC') ||
+      !symbol ||
+      symbol.length > 24 ||
+      !/^[A-Z0-9.^=/:_-]+$/.test(symbol) ||
+      (market === 'CC'
+        ? !CRYPTO_QUOTE_PROVIDERS.includes(provider as CryptoQuoteProvider)
+        : !STOCK_QUOTE_PROVIDERS.includes(provider as StockQuoteProvider))
+    ) {
+      throw new Error('行情查询请求无效')
+    }
+    if (!this.dependencies.lookupAssetQuote) return { status: 'unavailable' }
+
+    try {
+      const quote = await this.dependencies.lookupAssetQuote({
+        market,
+        symbol,
+        provider: provider as AssetQuoteLookupInput['provider']
+      })
+      return quote ? { status: 'found', quote } : { status: 'not-found' }
+    } catch {
+      return { status: 'unavailable' }
+    }
+  }
+
   exportBackup(ownerId: number, content: unknown): Promise<BackupExportResult> {
     return this.dependencies.exportBackup(ownerId, content)
   }
 
-  importBackup(ownerId: number): Promise<BackupImportResult> {
+  importBackup(ownerId: number): Promise<BackupFileImportResult> {
     return this.dependencies.importBackup(ownerId)
   }
 
