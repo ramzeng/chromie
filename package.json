@@ -11,7 +11,8 @@
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "build": "npm run typecheck && electron-vite build",
-    "build:mac": "npm run build && electron-builder --mac"
+    "icons:mac": "sh scripts/generate-macos-icon.sh",
+    "build:mac": "npm run icons:mac && npm run build && electron-builder --mac"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -68,7 +69,7 @@
     ],
     "mac": {
       "category": "public.app-category.finance",
-      "icon": "resources/chromie-app-icon-knot.png",
+      "icon": "resources/chromie-app-icon-knot.icns",
       "target": [
         "dmg",
         "zip"
