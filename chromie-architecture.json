@@ -9,7 +9,7 @@
       "url": "https://github.com/ramzeng/chromie",
       "revision": "dc5f26070718468bba685249bbbaa59975463e3c"
     },
-    "viewBox": [1380, 720]
+    "viewBox": [1395, 720]
   },
   "components": [
     {
@@ -44,7 +44,7 @@
       "label": "Electron IPC",
       "sublabel": "transport 层",
       "tag": "可信窗口校验",
-      "pos": [380, 300],
+      "pos": [410, 300],
       "size": [150, 72],
       "sources": [
         { "path": "src/main/transport/electron-ipc.ts", "line": 24, "end_line": 45, "label": "发送方校验" },
@@ -57,7 +57,7 @@
       "label": "应用服务",
       "sublabel": "PortfolioModule",
       "tag": "同步、汇率、备份、MCP",
-      "pos": [560, 300],
+      "pos": [590, 300],
       "size": [180, 72],
       "sources": [
         { "path": "src/main/service/portfolio-module.ts", "line": 26, "end_line": 90, "label": "应用服务门面" },
@@ -71,7 +71,7 @@
       "label": "资产领域",
       "sublabel": "PortfolioService / operations",
       "tag": "标签、账户、持仓、快照",
-      "pos": [770, 300],
+      "pos": [800, 300],
       "size": [180, 72],
       "sources": [
         { "path": "src/main/service/portfolio-service.ts", "line": 59, "label": "资产状态与串行命令" },
@@ -85,7 +85,7 @@
       "label": "状态仓储",
       "sublabel": "PortfolioStateRepository",
       "tag": "资产与接入配置",
-      "pos": [980, 300],
+      "pos": [1010, 300],
       "size": [170, 72],
       "sources": [
         { "path": "src/main/repository/portfolio-state-repository.ts", "line": 14, "end_line": 16, "label": "统一状态仓储接口" },
@@ -98,7 +98,7 @@
       "label": "本地数据目录",
       "sublabel": "~/.chromie / 自定义路径",
       "tag": "明文 JSON · 0600",
-      "pos": [1180, 300],
+      "pos": [1205, 300],
       "size": [180, 72],
       "sources": [
         { "path": "src/main/index.ts", "line": 110, "end_line": 124, "label": "本地文件装配" },
@@ -112,7 +112,7 @@
       "label": "账户数据源",
       "sublabel": "Futu / IBKR / HSTong",
       "tag": "OKX / Binance",
-      "pos": [560, 40],
+      "pos": [590, 40],
       "size": [180, 72],
       "sources": [
         { "path": "src/main/service/account-sync-coordinator.ts", "line": 61, "end_line": 98, "label": "五类账户同步分派" },
@@ -125,7 +125,7 @@
       "label": "公共行情",
       "sublabel": "东方财富 / Yahoo Finance",
       "tag": "Coinbase 汇率与数字资产",
-      "pos": [800, 40],
+      "pos": [830, 40],
       "size": [190, 72],
       "sources": [
         { "path": "src/main/infra/asset-quotes.ts", "line": 372, "end_line": 386, "label": "行情数据源分派" },
@@ -164,7 +164,7 @@
       "label": "MCP Socket Host",
       "sublabel": "主进程授权边界",
       "tag": "Unix Socket + token",
-      "pos": [380, 520],
+      "pos": [410, 520],
       "size": [150, 72],
       "sources": [
         { "path": "src/main/transport/mcp-socket.ts", "line": 49, "end_line": 115, "label": "本机 Socket 与令牌" },
@@ -202,7 +202,7 @@
       "to": "ipc",
       "label": "IPC 调用与事件",
       "variant": "security",
-      "labelAt": [365, 386]
+      "labelAt": [380, 386]
     },
     {
       "id": "ipc_to_services",
@@ -210,7 +210,7 @@
       "to": "app_services",
       "label": "请求与订阅",
       "variant": "emphasis",
-      "labelAt": [545, 296]
+      "labelAt": [575, 296]
     },
     {
       "id": "services_to_core",
@@ -218,14 +218,14 @@
       "to": "portfolio_core",
       "label": "命令、查询与同步结果",
       "variant": "emphasis",
-      "labelAt": [755, 386]
+      "labelAt": [785, 386]
     },
     {
       "id": "core_to_repository",
       "from": "portfolio_core",
       "to": "state_repository",
       "label": "load / save",
-      "labelAt": [965, 386]
+      "labelAt": [995, 386]
     },
     {
       "id": "repository_to_store",
@@ -233,7 +233,7 @@
       "to": "local_store",
       "label": "明文 JSON",
       "variant": "security",
-      "labelAt": [1165, 386]
+      "labelAt": [1192.5, 386]
     },
     {
       "id": "services_to_accounts",
@@ -263,7 +263,7 @@
       "to": "mcp_socket",
       "label": "Unix Socket + token",
       "variant": "security",
-      "labelAt": [365, 606]
+      "labelAt": [380, 606]
     },
     {
       "id": "socket_to_services",
