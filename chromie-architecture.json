@@ -57,8 +57,8 @@
       "label": "应用服务",
       "sublabel": "PortfolioModule",
       "tag": "同步、汇率、备份、MCP",
-      "pos": [590, 300],
-      "size": [180, 72],
+      "pos": [610, 300],
+      "size": [160, 72],
       "sources": [
         { "path": "src/main/service/portfolio-module.ts", "line": 26, "end_line": 90, "label": "应用服务门面" },
         { "path": "src/main/service/desktop-service.ts", "line": 65, "label": "平台能力入口" },
@@ -98,8 +98,8 @@
       "label": "本地数据目录",
       "sublabel": "~/.chromie / 自定义路径",
       "tag": "明文 JSON · 0600",
-      "pos": [1205, 300],
-      "size": [180, 72],
+      "pos": [1220, 300],
+      "size": [165, 72],
       "sources": [
         { "path": "src/main/index.ts", "line": 110, "end_line": 124, "label": "本地文件装配" },
         { "path": "src/main/infra/file-store.ts", "line": 19, "end_line": 48, "label": "0600 原子写入" },
@@ -112,8 +112,8 @@
       "label": "账户数据源",
       "sublabel": "Futu / IBKR / HSTong",
       "tag": "OKX / Binance",
-      "pos": [590, 40],
-      "size": [180, 72],
+      "pos": [610, 40],
+      "size": [160, 72],
       "sources": [
         { "path": "src/main/service/account-sync-coordinator.ts", "line": 61, "end_line": 98, "label": "五类账户同步分派" },
         { "path": "src/main/service/desktop-service.ts", "line": 67, "end_line": 85, "label": "只读持仓同步" }
@@ -210,7 +210,7 @@
       "to": "app_services",
       "label": "请求与订阅",
       "variant": "emphasis",
-      "labelAt": [575, 296]
+      "labelAt": [585, 296]
     },
     {
       "id": "services_to_core",
@@ -233,7 +233,7 @@
       "to": "local_store",
       "label": "明文 JSON",
       "variant": "security",
-      "labelAt": [1192.5, 386]
+      "labelAt": [1200, 386]
     },
     {
       "id": "services_to_accounts",
@@ -270,7 +270,9 @@
       "from": "mcp_socket",
       "to": "app_services",
       "label": "授权后的 tool call",
-      "variant": "security"
+      "variant": "security",
+      "fromSide": "right",
+      "toSide": "bottom"
     }
   ],
   "cards": [

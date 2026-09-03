@@ -5037,15 +5037,15 @@
         <!-- Connection paths (before components for correct z-order) -->
         <path data-edge-from="renderer" data-edge-to="preload" data-edge-label="window.desktop" data-edge-key="0" data-edge-id="renderer_to_preload" data-composition-points="170,336;200,336" d="M 170 336 L 200 336" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
         <path data-edge-from="preload" data-edge-to="ipc" data-edge-label="IPC 调用与事件" data-edge-key="1" data-edge-id="preload_to_ipc" data-composition-points="350,336;410,336" d="M 350 336 L 410 336" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="ipc" data-edge-to="app_services" data-edge-label="请求与订阅" data-edge-key="2" data-edge-id="ipc_to_services" data-composition-points="560,336;590,336" d="M 560 336 L 590 336" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="ipc" data-edge-to="app_services" data-edge-label="请求与订阅" data-edge-key="2" data-edge-id="ipc_to_services" data-composition-points="560,336;610,336" d="M 560 336 L 610 336" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="app_services" data-edge-to="portfolio_core" data-edge-label="命令、查询与同步结果" data-edge-key="3" data-edge-id="services_to_core" data-composition-points="770,336;800,336" d="M 770 336 L 800 336" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="portfolio_core" data-edge-to="state_repository" data-edge-label="load / save" data-edge-key="4" data-edge-id="core_to_repository" data-composition-points="980,336;1010,336" d="M 980 336 L 1010 336" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="state_repository" data-edge-to="local_store" data-edge-label="明文 JSON" data-edge-key="5" data-edge-id="repository_to_store" data-composition-points="1180,336;1205,336" d="M 1180 336 L 1205 336" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="app_services" data-edge-to="account_sources" data-edge-label="只读同步" data-edge-key="6" data-edge-id="services_to_accounts" data-composition-points="680,300;680,112" d="M 680 300 L 680 112" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="state_repository" data-edge-to="local_store" data-edge-label="明文 JSON" data-edge-key="5" data-edge-id="repository_to_store" data-composition-points="1180,336;1220,336" d="M 1180 336 L 1220 336" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="app_services" data-edge-to="account_sources" data-edge-label="只读同步" data-edge-key="6" data-edge-id="services_to_accounts" data-composition-points="690,300;690,112" d="M 690 300 L 690 112" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         <path data-edge-from="app_services" data-edge-to="market_apis" data-edge-label="HTTPS 行情与汇率" data-edge-key="7" data-edge-id="services_to_market" data-composition-points="770,336;794,336;794,76;830,76" d="M 770 336 L 786 336 Q 794 336 794 328 L 794 84 Q 794 76 802 76 L 830 76" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
         <path data-edge-from="mcp_consumer" data-edge-to="mcp_stdio" data-edge-label="MCP stdio" data-edge-key="8" data-edge-id="consumer_to_stdio" data-composition-points="170,556;200,556" d="M 170 556 L 200 556" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         <path data-edge-from="mcp_stdio" data-edge-to="mcp_socket" data-edge-label="Unix Socket + token" data-edge-key="9" data-edge-id="stdio_to_socket" data-composition-points="350,556;410,556" d="M 350 556 L 410 556" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="mcp_socket" data-edge-to="app_services" data-edge-label="授权后的 tool call" data-edge-key="10" data-edge-id="socket_to_services" data-composition-points="560,556;575,556;575,336;590,336" d="M 560 556 L 567.5 556 Q 575 556 575 548.5 L 575 343.5 Q 575 336 582.5 336 L 590 336" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="mcp_socket" data-edge-to="app_services" data-edge-label="授权后的 tool call" data-edge-key="10" data-edge-id="socket_to_services" data-composition-points="560,556;690,556;690,372" d="M 560 556 L 682 556 Q 690 556 690 548 L 690 372" class="a-security" stroke-width="1.5" marker-end="url(#arrowhead-security)"/>
 
         <!-- Components -->
         <g id="node-renderer" data-node-id="renderer" data-node-label="React Renderer" tabindex="0" role="button" aria-label="聚焦React Renderer，界面与状态, Electron Renderer · contextIsolation + sandbox" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="界面与状态" data-node-tag="React 19 + shadcn/ui" data-node-context="Electron Renderer · contextIsolation + sandbox">
@@ -5090,14 +5090,14 @@
 
         <g id="node-app_services" data-node-id="app_services" data-node-label="应用服务" tabindex="0" role="button" aria-label="聚焦应用服务，PortfolioModule, Electron 主进程" aria-pressed="false" data-node-kind="backend" data-node-sublabel="PortfolioModule" data-node-tag="同步、汇率、备份、MCP" data-node-context="Electron 主进程">
           <title>应用服务 · PortfolioModule · Electron 主进程 · 同步、汇率、备份、MCP</title>
-          <rect x="590" y="300" width="180" height="72" rx="6" class="c-mask"/>
-          <rect x="590" y="300" width="180" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(596 306) scale(0.6875)">
+          <rect x="610" y="300" width="160" height="72" rx="6" class="c-mask"/>
+          <rect x="610" y="300" width="160" height="72" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(616 306) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="680" y="334" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">应用服务</text>
-        <text data-detail="context" x="680" y="350" class="t-muted" font-size="9" text-anchor="middle">PortfolioModule</text>
-        <text data-detail="fine" x="680" y="364" class="t-backend" font-size="7" text-anchor="middle">同步、汇率、备份、MCP</text>
+          <text data-node-label="" data-detail-anchor="" x="690" y="334" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">应用服务</text>
+        <text data-detail="context" x="690" y="350" class="t-muted" font-size="9" text-anchor="middle">PortfolioModule</text>
+        <text data-detail="fine" x="690" y="364" class="t-backend" font-size="7" text-anchor="middle">同步、汇率、备份、MCP</text>
         </g>
 
         <g id="node-portfolio_core" data-node-id="portfolio_core" data-node-label="资产领域" tabindex="0" role="button" aria-label="聚焦资产领域，PortfolioService / operations, Electron 主进程" aria-pressed="false" data-node-kind="backend" data-node-sublabel="PortfolioService / operations" data-node-tag="标签、账户、持仓、快照" data-node-context="Electron 主进程">
@@ -5126,28 +5126,28 @@
 
         <g id="node-local_store" data-node-id="local_store" data-node-label="本地数据目录" tabindex="0" role="button" aria-label="聚焦本地数据目录，~/.chromie / 自定义路径, 架构组件" aria-pressed="false" data-node-kind="database" data-node-sublabel="~/.chromie / 自定义路径" data-node-tag="明文 JSON · 0600" data-node-context="架构组件">
           <title>本地数据目录 · ~/.chromie / 自定义路径 · 架构组件 · 明文 JSON · 0600</title>
-          <rect x="1205" y="300" width="180" height="72" rx="6" class="c-mask"/>
-          <rect x="1205" y="300" width="180" height="72" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(1211 306) scale(0.6875)">
+          <rect x="1220" y="300" width="165" height="72" rx="6" class="c-mask"/>
+          <rect x="1220" y="300" width="165" height="72" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(1226 306) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1295" y="334" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">本地数据目录</text>
-        <text data-detail="context" x="1295" y="350" class="t-muted" font-size="9" text-anchor="middle">~/.chromie / 自定义路径</text>
-        <text data-detail="fine" x="1295" y="364" class="t-database" font-size="7" text-anchor="middle">明文 JSON · 0600</text>
+          <text data-node-label="" data-detail-anchor="" x="1302.5" y="334" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">本地数据目录</text>
+        <text data-detail="context" x="1302.5" y="350" class="t-muted" font-size="9" text-anchor="middle">~/.chromie / 自定义路径</text>
+        <text data-detail="fine" x="1302.5" y="364" class="t-database" font-size="7" text-anchor="middle">明文 JSON · 0600</text>
         </g>
 
         <g id="node-account_sources" data-node-id="account_sources" data-node-label="账户数据源" tabindex="0" role="button" aria-label="聚焦账户数据源，Futu / IBKR / HSTong, 架构组件" aria-pressed="false" data-node-kind="external" data-node-sublabel="Futu / IBKR / HSTong" data-node-tag="OKX / Binance" data-node-context="架构组件">
           <title>账户数据源 · Futu / IBKR / HSTong · 架构组件 · OKX / Binance</title>
-          <rect x="590" y="40" width="180" height="72" rx="6" class="c-mask"/>
-          <rect x="590" y="40" width="180" height="72" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(596 46) scale(0.6875)">
+          <rect x="610" y="40" width="160" height="72" rx="6" class="c-mask"/>
+          <rect x="610" y="40" width="160" height="72" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(616 46) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="680" y="74" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">账户数据源</text>
-        <text data-detail="context" x="680" y="90" class="t-muted" font-size="9" text-anchor="middle">Futu / IBKR / HSTong</text>
-        <text data-detail="fine" x="680" y="104" class="t-external" font-size="7" text-anchor="middle">OKX / Binance</text>
+          <text data-node-label="" data-detail-anchor="" x="690" y="74" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">账户数据源</text>
+        <text data-detail="context" x="690" y="90" class="t-muted" font-size="9" text-anchor="middle">Futu / IBKR / HSTong</text>
+        <text data-detail="fine" x="690" y="104" class="t-external" font-size="7" text-anchor="middle">OKX / Binance</text>
         </g>
 
         <g id="node-market_apis" data-node-id="market_apis" data-node-label="公共行情" tabindex="0" role="button" aria-label="聚焦公共行情，东方财富 / Yahoo Finance, 架构组件" aria-pressed="false" data-node-kind="external" data-node-sublabel="东方财富 / Yahoo Finance" data-node-tag="Coinbase 汇率与数字资产" data-node-context="架构组件">
@@ -5211,8 +5211,8 @@
           <text x="380" y="386" class="t-security" font-size="8" text-anchor="middle">IPC 调用与事件</text>
         </g>
         <g data-detail="context" data-edge-from="ipc" data-edge-to="app_services" data-edge-label="请求与订阅" data-edge-key="2" data-edge-id="ipc_to_services">
-          <rect x="546" y="286" width="58" height="14" rx="3" class="c-mask"/>
-          <text x="575" y="296" class="t-backend" font-size="8" text-anchor="middle">请求与订阅</text>
+          <rect x="556" y="286" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="585" y="296" class="t-backend" font-size="8" text-anchor="middle">请求与订阅</text>
         </g>
         <g data-detail="context" data-edge-from="app_services" data-edge-to="portfolio_core" data-edge-label="命令、查询与同步结果" data-edge-key="3" data-edge-id="services_to_core">
           <rect x="732" y="376" width="106" height="14" rx="3" class="c-mask"/>
@@ -5223,12 +5223,12 @@
           <text x="995" y="386" class="t-muted" font-size="8" text-anchor="middle">load / save</text>
         </g>
         <g data-detail="context" data-edge-from="state_repository" data-edge-to="local_store" data-edge-label="明文 JSON" data-edge-key="5" data-edge-id="repository_to_store">
-          <rect x="1165.9" y="376" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
-          <text x="1192.5" y="386" class="t-security" font-size="8" text-anchor="middle">明文 JSON</text>
+          <rect x="1173.4" y="376" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
+          <text x="1200" y="386" class="t-security" font-size="8" text-anchor="middle">明文 JSON</text>
         </g>
         <g data-detail="context" data-edge-from="app_services" data-edge-to="account_sources" data-edge-label="只读同步" data-edge-key="6" data-edge-id="services_to_accounts">
-          <rect x="655.8" y="280" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="680" y="290" class="t-messagebus" font-size="8" text-anchor="middle">只读同步</text>
+          <rect x="665.8" y="280" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="690" y="290" class="t-messagebus" font-size="8" text-anchor="middle">只读同步</text>
         </g>
         <g data-detail="context" data-edge-from="app_services" data-edge-to="market_apis" data-edge-label="HTTPS 行情与汇率" data-edge-key="7" data-edge-id="services_to_market">
           <rect x="750.6" y="186" width="86.8" height="14" rx="3" class="c-mask"/>
@@ -5243,8 +5243,8 @@
           <text x="380" y="606" class="t-security" font-size="8" text-anchor="middle">Unix Socket + token</text>
         </g>
         <g data-detail="context" data-edge-from="mcp_socket" data-edge-to="app_services" data-edge-label="授权后的 tool call" data-edge-key="10" data-edge-id="socket_to_services">
-          <rect x="526.8" y="426" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="575" y="436" class="t-security" font-size="8" text-anchor="middle">授权后的 tool call</text>
+          <rect x="641.8" y="444" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="690" y="454" class="t-security" font-size="8" text-anchor="middle">授权后的 tool call</text>
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
