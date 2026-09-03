@@ -23,8 +23,8 @@
 
 | 账户 | 接入方式 | 资产内容 |
 | --- | --- | --- |
-| 富途牛牛 | Futu OpenD，默认 `127.0.0.1:33333` | 港美股持仓与分币种现金 |
-| 盈透证券 | Client Portal Gateway，默认 `127.0.0.1:5000` | 证券持仓与分币种现金 |
+| 富途牛牛 | [Futu OpenD](https://openapi.futunn.com/futu-api-doc/opend/opend-intro.html)，默认 `127.0.0.1:33333` | 港美股持仓与分币种现金 |
+| 盈透证券 | [Client Portal Gateway](https://ibkrcampus.com/docs/web-api/authentication/cpgw/installation-authentication)，默认 `127.0.0.1:5000` | 证券持仓与分币种现金 |
 | 华盛通 | [OpenAPI Gateway](https://quant-open.hstong.com/api-docs/introduction/guidelines.html)，默认 `127.0.0.1:11111` | 港股、美股、A 股通持仓与现金 |
 | 欧易 | 只读 API Key | 交易账户与资金账户资产 |
 | 币安 | 只读 HMAC API Key | 现货账户与资金钱包资产 |
