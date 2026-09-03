@@ -82,6 +82,8 @@ pnpm build:mac
 
 项目使用 Electron、electron-vite、React、TypeScript、Tailwind CSS v4、shadcn/ui 和 pnpm。
 
+[查看交互式项目架构图](./chromie-architecture.html)
+
 | 目录 | 用途 |
 | --- | --- |
 | `src/main` | Electron 主进程、本地数据与平台接入 |
