@@ -6,8 +6,6 @@
 
 <p align="center">在 macOS 上管理分散的资产，数据保存在本地</p>
 
-Chromie 汇总券商、交易所和手动账户中的资产，支持多工作区、多币种折算、历史快照和 MCP。
-
 ![Chromie 项目架构](./resources/chromie-architecture.webp)
 
 ## 功能
@@ -83,8 +81,6 @@ pnpm build:mac
 ## 开发
 
 项目使用 Electron、electron-vite、React、TypeScript、Tailwind CSS v4、shadcn/ui 和 pnpm。
-
-[查看交互式项目架构图](./chromie-architecture.html)
 
 | 目录 | 用途 |
 | --- | --- |
