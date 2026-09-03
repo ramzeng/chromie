@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from 'node:fs/promises'
+import { chmod, readFile, stat, writeFile } from 'node:fs/promises'
 
 import {
   BrowserWindow,
@@ -8,7 +8,11 @@ import {
   type SaveDialogOptions
 } from 'electron'
 
-import type { BackupExportResult, BackupImportResult } from '../../shared/backup'
+import type { BackupExportResult } from '../../shared/backup'
+
+export type BackupFileImportResult =
+  | { canceled: true }
+  | { canceled: false; content: string }
 
 const MAX_BACKUP_SIZE = 10 * 1024 * 1024
 
@@ -44,13 +48,14 @@ export async function exportBackup(
     : await dialog.showSaveDialog(options)
   if (result.canceled || !result.filePath) return { canceled: true }
 
-  await writeFile(result.filePath, content, 'utf8')
+  await writeFile(result.filePath, content, { encoding: 'utf8', mode: 0o600 })
+  await chmod(result.filePath, 0o600)
   return { canceled: false }
 }
 
 export async function importBackup(
   ownerId: number
-): Promise<BackupImportResult> {
+): Promise<BackupFileImportResult> {
   const options: OpenDialogOptions = {
     title: '导入工作区',
     filters: [{ name: 'Chromie 工作区', extensions: ['json'] }],

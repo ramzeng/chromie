@@ -1,5 +1,5 @@
 export type FutuIntegration = {
-  assetAccountId: string
+  accountId: string
   provider: 'Futu'
   websocket: {
     host: string
@@ -9,7 +9,7 @@ export type FutuIntegration = {
 }
 
 export type IbkrIntegration = {
-  assetAccountId: string
+  accountId: string
   provider: 'Ibkr'
   gateway: {
     host: string
@@ -18,7 +18,7 @@ export type IbkrIntegration = {
 }
 
 export type HstongIntegration = {
-  assetAccountId: string
+  accountId: string
   provider: 'Hstong'
   gateway: {
     host: string
@@ -28,7 +28,7 @@ export type HstongIntegration = {
 }
 
 export type OkxIntegration = {
-  assetAccountId: string
+  accountId: string
   provider: 'Okx'
   api: {
     apiKey: string
@@ -38,7 +38,7 @@ export type OkxIntegration = {
 }
 
 export type BinanceIntegration = {
-  assetAccountId: string
+  accountId: string
   provider: 'Binance'
   api: {
     apiKey: string
@@ -46,7 +46,7 @@ export type BinanceIntegration = {
   }
 }
 
-export type AssetAccountIntegration =
+export type AccountIntegration =
   | FutuIntegration
   | IbkrIntegration
   | HstongIntegration
@@ -61,7 +61,7 @@ export type OptionalCredentialUpdate<T> =
   | CredentialUpdate<T>
   | { mode: 'clear' }
 
-export type AssetAccountIntegrationInput =
+export type AccountIntegrationInput =
   | {
       provider: 'Futu'
       websocket: {
@@ -70,7 +70,7 @@ export type AssetAccountIntegrationInput =
         credential: OptionalCredentialUpdate<{ key: string }>
       }
     }
-  | Omit<IbkrIntegration, 'assetAccountId'>
+  | Omit<IbkrIntegration, 'accountId'>
   | {
       provider: 'Hstong'
       gateway: {
@@ -99,9 +99,9 @@ export type AssetAccountIntegrationInput =
       }
     }
 
-export type AssetAccountIntegrationView =
+export type AccountIntegrationView =
   | {
-      assetAccountId: string
+      accountId: string
       provider: 'Futu'
       websocket: {
         host: string
@@ -110,7 +110,7 @@ export type AssetAccountIntegrationView =
       }
     }
   | {
-      assetAccountId: string
+      accountId: string
       provider: 'Ibkr'
       gateway: {
         host: string
@@ -118,7 +118,7 @@ export type AssetAccountIntegrationView =
       }
     }
   | {
-      assetAccountId: string
+      accountId: string
       provider: 'Hstong'
       gateway: {
         host: string
@@ -127,19 +127,19 @@ export type AssetAccountIntegrationView =
       }
     }
   | {
-      assetAccountId: string
+      accountId: string
       provider: 'Okx'
       credentialConfigured: true
     }
   | {
-      assetAccountId: string
+      accountId: string
       provider: 'Binance'
       credentialConfigured: true
     }
 
 export type IntegrationData = {
   version: 1
-  integrations: AssetAccountIntegration[]
+  integrations: AccountIntegration[]
 }
 
 export const EMPTY_INTEGRATION_DATA: IntegrationData = {

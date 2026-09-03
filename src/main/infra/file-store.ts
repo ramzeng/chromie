@@ -1,8 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-
-import { safeStorage } from 'electron'
 
 export interface StringStore {
   read(): Promise<string | null>
@@ -19,7 +17,7 @@ async function readOptionalFile(path: string): Promise<Buffer | null> {
 }
 
 async function atomicWrite(path: string, content: Uint8Array | string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true })
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 })
   const temporaryPath = `${path}.${process.pid}.${randomUUID()}.tmp`
   try {
     await writeFile(temporaryPath, content, { mode: 0o600 })
@@ -28,6 +26,14 @@ async function atomicWrite(path: string, content: Uint8Array | string): Promise<
     await rm(temporaryPath, { force: true })
     throw error
   }
+}
+
+export async function ensurePrivateDirectory(
+  path: string,
+  enforcePermissions = true
+): Promise<void> {
+  await mkdir(path, { recursive: true, mode: 0o700 })
+  if (enforcePermissions) await chmod(path, 0o700)
 }
 
 export class PlainTextFileStore implements StringStore {
@@ -40,27 +46,5 @@ export class PlainTextFileStore implements StringStore {
 
   async write(content: string): Promise<void> {
     await atomicWrite(this.path, content)
-  }
-}
-
-export class SecureFileStore implements StringStore {
-  constructor(private readonly path: string) {}
-
-  async read(): Promise<string | null> {
-    const encrypted = await readOptionalFile(this.path)
-    if (!encrypted) return null
-    if (!(await safeStorage.isAsyncEncryptionAvailable())) {
-      throw new Error('系统安全存储当前不可用，无法读取资产数据')
-    }
-    const decrypted = await safeStorage.decryptStringAsync(encrypted)
-    if (decrypted.shouldReEncrypt) await this.write(decrypted.result)
-    return decrypted.result
-  }
-
-  async write(content: string): Promise<void> {
-    if (!(await safeStorage.isAsyncEncryptionAvailable())) {
-      throw new Error('系统安全存储当前不可用，无法保存资产数据')
-    }
-    await atomicWrite(this.path, await safeStorage.encryptStringAsync(content))
   }
 }

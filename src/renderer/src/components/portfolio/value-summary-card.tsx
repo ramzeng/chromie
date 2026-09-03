@@ -44,7 +44,7 @@ function SummaryAmount({
           aria-label={label}
           className={cn(
             'block min-w-0 truncate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-            !value && 'mt-1 text-sm font-medium text-muted-foreground'
+            !value && 'text-xs font-normal tracking-normal text-muted-foreground'
           )}
         >
           {value
@@ -104,9 +104,7 @@ export function ValueSummaryCard({
     baseCurrency,
     exchangeRates.snapshot?.rates
   )
-  const missingPriceCount = positions.filter(
-    (position) => position.price === undefined
-  ).length
+  const missingPriceCount = convertedValuation.missingPriceCount
   const hasCompleteConvertedTotal =
     positions.length > 0 &&
     missingPriceCount === 0 &&
@@ -139,20 +137,20 @@ export function ValueSummaryCard({
   const refreshHint = refreshing
     ? '正在更新汇率'
     : refreshFailed
-      ? `汇率更新失败：${refreshError}${refreshedAt ? `；当前使用 ${refreshedAt} 的汇率` : ''}`
+      ? `汇率更新失败：${refreshError}${refreshedAt ? `。当前使用 ${refreshedAt} 的汇率` : ''}`
       : refreshedAt
         ? `更新汇率 · 上次更新于 ${refreshedAt}`
         : '更新汇率 · 暂无汇率数据'
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="grid gap-2 @min-[36rem]:grid-cols-2 @min-[48rem]:grid-cols-3 @min-[68rem]:grid-cols-5">
+      <div className="grid gap-2 @min-[36rem]:grid-cols-2 @min-[68rem]:grid-cols-4">
         <Card
           size="sm"
-          className="min-h-[104px] border-0 bg-muted/35 shadow-none data-[size=sm]:gap-0 data-[size=sm]:py-0 @min-[36rem]:col-span-2 @min-[48rem]:col-span-3 @min-[68rem]:col-span-2"
+          className="min-h-[104px] border-border/40 shadow-none data-[size=sm]:gap-0 data-[size=sm]:py-0"
         >
           <CardHeader className="flex-1 grid-cols-1 content-center gap-1 py-3">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex h-7 items-center justify-between gap-2">
               <CardDescription>总市值 · {baseCurrency}</CardDescription>
               {exchangeRates.refresh && (
                 <Tooltip>
@@ -187,7 +185,7 @@ export function ValueSummaryCard({
                 </Tooltip>
               )}
             </div>
-            <CardTitle className="min-w-0 text-2xl tracking-[-0.03em] tabular-nums">
+            <CardTitle className="flex h-6 min-w-0 items-center text-xl tracking-[-0.03em] tabular-nums">
               <SummaryAmount
                 value={totalValue}
                 unavailableReason={totalUnavailableReason}
@@ -227,14 +225,10 @@ export function ValueSummaryCard({
             <Card
               key={currency}
               size="sm"
-              className={cn(
-                'min-h-[104px] border-border/40 shadow-none data-[size=sm]:gap-0 data-[size=sm]:py-0',
-                currency === portfolioDisplayCurrencies.at(-1) &&
-                  '@min-[36rem]:col-span-2 @min-[48rem]:col-span-1'
-              )}
+              className="min-h-[104px] border-border/40 shadow-none data-[size=sm]:gap-0 data-[size=sm]:py-0"
             >
               <CardHeader className="flex-1 grid-cols-1 content-center gap-1 py-3">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex h-7 items-center justify-between gap-2">
                   <CardDescription className="shrink-0">
                     {currency} 市值
                   </CardDescription>
@@ -246,7 +240,7 @@ export function ValueSummaryCard({
                     />
                   )}
                 </div>
-                <CardTitle className="min-w-0 text-xl tracking-[-0.03em] tabular-nums">
+                <CardTitle className="flex h-6 min-w-0 items-center text-xl tracking-[-0.03em] tabular-nums">
                   <SummaryAmount
                     value={currencyValue}
                     unavailableReason={unavailableReason}

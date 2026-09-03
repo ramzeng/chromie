@@ -1,70 +1,63 @@
 export {}
 
-import type { BackupExportResult, BackupImportResult } from '../../../shared/backup'
 import type {
-  BinanceSyncOptions,
-  BinanceSyncResult
-} from '../../../shared/binance'
+  BackupExportResult,
+  BackupImportConfirmResult,
+  BackupImportResult
+} from '../../../shared/backup'
 import type {
   ExchangeRateProvider,
   ExchangeRateSnapshot
 } from '../../../shared/exchange-rates'
-import type { FutuSyncOptions, FutuSyncResult } from '../../../shared/futu'
-import type { IbkrSyncOptions, IbkrSyncResult } from '../../../shared/ibkr'
-import type {
-  HstongSyncOptions,
-  HstongSyncResult
-} from '../../../shared/hstong'
 import type {
   McpAccessSettings,
   McpConnectionSettings
 } from '../../../shared/mcp'
-import type { OkxSyncOptions, OkxSyncResult } from '../../../shared/okx'
 import type {
-  WorkspaceBackup,
+  StorageLocation,
+  StorageLocationChangeResult
+} from '../../../shared/storage'
+import type {
   PortfolioCommand,
   PortfolioClientCommandResponse,
   PortfolioClientLoadResponse,
   PortfolioSyncResponse
 } from '../../../shared/portfolio'
+import type {
+  AssetQuoteLookupInput,
+  AssetQuoteLookupResult
+} from '../../../shared/asset-quotes'
 
 declare global {
   interface Window {
     desktop: {
       platform: string
-      futu?: {
-        syncPositions: (options?: FutuSyncOptions) => Promise<FutuSyncResult>
-      }
-      okx?: {
-        syncPositions: (options: OkxSyncOptions) => Promise<OkxSyncResult>
-      }
-      binance?: {
-        syncPositions: (options: BinanceSyncOptions) => Promise<BinanceSyncResult>
-      }
-      ibkr?: {
-        syncPositions: (options?: IbkrSyncOptions) => Promise<IbkrSyncResult>
-      }
-      hstong?: {
-        syncPositions: (options?: HstongSyncOptions) => Promise<HstongSyncResult>
-      }
       exchangeRates?: {
         load: (legacyContent?: string) => Promise<ExchangeRateSnapshot | null>
         fetch: (provider: ExchangeRateProvider) => Promise<ExchangeRateSnapshot>
       }
+      assetQuotes?: {
+        lookup: (input: AssetQuoteLookupInput) => Promise<AssetQuoteLookupResult>
+      }
       portfolio?: {
         load: () => Promise<PortfolioClientLoadResponse>
         execute: (command: PortfolioCommand) => Promise<PortfolioClientCommandResponse>
-        syncAssetAccount: (
+        syncAccount: (
           workspaceId: string,
-          assetAccountId: string
+          accountId: string
         ) => Promise<PortfolioSyncResponse>
         onChanged: (listener: () => void) => () => void
-        inspectBackup: (content: string) => Promise<WorkspaceBackup | null>
-        exportActiveWorkspace: () => Promise<string>
       }
       backup?: {
-        exportData: (content: string) => Promise<BackupExportResult>
+        exportData: () => Promise<BackupExportResult>
         importData: () => Promise<BackupImportResult>
+        confirmImport: (token: string) => Promise<BackupImportConfirmResult>
+        discardImport: (token: string) => Promise<void>
+      }
+      storage?: {
+        getLocation: () => Promise<StorageLocation>
+        validateLocation: (path: string) => Promise<StorageLocation>
+        updateLocation: (path: string) => Promise<StorageLocationChangeResult>
       }
       mcp?: {
         loadSettings: () => Promise<McpConnectionSettings>

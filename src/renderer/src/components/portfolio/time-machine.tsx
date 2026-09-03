@@ -19,6 +19,10 @@ import {
   compareText,
   useTableSort
 } from '@/components/portfolio/sortable-table-head'
+import {
+  TablePagination,
+  useTablePagination
+} from '@/components/portfolio/table-pagination'
 import { PortfolioPage, PortfolioPageHeader } from '@/components/portfolio/page-shell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -50,6 +54,7 @@ import { valuePositions } from '@/lib/valuation'
 export function TimeMachine({
   workspace,
   snapshots,
+  readOnly,
   selectedSnapshotId,
   liveExchangeRates,
   creating,
@@ -60,6 +65,7 @@ export function TimeMachine({
 }: {
   workspace: Workspace
   snapshots: WorkspaceSnapshot[]
+  readOnly: boolean
   selectedSnapshotId: string | null
   liveExchangeRates: ExchangeRateView
   creating: boolean
@@ -88,8 +94,8 @@ export function TimeMachine({
       snapshot
     }))
   ].map((row) => {
-    const positions = row.workspace.assetAccounts.flatMap(
-      (assetAccount) => assetAccount.positions
+    const positions = row.workspace.accounts.flatMap(
+      (account) => account.positions
     )
     return {
       ...row,
@@ -114,8 +120,8 @@ export function TimeMachine({
     }
     if (sort.key === 'accounts') {
       return compareOptionalNumbers(
-        left.workspace.assetAccounts.length,
-        right.workspace.assetAccounts.length,
+        left.workspace.accounts.length,
+        right.workspace.accounts.length,
         sort.direction
       )
     }
@@ -128,6 +134,17 @@ export function TimeMachine({
       sort.direction
     )
   })
+  const paginationResetKey = [
+    sort.key,
+    sort.direction,
+    'latest',
+    ...snapshots.map((snapshot) => snapshot.id)
+  ].join(':')
+  const pagination = useTablePagination(
+    rows.length,
+    paginationResetKey
+  )
+  const visibleRows = rows.slice(pagination.startIndex, pagination.endIndex)
 
   return (
     <PortfolioPage>
@@ -137,9 +154,15 @@ export function TimeMachine({
         </div>
         <Button
           onClick={() => void onCreate()}
-          disabled={selectedSnapshotId !== null || creating}
+          disabled={readOnly || selectedSnapshotId !== null || creating}
           aria-busy={creating}
-          title={selectedSnapshotId ? '请先切换到当前数据' : undefined}
+          title={
+            readOnly
+              ? '示例工作区为只读'
+              : selectedSnapshotId
+                ? '请先切换到当前数据'
+                : undefined
+          }
         >
           {creating ? (
             <Spinner data-icon="inline-start" />
@@ -150,7 +173,7 @@ export function TimeMachine({
         </Button>
       </PortfolioPageHeader>
 
-      <section className="mt-6 overflow-hidden rounded-sm border border-border/70 bg-card">
+      <section className="mt-5 overflow-hidden rounded-sm border border-border/70 bg-card">
         <Table className="min-w-[760px] [&_.tabular-nums]:whitespace-nowrap">
           <TableHeader className="bg-muted/15">
             <TableRow className="hover:bg-transparent">
@@ -180,7 +203,7 @@ export function TimeMachine({
                 align="right"
                 className="whitespace-nowrap"
               >
-                资产账户数
+                账户数
               </SortableTableHead>
               <SortableTableHead
                 sortKey="positions"
@@ -207,7 +230,7 @@ export function TimeMachine({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => {
+            {visibleRows.map((row) => {
               const isSelected = row.kind === 'latest'
                 ? selectedSnapshotId === null
                 : selectedSnapshotId === row.id
@@ -243,7 +266,7 @@ export function TimeMachine({
                     {row.createdAt ? formatLastSyncedAt(row.createdAt) : '当前数据'}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {row.workspace.assetAccounts.length}
+                    {row.workspace.accounts.length}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {row.positionCount}
@@ -264,7 +287,6 @@ export function TimeMachine({
                   <TableCell>
                     <Badge
                       variant={isSelected ? 'default' : 'secondary'}
-                      className="rounded-sm"
                     >
                       {isSelected ? '正在查看' : row.kind === 'latest' ? '当前' : '只读'}
                     </Badge>
@@ -295,7 +317,7 @@ export function TimeMachine({
                             {isSelected ? '当前数据' : '查看'}
                           </DropdownMenuItem>
                         </DropdownMenuGroup>
-                        {row.kind === 'snapshot' && (
+                        {row.kind === 'snapshot' && !readOnly && (
                           <>
                             <DropdownMenuSeparator />
                             <DropdownMenuGroup>
@@ -317,6 +339,7 @@ export function TimeMachine({
             })}
           </TableBody>
         </Table>
+        <TablePagination itemCount={rows.length} {...pagination} />
       </section>
 
     </PortfolioPage>

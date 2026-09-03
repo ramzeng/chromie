@@ -35,16 +35,24 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --color-tag-gray: var(--tag-gray);
+  --color-tag-red: var(--tag-red);
+  --color-tag-orange: var(--tag-orange);
+  --color-tag-yellow: var(--tag-yellow);
+  --color-tag-green: var(--tag-green);
+  --color-tag-blue: var(--tag-blue);
+  --color-tag-purple: var(--tag-purple);
+  --radius-xs: var(--radius);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
 }
 
 :root {
   color-scheme: dark;
-  --radius: 0.625rem;
+  --radius: 0.125rem;
   --background: #111213;
   --foreground: #d7d8db;
   --card: #171819;
@@ -64,11 +72,11 @@
   --border: rgb(255 255 255 / 8%);
   --input: rgb(255 255 255 / 12%);
   --ring: #72757c;
-  --chart-1: oklch(0.72 0.14 250);
-  --chart-2: oklch(0.73 0.13 185);
-  --chart-3: oklch(0.7 0.15 305);
-  --chart-4: oklch(0.78 0.14 85);
-  --chart-5: oklch(0.7 0.16 25);
+  --chart-1: #9ed1ff;
+  --chart-2: #3596ff;
+  --chart-3: #1778fd;
+  --chart-4: #1862eb;
+  --chart-5: #2054c5;
   --sidebar: #0e0f10;
   --sidebar-foreground: #b8bac0;
   --sidebar-primary: #222325;
@@ -77,10 +85,31 @@
   --sidebar-accent-foreground: #dedfe2;
   --sidebar-border: rgb(255 255 255 / 7%);
   --sidebar-ring: #72757c;
+  --tag-gray: #98989d;
+  --tag-red: #ff453a;
+  --tag-orange: #ff9f0a;
+  --tag-yellow: #ffd60a;
+  --tag-green: #30d158;
+  --tag-blue: #0a84ff;
+  --tag-purple: #bf5af2;
 }
 
 * {
   border-color: var(--border);
+}
+
+:is(
+  [data-slot='dialog-overlay'],
+  [data-slot='alert-dialog-overlay']
+):has(
+  ~ :is(
+    [data-slot='dialog-overlay'],
+    [data-slot='alert-dialog-overlay']
+  )
+) {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 [data-slot="app-sidebar"] {

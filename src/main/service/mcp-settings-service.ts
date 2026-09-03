@@ -14,8 +14,12 @@ function normalizeSettings(value: unknown): McpAccessSettings {
     return { ...DEFAULT_MCP_ACCESS_SETTINGS }
   }
   const input = value as Partial<McpAccessSettings>
-  const enabled = input.enabled === true
-  const allowWrite = enabled && input.allowWrite === true
+  const enabled = typeof input.enabled === 'boolean'
+    ? input.enabled
+    : DEFAULT_MCP_ACCESS_SETTINGS.enabled
+  const allowWrite = typeof input.allowWrite === 'boolean'
+    ? input.allowWrite
+    : DEFAULT_MCP_ACCESS_SETTINGS.allowWrite
   return {
     enabled,
     allowWrite
