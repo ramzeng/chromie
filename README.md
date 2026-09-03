@@ -6,7 +6,7 @@
 
 <p align="center">在 macOS 上管理分散的资产，数据保存在本地</p>
 
-Chromie 汇总券商、交易所和手动账户中的资产，支持多工作区、多币种折算、历史快照和 MCP。
+![Chromie 项目架构](./resources/chromie-architecture.webp)
 
 ## 功能
 
