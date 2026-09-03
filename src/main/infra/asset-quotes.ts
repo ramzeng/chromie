@@ -6,6 +6,8 @@ import type {
 
 const EASTMONEY_QUOTE_URL = 'https://push2.eastmoney.com/api/qt/stock/get'
 const EASTMONEY_SEARCH_URL = 'https://searchapi.eastmoney.com/api/suggest/get'
+const EASTMONEY_FUND_NAV_URL = 'https://api.fund.eastmoney.com/f10/lsjz'
+const EASTMONEY_FUND_REFERER = 'https://fundf10.eastmoney.com/'
 const EASTMONEY_SEARCH_TOKEN = 'D43BF722C8E33CBF33964D1D6CFAE909D'
 const COINBASE_API_URL = 'https://api.coinbase.com/v2'
 const REQUEST_TIMEOUT_MS = 8_000
@@ -36,6 +38,15 @@ type EastMoneySearchResponse = {
   QuotationCodeTable?: {
     Data?: EastMoneySearchItem[] | null
   }
+}
+
+type EastMoneyFundNavResponse = {
+  Data?: {
+    LSJZList?: Array<{
+      DWJZ?: unknown
+    }> | null
+  } | string | null
+  ErrCode?: unknown
 }
 
 type CoinbaseCurrency = {
@@ -85,11 +96,12 @@ async function fetchJson<T>(
   url: string,
   fetchImpl: FetchLike,
   signal: AbortSignal,
-  notFoundStatuses: readonly number[] = [404]
+  notFoundStatuses: readonly number[] = [404],
+  headers: HeadersInit = {}
 ): Promise<T | null> {
   const response = await fetchImpl(url, {
     method: 'GET',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...headers },
     signal
   })
   if (notFoundStatuses.includes(response.status)) return null
@@ -140,7 +152,12 @@ function eastMoneyMarketMatch(
 ): boolean {
   const classify = textValue(item.Classify)
   const marketNumber = textValue(item.MktNum)
-  if (market === 'CN') return marketNumber === '0' || marketNumber === '1'
+  if (market === 'CN') {
+    return marketNumber === '0' ||
+      marketNumber === '1' ||
+      marketNumber === '150' ||
+      classify === 'OTCFUND'
+  }
   if (market === 'HK') return marketNumber === '116' || classify === 'HK'
   return market === 'US' && (
     classify === 'UsStock' ||
@@ -158,7 +175,12 @@ async function findEastMoneyQuoteId(
   input: AssetQuoteQuery,
   fetchImpl: FetchLike,
   signal: AbortSignal
-): Promise<{ quoteId: string; name?: string } | null> {
+): Promise<{
+  quoteId: string
+  code: string
+  name?: string
+  isOtcFund: boolean
+} | null> {
   const symbol = normalizedStockSymbol(input)
   const url = new URL(EASTMONEY_SEARCH_URL)
   url.searchParams.set('input', symbol)
@@ -179,7 +201,49 @@ async function findEastMoneyQuoteId(
     )
   })
   const quoteId = textValue(match?.QuoteID)
-  return quoteId ? { quoteId, name: textValue(match?.Name) } : null
+  const code = textValue(match?.Code)
+  return quoteId && code ? {
+    quoteId,
+    code,
+    name: textValue(match?.Name),
+    isOtcFund: textValue(match?.Classify) === 'OTCFUND' ||
+      textValue(match?.MktNum) === '150'
+  } : null
+}
+
+async function fetchEastMoneyFundQuote(
+  input: AssetQuoteQuery,
+  code: string,
+  fallbackName: string | undefined,
+  fetchImpl: FetchLike,
+  signal: AbortSignal
+): Promise<AssetQuote | null> {
+  const url = new URL(EASTMONEY_FUND_NAV_URL)
+  url.searchParams.set('fundCode', code)
+  url.searchParams.set('pageIndex', '1')
+  url.searchParams.set('pageSize', '1')
+  const response = await fetchJson<EastMoneyFundNavResponse>(
+    url.toString(),
+    fetchImpl,
+    signal,
+    [404],
+    { Referer: EASTMONEY_FUND_REFERER }
+  )
+  const data = response?.Data
+  const price = typeof data === 'object' && data
+    ? finiteNumber(data.LSJZList?.[0]?.DWJZ)
+    : undefined
+  if (!fallbackName && price === undefined) return null
+
+  return {
+    market: input.market,
+    symbol: input.symbol.trim().toUpperCase(),
+    source: 'eastmoney',
+    ...(fallbackName ? { name: fallbackName } : {}),
+    currency: 'CNY',
+    ...(price !== undefined ? { price } : {}),
+    fetchedAt: new Date().toISOString()
+  }
 }
 
 async function fetchEastMoneyQuote(
@@ -226,20 +290,32 @@ async function fetchEastMoneyAssetQuote(
 ): Promise<AssetQuote | null> {
   const directQuoteId = eastMoneyDirectQuoteId(input)
   if (directQuoteId) {
-    const directQuote = await fetchEastMoneyQuote(
-      input,
-      directQuoteId,
-      undefined,
-      fetchImpl,
-      signal
-    )
-    if (directQuote) return directQuote
+    try {
+      const directQuote = await fetchEastMoneyQuote(
+        input,
+        directQuoteId,
+        undefined,
+        fetchImpl,
+        signal
+      )
+      if (directQuote) return directQuote
+    } catch {
+      // A numeric fund code can look like a mainland stock code. East Money may
+      // close the invalid stock request, so continue with the security search.
+    }
   }
 
   const match = await findEastMoneyQuoteId(input, fetchImpl, signal)
-  return match
-    ? fetchEastMoneyQuote(input, match.quoteId, match.name, fetchImpl, signal)
-    : null
+  if (!match) return null
+  return match.isOtcFund
+    ? fetchEastMoneyFundQuote(
+        input,
+        match.code,
+        match.name,
+        fetchImpl,
+        signal
+      )
+    : fetchEastMoneyQuote(input, match.quoteId, match.name, fetchImpl, signal)
 }
 
 export function coinbaseAssetSymbol(symbol: string): string {

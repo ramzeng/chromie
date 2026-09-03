@@ -66,6 +66,49 @@ test('extracts stock name, scaled price and market currency from East Money', as
   })
 })
 
+test('resolves an East Money OTC fund and loads its latest net asset value', async () => {
+  const requestedUrls: string[] = []
+  let fundReferer: string | null = null
+  const quote = await fetchAssetQuote(
+    { market: 'CN', symbol: '017641', provider: 'eastmoney' },
+    async (input, init) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url.startsWith('https://push2.eastmoney.com/')) {
+        throw new TypeError('fetch failed')
+      }
+      if (url.startsWith('https://searchapi.eastmoney.com/')) {
+        return new Response(JSON.stringify({
+          QuotationCodeTable: {
+            Data: [{
+              Code: '017641',
+              Name: '摩根标普500指数(QDII)人民币A',
+              Classify: 'OTCFUND',
+              MktNum: '150',
+              QuoteID: '150.017641'
+            }]
+          }
+        }), { status: 200 })
+      }
+      fundReferer = new Headers(init?.headers).get('Referer')
+      return new Response(JSON.stringify({
+        Data: {
+          LSJZList: [{ DWJZ: '1.7044' }]
+        },
+        ErrCode: 0
+      }), { status: 200 })
+    }
+  )
+
+  assert.equal(requestedUrls.length, 3)
+  assert.match(requestedUrls[2], /api\.fund\.eastmoney\.com\/f10\/lsjz/)
+  assert.match(requestedUrls[2], /fundCode=017641/)
+  assert.equal(fundReferer, 'https://fundf10.eastmoney.com/')
+  assert.equal(quote?.name, '摩根标普500指数(QDII)人民币A')
+  assert.equal(quote?.currency, 'CNY')
+  assert.equal(quote?.price, 1.7044)
+})
+
 test('resolves a US exchange before loading its East Money quote', async () => {
   const requestedUrls: string[] = []
   const quote = await fetchAssetQuote(
