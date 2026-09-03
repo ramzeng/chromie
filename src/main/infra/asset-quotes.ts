@@ -8,7 +8,6 @@ const EASTMONEY_QUOTE_URL = 'https://push2.eastmoney.com/api/qt/stock/get'
 const EASTMONEY_SEARCH_URL = 'https://searchapi.eastmoney.com/api/suggest/get'
 const EASTMONEY_FUND_NAV_URL = 'https://api.fund.eastmoney.com/f10/lsjz'
 const EASTMONEY_FUND_REFERER = 'https://fundf10.eastmoney.com/'
-const EASTMONEY_SEARCH_TOKEN = 'D43BF722C8E33CBF33964D1D6CFAE909D'
 const COINBASE_API_URL = 'https://api.coinbase.com/v2'
 const REQUEST_TIMEOUT_MS = 8_000
 
@@ -190,7 +189,6 @@ async function findEastMoneyQuoteId(
   const url = new URL(EASTMONEY_SEARCH_URL)
   url.searchParams.set('input', symbol)
   url.searchParams.set('type', '14')
-  url.searchParams.set('token', EASTMONEY_SEARCH_TOKEN)
   url.searchParams.set('count', '20')
   const response = await fetchJson<EastMoneySearchResponse>(
     url.toString(),

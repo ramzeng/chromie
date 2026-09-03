@@ -103,6 +103,7 @@ test('resolves an East Money OTC fund and loads its latest net asset value', asy
   )
 
   assert.equal(requestedUrls.length, 2)
+  assert.equal(new URL(requestedUrls[0]).searchParams.has('token'), false)
   assert.match(requestedUrls[1], /api\.fund\.eastmoney\.com\/f10\/lsjz/)
   assert.match(requestedUrls[1], /fundCode=017641/)
   assert.equal(fundReferer, 'https://fundf10.eastmoney.com/')
