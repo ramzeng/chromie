@@ -8,6 +8,8 @@
 
 Chromie 汇总券商、交易所和手动账户中的资产，支持多工作区、多币种折算、历史快照和 MCP。
 
+![Chromie 项目架构](./resources/chromie-architecture.webp)
+
 ## 功能
 
 - 使用标签整理账户和持仓
