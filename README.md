@@ -90,6 +90,8 @@ pnpm build:mac
 
 工作流使用 `apple-actions/import-codesign-certs@v7` 将 `.p12` 导入临时 Keychain，并在任务结束后自动清理。macOS 构建被明确限制为 distribution 签名，因此 `MAC_CSC_LINK` 必须包含 `Developer ID Application` 证书及其私钥，不能使用 `Apple Development` 证书。
 
+发布流程会先生成并签名通用 app，再异步提交 Apple 公证。公证提交 ID 会记录在 Actions step summary 中，等待时间限制为 25 分钟；如果 Apple 仍在处理，任务会快速失败并保留提交 ID，避免 `notarytool --wait` 静默占用整个任务时限。公证通过并 staple 后，工作流才会从已验证的 app 生成 DMG 和 ZIP。
+
 在仓库的“Settings → Secrets and variables → Actions”中配置以下 Secrets：
 
 | Secret | 内容 |
