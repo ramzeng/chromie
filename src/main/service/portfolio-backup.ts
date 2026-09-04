@@ -4,7 +4,11 @@ import {
   MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
 } from '../../shared/exchange-rates'
-import { type AccountIntegration, type IntegrationData } from '../../shared/integrations'
+import {
+  type AccountIntegration,
+  type IntegrationData,
+  type ProxyProfile
+} from '../../shared/integrations'
 import {
   DEFAULT_SYNC_INTERVAL,
   MAX_TAG_NOTE_LENGTH,
@@ -100,12 +104,14 @@ function sanitizeSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
 function sanitizeWorkspaceBackup(
   workspace: Workspace,
   snapshots: WorkspaceSnapshot[],
-  integrations: AccountIntegration[]
+  integrations: AccountIntegration[],
+  proxyProfiles: ProxyProfile[]
 ): WorkspaceBackup {
   return {
     workspace: stripIntegrationFields(workspace),
     snapshots: snapshots.map(sanitizeSnapshot),
-    integrations: structuredClone(integrations)
+    integrations: structuredClone(integrations),
+    proxyProfiles: structuredClone(proxyProfiles)
   }
 }
 
@@ -140,7 +146,11 @@ export function reconcileIntegrations(
         })
       }))
     },
-    integrationData: { version: 1, integrations }
+    integrationData: {
+      version: 1,
+      integrations,
+      proxyProfiles: structuredClone(integrationData.proxyProfiles)
+    }
   }
 }
 
@@ -180,8 +190,8 @@ function isValidBackupWorkspace(value: unknown): boolean {
       tagIds.has(tag.id) ||
       typeof tag.name !== 'string' ||
       !tag.name.trim() ||
-      typeof tag.note !== 'string' ||
-      tag.note.trim().length > MAX_TAG_NOTE_LENGTH ||
+      (tag.note !== undefined &&
+        (typeof tag.note !== 'string' || tag.note.trim().length > MAX_TAG_NOTE_LENGTH)) ||
       !isTagColor(tag.color)
     )
       return false
@@ -228,18 +238,31 @@ function isValidBackupWorkspace(value: unknown): boolean {
 export function createWorkspaceBackup(
   workspace: Workspace,
   snapshots: WorkspaceSnapshot[] = [],
-  integrations: AccountIntegration[] = []
+  integrations: AccountIntegration[] = [],
+  proxyProfiles: ProxyProfile[] = []
 ): string {
   const accountIds = new Set(workspace.accounts.map((account) => account.id))
+  const workspaceIntegrations = integrations.filter((integration) =>
+    accountIds.has(integration.accountId)
+  )
+  const referencedProxyProfileIds = new Set(
+    workspaceIntegrations.flatMap((integration) =>
+      (integration.provider === 'Okx' || integration.provider === 'Binance') &&
+      integration.network.mode === 'proxy'
+        ? [integration.network.proxyProfileId]
+        : []
+    )
+  )
   const backup = sanitizeWorkspaceBackup(
     workspace,
     snapshots,
-    integrations.filter((integration) => accountIds.has(integration.accountId))
+    workspaceIntegrations,
+    proxyProfiles.filter((profile) => referencedProxyProfileIds.has(profile.id))
   )
   return JSON.stringify(
     {
       format: 'chromie-workspace',
-      version: 1,
+      version: 2,
       exportedAt: new Date().toISOString(),
       ...backup
     },
@@ -257,10 +280,11 @@ export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
       workspace?: unknown
       snapshots?: unknown
       integrations?: unknown
+      proxyProfiles?: unknown
     }
     if (
       backup.format !== 'chromie-workspace' ||
-      backup.version !== 1 ||
+      (backup.version !== 1 && backup.version !== 2) ||
       typeof backup.exportedAt !== 'string' ||
       !Number.isFinite(Date.parse(backup.exportedAt)) ||
       !isValidBackupWorkspace(backup.workspace)
@@ -273,13 +297,17 @@ export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
     if (!Array.isArray(rawSnapshots)) return null
     const rawIntegrations = backup.integrations ?? []
     if (!Array.isArray(rawIntegrations)) return null
+    const rawProxyProfiles = backup.version === 2 ? (backup.proxyProfiles ?? []) : []
+    if (!Array.isArray(rawProxyProfiles)) return null
     const normalizedIntegrationData = normalizeStoredIntegrationData({
       version: 1,
-      integrations: rawIntegrations
+      integrations: rawIntegrations,
+      proxyProfiles: rawProxyProfiles
     })
     if (
       !normalizedIntegrationData ||
-      normalizedIntegrationData.integrations.length !== rawIntegrations.length
+      normalizedIntegrationData.integrations.length !== rawIntegrations.length ||
+      normalizedIntegrationData.proxyProfiles.length !== rawProxyProfiles.length
     ) {
       return null
     }
@@ -294,7 +322,7 @@ export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
       return null
     }
     const normalized = normalizeStoredData({
-      version: backup.version,
+      version: 1,
       activeWorkspaceId: normalizedWorkspace.id,
       workspaces: [normalizedWorkspace],
       snapshots: rawSnapshots
@@ -304,7 +332,8 @@ export function parseWorkspaceBackup(raw: string): WorkspaceBackup | null {
     return {
       workspace,
       snapshots: normalized.snapshots,
-      integrations: normalizedIntegrationData.integrations
+      integrations: normalizedIntegrationData.integrations,
+      proxyProfiles: normalizedIntegrationData.proxyProfiles
     }
   } catch {
     return null

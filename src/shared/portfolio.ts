@@ -22,7 +22,10 @@ import {
 import type {
   AccountIntegration,
   AccountIntegrationInput,
-  AccountIntegrationView
+  AccountIntegrationView,
+  ProxyProfile,
+  ProxyProfileInput,
+  ProxyProfileView
 } from './integrations'
 
 export type Market = 'CN' | 'CN_OTC' | 'HK' | 'US' | 'CC'
@@ -127,6 +130,7 @@ export type WorkspaceBackup = {
   workspace: Workspace
   snapshots: WorkspaceSnapshot[]
   integrations: AccountIntegration[]
+  proxyProfiles: ProxyProfile[]
 }
 
 export type WorkspaceInput = Pick<Workspace, 'name' | 'baseCurrency'>
@@ -205,6 +209,9 @@ export type PortfolioCommand =
       workspaceId: string
       accountId: string
     }
+  | { type: 'create-proxy-profile'; input: ProxyProfileInput }
+  | { type: 'update-proxy-profile'; id: string; input: ProxyProfileInput }
+  | { type: 'delete-proxy-profile'; id: string }
   | {
       type: 'save-position'
       workspaceId: string
@@ -222,26 +229,30 @@ export type PortfolioCommand =
 export type PortfolioCommandResponse = {
   data: AppData
   integrations: AccountIntegration[]
+  proxyProfiles: ProxyProfile[]
   result?: string
 }
 
 export type PortfolioLoadResponse = {
   data: AppData
   integrations: AccountIntegration[]
+  proxyProfiles: ProxyProfile[]
 }
 
 export type PortfolioClientCommandResponse = Omit<
   PortfolioCommandResponse,
-  'integrations'
+  'integrations' | 'proxyProfiles'
 > & {
   integrations: AccountIntegrationView[]
+  proxyProfiles: ProxyProfileView[]
 }
 
 export type PortfolioClientLoadResponse = Omit<
   PortfolioLoadResponse,
-  'integrations'
+  'integrations' | 'proxyProfiles'
 > & {
   integrations: AccountIntegrationView[]
+  proxyProfiles: ProxyProfileView[]
 }
 
 export type PortfolioSyncResponse = {

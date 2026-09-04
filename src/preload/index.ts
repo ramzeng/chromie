@@ -27,6 +27,7 @@ import type {
   AssetQuoteLookupInput,
   AssetQuoteLookupResult
 } from '../shared/asset-quotes'
+import type { ProxyTestResult, ProxyTestTarget } from '../shared/integrations'
 
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
@@ -53,6 +54,8 @@ contextBridge.exposeInMainWorld('desktop', {
         workspaceId,
         accountId
       ),
+    testProxy: (profileId: string, target: ProxyTestTarget): Promise<ProxyTestResult> =>
+      ipcRenderer.invoke('portfolio:test-proxy', profileId, target),
     onChanged: (listener: () => void): (() => void) => {
       const handleChange = () => {
         listener()

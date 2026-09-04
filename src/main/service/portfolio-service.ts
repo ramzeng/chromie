@@ -3,7 +3,8 @@ import { isDeepStrictEqual } from 'node:util'
 import {
   EMPTY_INTEGRATION_DATA,
   type AccountIntegration,
-  type IntegrationData
+  type IntegrationData,
+  type ProxyProfile
 } from '../../shared/integrations'
 import {
   EMPTY_PORTFOLIO_DATA,
@@ -39,7 +40,8 @@ export interface PortfolioOperations {
     accountId: string,
     expectedIntegration: AccountIntegration,
     positions: PositionInput[],
-    syncedAt: string
+    syncedAt: string,
+    expectedProxyProfile?: ProxyProfile
   ): Promise<void>
   inspectBackup(content: unknown): WorkspaceBackup | null
   exportActiveWorkspace(): Promise<string>
@@ -80,7 +82,8 @@ export class PortfolioService implements PortfolioOperations {
       await this.initialize()
       return {
         data: structuredClone(this.data),
-        integrations: structuredClone(this.integrationData.integrations)
+        integrations: structuredClone(this.integrationData.integrations),
+        proxyProfiles: structuredClone(this.integrationData.proxyProfiles)
       }
     })
   }
@@ -151,6 +154,15 @@ export class PortfolioService implements PortfolioOperations {
         case 'delete-account':
           operations.deleteAccount(command.workspaceId, command.accountId)
           break
+        case 'create-proxy-profile':
+          result = operations.createProxyProfile(command.input)
+          break
+        case 'update-proxy-profile':
+          operations.updateProxyProfile(command.id, command.input)
+          break
+        case 'delete-proxy-profile':
+          operations.deleteProxyProfile(command.id)
+          break
         case 'save-position':
           operations.savePosition(
             command.workspaceId,
@@ -173,6 +185,7 @@ export class PortfolioService implements PortfolioOperations {
       return {
         data: structuredClone(this.data),
         integrations: structuredClone(this.integrationData.integrations),
+        proxyProfiles: structuredClone(this.integrationData.proxyProfiles),
         ...(result === undefined ? {} : { result })
       }
     })
@@ -183,7 +196,8 @@ export class PortfolioService implements PortfolioOperations {
     accountId: string,
     expectedIntegration: AccountIntegration,
     positions: PositionInput[],
-    syncedAt: string
+    syncedAt: string,
+    expectedProxyProfile?: ProxyProfile
   ): Promise<void> {
     return this.runExclusive(async () => {
       await this.initialize()
@@ -192,11 +206,21 @@ export class PortfolioService implements PortfolioOperations {
       const currentIntegration = this.integrationData.integrations.find(
         (item) => item.accountId === accountId
       )
+      const expectedProxyProfileId =
+        (expectedIntegration.provider === 'Okx' || expectedIntegration.provider === 'Binance') &&
+        expectedIntegration.network.mode === 'proxy'
+          ? expectedIntegration.network.proxyProfileId
+          : undefined
+      const currentProxyProfile = expectedProxyProfileId
+        ? this.integrationData.proxyProfiles.find((profile) => profile.id === expectedProxyProfileId)
+        : undefined
       if (
         !account?.sync ||
         account.type !== expectedIntegration.provider ||
         !currentIntegration ||
-        !isDeepStrictEqual(currentIntegration, expectedIntegration)
+        !isDeepStrictEqual(currentIntegration, expectedIntegration) ||
+        (expectedProxyProfileId !== undefined &&
+          (!expectedProxyProfile || !isDeepStrictEqual(currentProxyProfile, expectedProxyProfile)))
       ) {
         throw new PortfolioSyncConflictError()
       }
@@ -235,7 +259,8 @@ export class PortfolioService implements PortfolioOperations {
         this.data.snapshots.filter((snapshot) => snapshot.workspaceId === workspace.id),
         this.integrationData.integrations.filter((integration) =>
           accountIds.has(integration.accountId)
-        )
+        ),
+        this.integrationData.proxyProfiles
       )
     })
   }
@@ -262,7 +287,8 @@ export class PortfolioService implements PortfolioOperations {
       const workspaceId = operations.importWorkspace(
         backup.workspace,
         backup.snapshots,
-        backup.integrations
+        backup.integrations,
+        backup.proxyProfiles
       )
       await this.persist(nextData, nextIntegrationData)
       this.data = nextData
@@ -292,13 +318,27 @@ export class PortfolioService implements PortfolioOperations {
     if (storedState.integrations !== null && !storedIntegrationData) {
       throw new Error('账户集成数据文件损坏或版本不受支持，原文件已保留')
     }
+    const storedPortfolioValue =
+      storedState.portfolio === null
+        ? null
+        : (JSON.parse(storedState.portfolio) as unknown)
+    const storedIntegrationValue =
+      storedState.integrations === null
+        ? null
+        : (JSON.parse(storedState.integrations) as unknown)
     const reconciled = reconcileIntegrations(
       structuredClone(storedData ?? EMPTY_PORTFOLIO_DATA),
       structuredClone(storedIntegrationData ?? EMPTY_INTEGRATION_DATA)
     )
+    const needsMigration =
+      (storedPortfolioValue !== null &&
+        !isDeepStrictEqual(storedPortfolioValue, reconciled.data)) ||
+      (storedIntegrationValue !== null &&
+        !isDeepStrictEqual(storedIntegrationValue, reconciled.integrationData))
     if (
-      storedState.source === 'legacy' &&
-      (storedState.portfolio !== null || storedState.integrations !== null)
+      (storedState.source === 'legacy' &&
+        (storedState.portfolio !== null || storedState.integrations !== null)) ||
+      needsMigration
     ) {
       await this.persist(reconciled.data, reconciled.integrationData)
     }

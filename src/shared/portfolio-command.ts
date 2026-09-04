@@ -7,6 +7,7 @@ import {
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
 } from './exchange-rates'
 import { MAX_TAG_NOTE_LENGTH, TAG_COLORS } from './portfolio'
+import { PROXY_PROTOCOLS } from './integrations'
 
 const id = z.string().trim().min(1).max(128)
 const accountName = z.string().trim().min(1).max(50)
@@ -45,6 +46,25 @@ const requiredCredential = <T extends z.ZodType>(value: T) =>
     z.object({ mode: z.literal('replace'), value }).strict()
   ])
 
+const accountNetworkRoute = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('system') }).strict(),
+  z.object({ mode: z.literal('direct') }).strict(),
+  z.object({ mode: z.literal('proxy'), proxyProfileId: id }).strict()
+])
+
+const proxyProfileInput = z.object({
+  name: z.string().trim().min(1).max(50),
+  protocol: z.enum(PROXY_PROTOCOLS),
+  host,
+  port,
+  credential: optionalCredential(
+    z.object({
+      username: z.string().trim().min(1).max(256),
+      password: secret
+    }).strict()
+  )
+}).strict()
+
 const integration = z.discriminatedUnion('provider', [
   z.object({
     provider: z.literal('Futu'),
@@ -80,7 +100,8 @@ const integration = z.discriminatedUnion('provider', [
           passphrase: z.string().min(1).max(256)
         }).strict()
       )
-    }).strict()
+    }).strict(),
+    network: accountNetworkRoute.optional()
   }).strict(),
   z.object({
     provider: z.literal('Binance'),
@@ -91,7 +112,8 @@ const integration = z.discriminatedUnion('provider', [
           secretKey: secret
         }).strict()
       )
-    }).strict()
+    }).strict(),
+    network: accountNetworkRoute.optional()
   }).strict()
 ])
 
@@ -200,6 +222,16 @@ export const portfolioCommandSchema = z.discriminatedUnion('type', [
     accountId: id
   }).strict(),
   z.object({
+    type: z.literal('create-proxy-profile'),
+    input: proxyProfileInput
+  }).strict(),
+  z.object({
+    type: z.literal('update-proxy-profile'),
+    id,
+    input: proxyProfileInput
+  }).strict(),
+  z.object({ type: z.literal('delete-proxy-profile'), id }).strict(),
+  z.object({
     type: z.literal('save-position'),
     workspaceId: id,
     accountId: id,
@@ -217,4 +249,9 @@ export const portfolioCommandSchema = z.discriminatedUnion('type', [
 export const portfolioAccountTargetSchema = z.object({
   workspaceId: id,
   accountId: id
+}).strict()
+
+export const portfolioProxyTestSchema = z.object({
+  profileId: id,
+  target: z.enum(['okx', 'binance'])
 }).strict()

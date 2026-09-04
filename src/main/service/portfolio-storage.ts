@@ -21,14 +21,35 @@ import {
   normalizeExchangeRateRefreshInterval,
   normalizeIntegration,
   normalizePosition,
+  normalizeProxyProfile,
   normalizeStockQuoteProvider,
   normalizeStoredMarket,
   normalizeStoredTagIds
 } from './portfolio-normalization'
 export function normalizeStoredIntegrationData(input: unknown): IntegrationData | null {
   if (!input || typeof input !== 'object') return null
-  const value = input as { version?: unknown; integrations?: unknown }
+  const value = input as { version?: unknown; integrations?: unknown; proxyProfiles?: unknown }
   if (value.version !== 1 || !Array.isArray(value.integrations)) return null
+
+  const rawProxyProfiles = value.proxyProfiles ?? []
+  if (!Array.isArray(rawProxyProfiles)) return null
+  const usedProxyProfileIds = new Set<string>()
+  const usedProxyProfileNames = new Set<string>()
+  const proxyProfiles = rawProxyProfiles.flatMap((profile) => {
+    const normalized = normalizeProxyProfile(profile)
+    const nameKey = normalized?.name.toLocaleLowerCase()
+    if (
+      !normalized ||
+      usedProxyProfileIds.has(normalized.id) ||
+      usedProxyProfileNames.has(nameKey!)
+    ) {
+      return []
+    }
+    usedProxyProfileIds.add(normalized.id)
+    usedProxyProfileNames.add(nameKey!)
+    return [normalized]
+  })
+  if (proxyProfiles.length !== rawProxyProfiles.length) return null
 
   const usedAccountIds = new Set<string>()
   const integrations = value.integrations.flatMap((integration) => {
@@ -37,7 +58,18 @@ export function normalizeStoredIntegrationData(input: unknown): IntegrationData 
     usedAccountIds.add(normalized.accountId)
     return [normalized]
   })
-  return integrations.length === value.integrations.length ? { version: 1, integrations } : null
+  if (
+    integrations.length !== value.integrations.length ||
+    integrations.some(
+      (integration) =>
+        (integration.provider === 'Okx' || integration.provider === 'Binance') &&
+        integration.network.mode === 'proxy' &&
+        !usedProxyProfileIds.has(integration.network.proxyProfileId)
+    )
+  ) {
+    return null
+  }
+  return { version: 1, integrations, proxyProfiles }
 }
 
 export function parseStoredIntegrationData(raw: string): IntegrationData | null {
@@ -205,16 +237,20 @@ export function normalizeStoredWorkspace(value: unknown): Workspace | null {
     rawColor: unknown,
     rawNote: unknown
   ): Tag | null {
+    const note = rawNote === undefined
+      ? ''
+      : typeof rawNote === 'string'
+        ? rawNote.trim()
+        : null
     if (
       typeof rawName !== 'string' ||
       !rawName.trim() ||
       !isTagColor(rawColor) ||
-      typeof rawNote !== 'string' ||
-      rawNote.trim().length > MAX_TAG_NOTE_LENGTH
+      note === null ||
+      note.length > MAX_TAG_NOTE_LENGTH
     )
       return null
     const name = rawName.trim()
-    const note = rawNote.trim()
     const key = name.toLocaleLowerCase()
     if (tagByNormalizedName.has(key)) return null
     const requestedId = typeof rawId === 'string' ? rawId.trim() : ''

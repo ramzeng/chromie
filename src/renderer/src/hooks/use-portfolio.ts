@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
 
 import type { ExchangeRateSnapshot } from '../../../shared/exchange-rates'
-import type { AccountIntegrationView } from '../../../shared/integrations'
+import type {
+  AccountIntegrationView,
+  ProxyProfileInput,
+  ProxyProfileView,
+  ProxyTestTarget
+} from '../../../shared/integrations'
 import {
   EMPTY_PORTFOLIO_DATA,
   type AppData,
@@ -21,6 +26,7 @@ function cleanIpcError(error: unknown): string {
 export function usePortfolio() {
   const [data, setData] = useState<AppData>(() => structuredClone(EMPTY_PORTFOLIO_DATA))
   const [integrations, setIntegrations] = useState<AccountIntegrationView[]>([])
+  const [proxyProfiles, setProxyProfiles] = useState<ProxyProfileView[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refreshError, setRefreshError] = useState('')
@@ -37,6 +43,7 @@ export function usePortfolio() {
         if (!active) return
         setData(response.data)
         setIntegrations(response.integrations)
+        setProxyProfiles(response.proxyProfiles)
       } catch (loadError) {
         if (active) setError(cleanIpcError(loadError))
       } finally {
@@ -59,6 +66,7 @@ export function usePortfolio() {
         if (!active) return
         setData(response.data)
         setIntegrations(response.integrations)
+        setProxyProfiles(response.proxyProfiles)
         setError('')
         setRefreshError('')
       }).catch((loadError) => {
@@ -78,6 +86,7 @@ export function usePortfolio() {
     const response = await window.desktop.portfolio.execute(command)
     setData(response.data)
     setIntegrations(response.integrations)
+    setProxyProfiles(response.proxyProfiles)
     setError('')
     setRefreshError('')
     return response.result
@@ -98,6 +107,7 @@ export function usePortfolio() {
     workspaces: data.workspaces,
     activeWorkspace,
     activeSnapshots,
+    proxyProfiles,
     getAccountIntegration: (accountId: string) =>
       integrations.find(
         (integration) => integration.accountId === accountId
@@ -187,6 +197,21 @@ export function usePortfolio() {
       execute({ type: 'delete-account', workspaceId, accountId }).then(
         () => undefined
       ),
+    createProxyProfile: (input: ProxyProfileInput) =>
+      execute({ type: 'create-proxy-profile', input }).then((result) => {
+        if (typeof result !== 'string') throw new Error('创建代理配置失败')
+        return result
+      }),
+    updateProxyProfile: (id: string, input: ProxyProfileInput) =>
+      execute({ type: 'update-proxy-profile', id, input }).then(() => undefined),
+    deleteProxyProfile: (id: string) =>
+      execute({ type: 'delete-proxy-profile', id }).then(() => undefined),
+    testProxy: async (profileId: string, target: ProxyTestTarget) => {
+      if (!window.desktop.portfolio?.testProxy) {
+        throw new Error('代理测试组件尚未加载，请重启 Chromie')
+      }
+      return window.desktop.portfolio.testProxy(profileId, target)
+    },
     savePosition: (
       workspaceId: string,
       accountId: string,

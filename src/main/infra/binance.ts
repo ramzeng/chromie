@@ -1,12 +1,11 @@
 import { createHmac } from 'node:crypto'
 
-import { net } from 'electron'
-
 import type {
   BinanceSyncedPosition,
   BinanceSyncOptions,
   BinanceSyncResult
 } from '../../shared/binance'
+import type { FetchLike } from './proxy-http'
 
 const BINANCE_BASE_URL = 'https://api.binance.com'
 const REQUEST_TIMEOUT_MS = 10_000
@@ -73,11 +72,11 @@ function getMessage(value: unknown): string | undefined {
   return undefined
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(fetchImpl: FetchLike, path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
-    const response = await net.fetch(`${BINANCE_BASE_URL}${path}`, {
+    const response = await fetchImpl(`${BINANCE_BASE_URL}${path}`, {
       ...init,
       signal: controller.signal
     })
@@ -111,22 +110,24 @@ function signedParameters(timestamp: number, secretKey: string): string {
 }
 
 async function signedGet<T>(
+  fetchImpl: FetchLike,
   path: string,
   timestamp: number,
   options: BinanceSyncOptions
 ): Promise<T> {
   const parameters = signedParameters(timestamp, options.secretKey)
-  return request<T>(`${path}?${parameters}`, {
+  return request<T>(fetchImpl, `${path}?${parameters}`, {
     headers: { 'X-MBX-APIKEY': options.apiKey }
   })
 }
 
 async function signedPost<T>(
+  fetchImpl: FetchLike,
   path: string,
   timestamp: number,
   options: BinanceSyncOptions
 ): Promise<T> {
-  return request<T>(path, {
+  return request<T>(fetchImpl, path, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -239,22 +240,24 @@ function toPositions(
 }
 
 export async function syncBinancePositions(
-  options?: BinanceSyncOptions
+  options: BinanceSyncOptions | undefined,
+  fetchImpl: FetchLike
 ): Promise<BinanceSyncResult> {
   const credentials = requireOptions(options)
   try {
-    const time = await request<{ serverTime?: unknown }>('/api/v3/time')
+    const time = await request<{ serverTime?: unknown }>(fetchImpl, '/api/v3/time')
     const serverTime = finiteNumber(time.serverTime)
     if (serverTime === undefined) throw new Error('币安服务器时间无效')
 
     const [account, fundingBalances, tickers] = await Promise.all([
-      signedGet<BinanceAccount>('/api/v3/account', serverTime, credentials),
+      signedGet<BinanceAccount>(fetchImpl, '/api/v3/account', serverTime, credentials),
       signedPost<BinanceFundingBalance[]>(
+        fetchImpl,
         '/sapi/v1/asset/get-funding-asset',
         serverTime,
         credentials
       ),
-      request<BinanceTicker[]>('/api/v3/ticker/price')
+      request<BinanceTicker[]>(fetchImpl, '/api/v3/ticker/price')
     ])
     return {
       positions: toPositions(account, fundingBalances, buildPrices(tickers)),

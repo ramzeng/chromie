@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -40,10 +40,12 @@ import {
   type AccountInput,
   type AccountIntegrationView,
   type AccountType,
+  type ProxyProfileView,
   type Tag,
   type TagInput
 } from '@/lib/portfolio'
 import { TagSelector } from './tag-selector'
+import { SavedCredentialInput } from './saved-credential-input'
 import { AccountTypeIcon } from './view-helpers'
 import { useAccountDialogForm } from './use-account-dialog-form'
 
@@ -53,12 +55,14 @@ export function AccountDialog({
   onOpenChange,
   account,
   integration,
+  proxyProfiles,
   tags,
   onCreateTag,
   onSubmit
 }: BaseDialogProps & {
   account?: Account
   integration?: AccountIntegrationView
+  proxyProfiles: ProxyProfileView[]
   tags: Tag[]
   onCreateTag: (input: TagInput) => Promise<string>
   onSubmit: (input: AccountInput) => Promise<void>
@@ -99,6 +103,8 @@ export function AccountDialog({
     setBinanceApiKey,
     binanceSecretKey,
     setBinanceSecretKey,
+    networkRoute,
+    setNetworkRoute,
     error,
     setError,
     submitting,
@@ -111,6 +117,7 @@ export function AccountDialog({
     onOpenChange,
     account,
     integration,
+    proxyProfiles,
     onSubmit
   })
 
@@ -247,7 +254,7 @@ export function AccountDialog({
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field>
                       <FieldLabel htmlFor="account-sync-key">密钥</FieldLabel>
-                      <Input
+                      <SavedCredentialInput
                         id="account-sync-key"
                         type="password"
                         value={syncKey}
@@ -255,13 +262,12 @@ export function AccountDialog({
                           setSyncKey(event.target.value)
                           setError('')
                         }}
-                        placeholder={
+                        credentialConfigured={Boolean(
                           account?.type === 'Futu' &&
-                          integration?.provider === 'Futu' &&
-                          integration.websocket.credentialConfigured
-                            ? '已保存，留空保持不变'
-                            : 'WebSocket Authentication Key'
-                        }
+                            integration?.provider === 'Futu' &&
+                            integration.websocket.credentialConfigured
+                        )}
+                        placeholder="WebSocket Authentication Key"
                         autoComplete="off"
                         maxLength={256}
                       />
@@ -293,18 +299,17 @@ export function AccountDialog({
                   </div>
                   <Field>
                     <FieldLabel htmlFor="account-okx-api-key">API Key</FieldLabel>
-                    <Input
+                    <SavedCredentialInput
                       id="account-okx-api-key"
                       value={okxApiKey}
                       onChange={(event) => {
                         setOkxApiKey(event.target.value)
                         setError('')
                       }}
-                      placeholder={
+                      credentialConfigured={Boolean(
                         account?.type === 'Okx' && integration?.provider === 'Okx'
-                          ? '已保存，留空保持不变'
-                          : '请输入 API Key'
-                      }
+                      )}
+                      placeholder="请输入 API Key"
                       autoComplete="off"
                       maxLength={256}
                     />
@@ -312,7 +317,7 @@ export function AccountDialog({
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <Field>
                       <FieldLabel htmlFor="account-okx-secret-key">Secret Key</FieldLabel>
-                      <Input
+                      <SavedCredentialInput
                         id="account-okx-secret-key"
                         type="password"
                         value={okxSecretKey}
@@ -320,18 +325,17 @@ export function AccountDialog({
                           setOkxSecretKey(event.target.value)
                           setError('')
                         }}
-                        placeholder={
+                        credentialConfigured={Boolean(
                           account?.type === 'Okx' && integration?.provider === 'Okx'
-                            ? '已保存，留空保持不变'
-                            : '请输入 Secret Key'
-                        }
+                        )}
+                        placeholder="请输入 Secret Key"
                         autoComplete="new-password"
                         maxLength={512}
                       />
                     </Field>
                     <Field>
                       <FieldLabel htmlFor="account-okx-passphrase">Passphrase</FieldLabel>
-                      <Input
+                      <SavedCredentialInput
                         id="account-okx-passphrase"
                         type="password"
                         value={okxPassphrase}
@@ -339,16 +343,41 @@ export function AccountDialog({
                           setOkxPassphrase(event.target.value)
                           setError('')
                         }}
-                        placeholder={
+                        credentialConfigured={Boolean(
                           account?.type === 'Okx' && integration?.provider === 'Okx'
-                            ? '已保存，留空保持不变'
-                            : '请输入 Passphrase'
-                        }
+                        )}
+                        placeholder="请输入 Passphrase"
                         autoComplete="new-password"
                         maxLength={256}
                       />
                     </Field>
                   </div>
+                  <Field>
+                    <FieldLabel htmlFor="account-okx-network">网络连接</FieldLabel>
+                    <Select
+                      value={networkRoute}
+                      onValueChange={(value) => {
+                        setNetworkRoute(value)
+                        setError('')
+                      }}
+                    >
+                      <SelectTrigger id="account-okx-network">
+                        <SelectValue placeholder="选择网络连接" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="system">跟随系统</SelectItem>
+                          <SelectItem value="direct">强制直连</SelectItem>
+                          {proxyProfiles.map((profile) => (
+                            <SelectItem key={profile.id} value={`proxy:${profile.id}`}>
+                              {profile.name}（{profile.host}:{profile.port}）
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>代理配置可在“工作区设置 → 网络代理”中管理</FieldDescription>
+                  </Field>
                   <Field className="max-w-72">
                     <FieldLabel htmlFor="account-okx-sync-interval">间隔（秒）</FieldLabel>
                     <Input
@@ -463,7 +492,7 @@ export function AccountDialog({
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <Field>
                         <FieldLabel htmlFor="account-hstong-password">交易密码（可选）</FieldLabel>
-                        <Input
+                        <SavedCredentialInput
                           id="account-hstong-password"
                           type="password"
                           value={hstongTradingPassword}
@@ -471,9 +500,8 @@ export function AccountDialog({
                             setHstongTradingPassword(event.target.value)
                             setError('')
                           }}
-                          placeholder={
-                            canKeepHstongCredential ? '已保存，留空保持不变' : '请输入交易密码'
-                          }
+                          credentialConfigured={canKeepHstongCredential}
+                          placeholder="请输入交易密码"
                           autoComplete="new-password"
                           maxLength={256}
                         />
@@ -506,25 +534,24 @@ export function AccountDialog({
                   </div>
                   <Field>
                     <FieldLabel htmlFor="account-binance-api-key">API Key</FieldLabel>
-                    <Input
+                    <SavedCredentialInput
                       id="account-binance-api-key"
                       value={binanceApiKey}
                       onChange={(event) => {
                         setBinanceApiKey(event.target.value)
                         setError('')
                       }}
-                      placeholder={
+                      credentialConfigured={Boolean(
                         account?.type === 'Binance' && integration?.provider === 'Binance'
-                          ? '已保存，留空保持不变'
-                          : '请输入 API Key'
-                      }
+                      )}
+                      placeholder="请输入 API Key"
                       autoComplete="off"
                       maxLength={256}
                     />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="account-binance-secret-key">Secret Key</FieldLabel>
-                    <Input
+                    <SavedCredentialInput
                       id="account-binance-secret-key"
                       type="password"
                       value={binanceSecretKey}
@@ -532,14 +559,39 @@ export function AccountDialog({
                         setBinanceSecretKey(event.target.value)
                         setError('')
                       }}
-                      placeholder={
+                      credentialConfigured={Boolean(
                         account?.type === 'Binance' && integration?.provider === 'Binance'
-                          ? '已保存，留空保持不变'
-                          : '请输入 Secret Key'
-                      }
+                      )}
+                      placeholder="请输入 Secret Key"
                       autoComplete="new-password"
                       maxLength={512}
                     />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="account-binance-network">网络连接</FieldLabel>
+                    <Select
+                      value={networkRoute}
+                      onValueChange={(value) => {
+                        setNetworkRoute(value)
+                        setError('')
+                      }}
+                    >
+                      <SelectTrigger id="account-binance-network">
+                        <SelectValue placeholder="选择网络连接" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="system">跟随系统</SelectItem>
+                          <SelectItem value="direct">强制直连</SelectItem>
+                          {proxyProfiles.map((profile) => (
+                            <SelectItem key={profile.id} value={`proxy:${profile.id}`}>
+                              {profile.name}（{profile.host}:{profile.port}）
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>代理配置可在“工作区设置 → 网络代理”中管理</FieldDescription>
                   </Field>
                   <Field className="max-w-72">
                     <FieldLabel htmlFor="account-binance-sync-interval">间隔（秒）</FieldLabel>

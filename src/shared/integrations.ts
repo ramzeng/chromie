@@ -27,6 +27,51 @@ export type HstongIntegration = {
   }
 }
 
+export const PROXY_PROTOCOLS = ['http', 'https', 'socks5', 'socks5h'] as const
+
+export type ProxyProtocol = (typeof PROXY_PROTOCOLS)[number]
+
+export type ProxyProfile = {
+  id: string
+  name: string
+  protocol: ProxyProtocol
+  host: string
+  port: number
+  username?: string
+  password?: string
+}
+
+export type CredentialUpdate<T> =
+  | { mode: 'keep' }
+  | { mode: 'replace'; value: T }
+
+export type OptionalCredentialUpdate<T> =
+  | CredentialUpdate<T>
+  | { mode: 'clear' }
+
+export type ProxyProfileInput = Omit<ProxyProfile, 'id' | 'username' | 'password'> & {
+  credential: OptionalCredentialUpdate<{
+    username: string
+    password: string
+  }>
+}
+
+export type ProxyProfileView = Omit<ProxyProfile, 'password'> & {
+  credentialConfigured: boolean
+}
+
+export type ProxyTestTarget = 'okx' | 'binance'
+
+export type ProxyTestResult = {
+  target: ProxyTestTarget
+  latencyMs: number
+}
+
+export type AccountNetworkRoute =
+  | { mode: 'system' }
+  | { mode: 'direct' }
+  | { mode: 'proxy'; proxyProfileId: string }
+
 export type OkxIntegration = {
   accountId: string
   provider: 'Okx'
@@ -35,6 +80,7 @@ export type OkxIntegration = {
     secretKey: string
     passphrase: string
   }
+  network: AccountNetworkRoute
 }
 
 export type BinanceIntegration = {
@@ -44,6 +90,7 @@ export type BinanceIntegration = {
     apiKey: string
     secretKey: string
   }
+  network: AccountNetworkRoute
 }
 
 export type AccountIntegration =
@@ -52,14 +99,6 @@ export type AccountIntegration =
   | HstongIntegration
   | OkxIntegration
   | BinanceIntegration
-
-export type CredentialUpdate<T> =
-  | { mode: 'keep' }
-  | { mode: 'replace'; value: T }
-
-export type OptionalCredentialUpdate<T> =
-  | CredentialUpdate<T>
-  | { mode: 'clear' }
 
 export type AccountIntegrationInput =
   | {
@@ -88,6 +127,7 @@ export type AccountIntegrationInput =
           passphrase: string
         }>
       }
+      network?: AccountNetworkRoute
     }
   | {
       provider: 'Binance'
@@ -97,6 +137,7 @@ export type AccountIntegrationInput =
           secretKey: string
         }>
       }
+      network?: AccountNetworkRoute
     }
 
 export type AccountIntegrationView =
@@ -130,19 +171,32 @@ export type AccountIntegrationView =
       accountId: string
       provider: 'Okx'
       credentialConfigured: true
+      network: AccountNetworkRoute
     }
   | {
       accountId: string
       provider: 'Binance'
       credentialConfigured: true
+      network: AccountNetworkRoute
     }
 
 export type IntegrationData = {
   version: 1
   integrations: AccountIntegration[]
+  proxyProfiles: ProxyProfile[]
 }
 
 export const EMPTY_INTEGRATION_DATA: IntegrationData = {
   version: 1,
-  integrations: []
+  integrations: [],
+  proxyProfiles: []
+}
+
+export const DEFAULT_ACCOUNT_NETWORK_ROUTE: AccountNetworkRoute = { mode: 'system' }
+
+export const proxyProtocolLabels: Record<ProxyProtocol, string> = {
+  http: 'HTTP',
+  https: 'HTTPS',
+  socks5: 'SOCKS5',
+  socks5h: 'SOCKS5H'
 }

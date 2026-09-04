@@ -5,6 +5,7 @@ import {
   type PositionInput,
   type Workspace
 } from '../../shared/portfolio'
+import type { ProxyProfile, ProxyTestResult, ProxyTestTarget } from '../../shared/integrations'
 import type { DesktopOperations } from './desktop-service'
 import { PortfolioSyncConflictError, type PortfolioOperations } from './portfolio-service'
 
@@ -46,6 +47,11 @@ export class AccountSyncCoordinator {
     return pending
   }
 
+  testProxy(profile: ProxyProfile, target: ProxyTestTarget): Promise<ProxyTestResult> {
+    if (!this.desktop.testProxy) throw new Error('代理测试组件尚未加载，请重启 Chromie')
+    return this.desktop.testProxy(profile, target)
+  }
+
   private async performAccountSync(
     workspaceId: string,
     accountId: string
@@ -60,6 +66,7 @@ export class AccountSyncCoordinator {
 
     try {
       let result: { positions: PositionInput[]; syncedAt: string }
+      let networkProxyProfile: ProxyProfile | undefined
       if (integration.provider === 'Futu' && account.type === 'Futu') {
         result = await this.desktop.syncPositions({
           provider: 'futu',
@@ -76,14 +83,38 @@ export class AccountSyncCoordinator {
           options: { ...integration.gateway }
         })
       } else if (integration.provider === 'Okx' && account.type === 'Okx') {
+        const proxyProfileId =
+          integration.network.mode === 'proxy'
+            ? integration.network.proxyProfileId
+            : undefined
+        networkProxyProfile =
+          proxyProfileId
+            ? state.proxyProfiles.find((profile) => profile.id === proxyProfileId)
+            : undefined
         result = await this.desktop.syncPositions({
           provider: 'okx',
-          options: { ...integration.api }
+          options: { ...integration.api },
+          network: {
+            route: integration.network,
+            ...(networkProxyProfile ? { proxyProfile: networkProxyProfile } : {})
+          }
         })
       } else if (integration.provider === 'Binance' && account.type === 'Binance') {
+        const proxyProfileId =
+          integration.network.mode === 'proxy'
+            ? integration.network.proxyProfileId
+            : undefined
+        networkProxyProfile =
+          proxyProfileId
+            ? state.proxyProfiles.find((profile) => profile.id === proxyProfileId)
+            : undefined
         result = await this.desktop.syncPositions({
           provider: 'binance',
-          options: { ...integration.api }
+          options: { ...integration.api },
+          network: {
+            route: integration.network,
+            ...(networkProxyProfile ? { proxyProfile: networkProxyProfile } : {})
+          }
         })
       } else {
         throw new McpOperationError('SYNC_NOT_CONFIGURED', '同步配置与账户类型不匹配')
@@ -94,7 +125,8 @@ export class AccountSyncCoordinator {
         accountId,
         integration,
         result.positions,
-        result.syncedAt
+        result.syncedAt,
+        networkProxyProfile
       )
       return {
         positionCount: result.positions.length,

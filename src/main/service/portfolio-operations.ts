@@ -7,7 +7,12 @@ import {
   DEFAULT_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   type ExchangeRateSnapshot
 } from '../../shared/exchange-rates'
-import { type AccountIntegration, type IntegrationData } from '../../shared/integrations'
+import {
+  type AccountIntegration,
+  type IntegrationData,
+  type ProxyProfile,
+  type ProxyProfileInput
+} from '../../shared/integrations'
 import {
   DEFAULT_SYNC_INTERVAL,
   marketMeta,
@@ -32,6 +37,7 @@ import {
   normalizeExchangeRateProvider,
   normalizeExchangeRateRefreshInterval,
   normalizePosition,
+  resolveProxyProfileInput,
   normalizeStockQuoteProvider,
   normalizeTagIds,
   resolveIntegrationInput,
@@ -49,6 +55,19 @@ export function createPortfolioOperations(
   integrationData: IntegrationData,
   setIntegrationData: IntegrationDataUpdater
 ) {
+  function requireValidIntegrationNetwork(integration: AccountIntegration | null): void {
+    if (
+      integration &&
+      (integration.provider === 'Okx' || integration.provider === 'Binance') &&
+      integration.network.mode === 'proxy'
+    ) {
+      const proxyProfileId = integration.network.proxyProfileId
+      if (!integrationData.proxyProfiles.some((profile) => profile.id === proxyProfileId)) {
+        throw new Error('选择的代理配置已不存在，请重新选择')
+      }
+    }
+  }
+
   function setAccountIntegration(accountId: string, integration: AccountIntegration | null): void {
     setIntegrationData((current) => ({
       ...current,
@@ -318,6 +337,7 @@ export function createPortfolioOperations(
     const name = uniqueAccountName(workspace, input.name)
     const accountId = createId()
     const integration = resolveIntegrationInput(input.integration, accountId)
+    requireValidIntegrationNetwork(integration)
     if (input.integration && (!integration || integration.provider !== type)) {
       throw new Error('同步配置与账户类型不匹配')
     }
@@ -359,6 +379,7 @@ export function createPortfolioOperations(
       (item) => item.accountId === accountId
     )
     const integration = resolveIntegrationInput(input.integration, accountId, existingIntegration)
+    requireValidIntegrationNetwork(integration)
     if (input.integration && (!integration || integration.provider !== type)) {
       throw new Error('同步配置与账户类型不匹配')
     }
@@ -412,6 +433,65 @@ export function createPortfolioOperations(
       })
     }))
     setAccountIntegration(accountId, null)
+  }
+
+  function uniqueProxyProfileName(value: string, excludedId?: string): string {
+    const name = value.trim()
+    const nameKey = name.toLocaleLowerCase()
+    if (
+      integrationData.proxyProfiles.some(
+        (profile) => profile.id !== excludedId && profile.name.toLocaleLowerCase() === nameKey
+      )
+    ) {
+      throw new Error(`代理配置“${name}”已存在`)
+    }
+    return name
+  }
+
+  function createProxyProfile(input: ProxyProfileInput): string {
+    const id = createId()
+    const profile = resolveProxyProfileInput(
+      { ...input, name: uniqueProxyProfileName(input.name) },
+      id
+    )
+    setIntegrationData((current) => ({
+      ...current,
+      proxyProfiles: [...current.proxyProfiles, profile]
+    }))
+    return id
+  }
+
+  function updateProxyProfile(id: string, input: ProxyProfileInput): void {
+    const existing = integrationData.proxyProfiles.find((profile) => profile.id === id)
+    if (!existing) throw new Error('没有找到对应的代理配置')
+    const profile = resolveProxyProfileInput(
+      { ...input, name: uniqueProxyProfileName(input.name, id) },
+      id,
+      existing
+    )
+    setIntegrationData((current) => ({
+      ...current,
+      proxyProfiles: current.proxyProfiles.map((item) => (item.id === id ? profile : item))
+    }))
+  }
+
+  function deleteProxyProfile(id: string): void {
+    const existing = integrationData.proxyProfiles.find((profile) => profile.id === id)
+    if (!existing) throw new Error('没有找到对应的代理配置')
+    const referencingAccountIds = integrationData.integrations.flatMap((integration) =>
+      (integration.provider === 'Okx' || integration.provider === 'Binance') &&
+      integration.network.mode === 'proxy' &&
+      integration.network.proxyProfileId === id
+        ? [integration.accountId]
+        : []
+    )
+    if (referencingAccountIds.length > 0) {
+      throw new Error('该代理配置仍被账户使用，请先修改账户的网络连接')
+    }
+    setIntegrationData((current) => ({
+      ...current,
+      proxyProfiles: current.proxyProfiles.filter((profile) => profile.id !== id)
+    }))
   }
 
   function savePosition(
@@ -552,7 +632,8 @@ export function createPortfolioOperations(
   function importWorkspace(
     input: Workspace,
     snapshots: WorkspaceSnapshot[] = [],
-    integrations: AccountIntegration[] = []
+    integrations: AccountIntegration[] = [],
+    proxyProfiles: ProxyProfile[] = []
   ): string {
     const tagIdMap = new Map(input.tags.map((tag) => [tag.id, createId()] as const))
     const accountIdMap = new Map(input.accounts.map((account) => [account.id, createId()] as const))
@@ -562,12 +643,38 @@ export function createPortfolioOperations(
       )
     )
     const accountTypes = new Map(input.accounts.map((account) => [account.id, account.type]))
+    const usedProfileNames = new Set(
+      integrationData.proxyProfiles.map((profile) => profile.name.toLocaleLowerCase())
+    )
+    const profileIdMap = new Map<string, string>()
+    const importedProxyProfiles = proxyProfiles.map((profile) => {
+      let name = profile.name
+      let suffix = 2
+      while (usedProfileNames.has(name.toLocaleLowerCase())) {
+        const suffixText = `（导入 ${suffix}）`
+        name = `${profile.name.slice(0, 50 - suffixText.length)}${suffixText}`
+        suffix += 1
+      }
+      usedProfileNames.add(name.toLocaleLowerCase())
+      const id = createId()
+      profileIdMap.set(profile.id, id)
+      return { ...structuredClone(profile), id, name }
+    })
     const importedIntegrations = integrations.flatMap((integration) => {
       const importedAccountId = accountIdMap.get(integration.accountId)
       if (!importedAccountId || accountTypes.get(integration.accountId) !== integration.provider) {
         return []
       }
-      return [{ ...structuredClone(integration), accountId: importedAccountId }]
+      const imported = { ...structuredClone(integration), accountId: importedAccountId }
+      if (
+        (imported.provider === 'Okx' || imported.provider === 'Binance') &&
+        imported.network.mode === 'proxy'
+      ) {
+        const proxyProfileId = profileIdMap.get(imported.network.proxyProfileId)
+        if (!proxyProfileId) return []
+        imported.network = { mode: 'proxy', proxyProfileId }
+      }
+      return [imported]
     })
     const integratedAccountIds = new Set(
       importedIntegrations.map((integration) => integration.accountId)
@@ -616,7 +723,8 @@ export function createPortfolioOperations(
     }))
     setIntegrationData((current) => ({
       version: 1,
-      integrations: [...current.integrations, ...importedIntegrations]
+      integrations: [...current.integrations, ...importedIntegrations],
+      proxyProfiles: [...current.proxyProfiles, ...importedProxyProfiles]
     }))
     return workspace.id
   }
@@ -636,6 +744,9 @@ export function createPortfolioOperations(
     createAccount,
     updateAccount,
     deleteAccount,
+    createProxyProfile,
+    updateProxyProfile,
+    deleteProxyProfile,
     savePosition,
     deletePosition,
     replacePositions,

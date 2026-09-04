@@ -90,3 +90,43 @@ test('portfolio service migrates valid legacy data into the combined state file'
     integrationStore
   ).load()).source, 'state')
 })
+
+test('portfolio service writes compatible stored-state migrations back atomically', async () => {
+  const stateStore = new MemoryStore(JSON.stringify({
+    format: 'chromie-portfolio-state',
+    version: 1,
+    portfolio: {
+      version: 1,
+      activeWorkspaceId: 'workspace-1',
+      workspaces: [
+        {
+          id: 'workspace-1',
+          name: '旧工作区',
+          baseCurrency: 'CNY',
+          exchangeRateProvider: 'coinbase',
+          exchangeRateRefreshIntervalMinutes: 15,
+          stockQuoteProvider: 'eastmoney',
+          cryptoQuoteProvider: 'coinbase',
+          tags: [{ id: 'tag-1', name: '长期持有', color: 'blue' }],
+          accounts: []
+        }
+      ],
+      snapshots: []
+    },
+    integrations: { version: 1, integrations: [] }
+  }))
+  const portfolio = new PortfolioService(new FilePortfolioStateRepository(
+    stateStore,
+    new MemoryStore(),
+    new MemoryStore()
+  ))
+
+  await portfolio.load()
+
+  const migrated = JSON.parse(stateStore.content!) as {
+    portfolio: { workspaces: Array<{ tags: Array<{ note?: string }> }> }
+    integrations: { proxyProfiles?: unknown[] }
+  }
+  assert.equal(migrated.portfolio.workspaces[0].tags[0].note, '')
+  assert.deepEqual(migrated.integrations.proxyProfiles, [])
+})

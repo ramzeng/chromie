@@ -8,7 +8,7 @@ import {
 import { toast } from 'sonner'
 
 import { cleanErrorMessage } from '@/components/portfolio/view-helpers'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Alert, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Empty,
@@ -168,9 +168,8 @@ export function PortfolioLoadError({ message }: { message: string }) {
     >
       <div className="window-drag absolute inset-x-0 top-0 h-12" />
       <Alert variant="destructive" className="max-w-lg">
-        <CircleAlert data-icon="inline-start" />
-        <AlertTitle>无法加载资产数据</AlertTitle>
-        <AlertDescription>{message}</AlertDescription>
+        <CircleAlert aria-hidden="true" />
+        <AlertTitle>无法加载资产数据：{message}</AlertTitle>
       </Alert>
     </main>
   )
