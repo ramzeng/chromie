@@ -21,6 +21,7 @@ import type {
   PortfolioCommand,
   PortfolioClientCommandResponse,
   PortfolioClientLoadResponse,
+  PortfolioPriceRefreshResponse,
   PortfolioSyncResponse
 } from '../shared/portfolio'
 import type {
@@ -51,6 +52,15 @@ contextBridge.exposeInMainWorld('desktop', {
     ): Promise<PortfolioSyncResponse> =>
       ipcRenderer.invoke(
         'portfolio:sync-account',
+        workspaceId,
+        accountId
+      ),
+    refreshPositionPrices: (
+      workspaceId: string,
+      accountId?: string
+    ): Promise<PortfolioPriceRefreshResponse> =>
+      ipcRenderer.invoke(
+        'portfolio:refresh-position-prices',
         workspaceId,
         accountId
       ),

@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -376,7 +376,6 @@ export function AccountDialog({
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <FieldDescription>代理配置可在“工作区设置 → 网络代理”中管理</FieldDescription>
                   </Field>
                   <Field className="max-w-72">
                     <FieldLabel htmlFor="account-okx-sync-interval">间隔（秒）</FieldLabel>
@@ -591,7 +590,6 @@ export function AccountDialog({
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <FieldDescription>代理配置可在“工作区设置 → 网络代理”中管理</FieldDescription>
                   </Field>
                   <Field className="max-w-72">
                     <FieldLabel htmlFor="account-binance-sync-interval">间隔（秒）</FieldLabel>

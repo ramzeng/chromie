@@ -21,6 +21,7 @@ import type {
   PortfolioCommand,
   PortfolioClientCommandResponse,
   PortfolioClientLoadResponse,
+  PortfolioPriceRefreshResponse,
   PortfolioSyncResponse
 } from '../../../shared/portfolio'
 import type {
@@ -47,6 +48,10 @@ declare global {
           workspaceId: string,
           accountId: string
         ) => Promise<PortfolioSyncResponse>
+        refreshPositionPrices: (
+          workspaceId: string,
+          accountId?: string
+        ) => Promise<PortfolioPriceRefreshResponse>
         testProxy: (profileId: string, target: ProxyTestTarget) => Promise<ProxyTestResult>
         onChanged: (listener: () => void) => () => void
       }

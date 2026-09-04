@@ -251,6 +251,11 @@ export const portfolioAccountTargetSchema = z.object({
   accountId: id
 }).strict()
 
+export const portfolioPriceRefreshTargetSchema = z.object({
+  workspaceId: id,
+  accountId: id.optional()
+}).strict()
+
 export const portfolioProxyTestSchema = z.object({
   profileId: id,
   target: z.enum(['okx', 'binance'])

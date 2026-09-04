@@ -5,7 +5,15 @@ import { TagDetail } from './tag-detail'
 import { TimeMachine } from './time-machine'
 import type { ExchangeRateView } from './view-helpers'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import type { Account, Position, Tag, Workspace, WorkspaceSnapshot } from '@/lib/portfolio'
+import type {
+  Account,
+  PortfolioPriceRefreshResponse,
+  PortfolioSyncResponse,
+  Position,
+  Tag,
+  Workspace,
+  WorkspaceSnapshot
+} from '@/lib/portfolio'
 import { cn } from '@/lib/utils'
 
 type AppContentProps = {
@@ -33,6 +41,14 @@ type AppContentProps = {
   onAddPosition: () => void
   onEditAccount: () => void
   onSyncAccount: () => Promise<void>
+  onSyncPortfolioAccount: (
+    workspaceId: string,
+    accountId: string
+  ) => Promise<PortfolioSyncResponse>
+  onRefreshPositionPrices: (
+    workspaceId: string,
+    accountId: string
+  ) => Promise<PortfolioPriceRefreshResponse>
   onManagePositionTags: (position: Position) => void
   onEditPosition: (position: Position) => void
   onDeletePosition: (position: Position) => void
@@ -63,6 +79,8 @@ export function AppContent({
   onAddPosition,
   onEditAccount,
   onSyncAccount,
+  onSyncPortfolioAccount,
+  onRefreshPositionPrices,
   onManagePositionTags,
   onEditPosition,
   onDeletePosition
@@ -131,7 +149,10 @@ export function AppContent({
             <Overview
               workspace={workspace}
               exchangeRates={exchangeRates}
+              readOnly={readOnly}
               onOpenAccount={onOpenAccount}
+              onSyncAccount={onSyncPortfolioAccount}
+              onRefreshPositionPrices={onRefreshPositionPrices}
             />
           )}
         </main>

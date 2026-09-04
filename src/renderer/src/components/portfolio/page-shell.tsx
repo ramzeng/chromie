@@ -69,7 +69,9 @@ function StatusBanner({
       <Icon aria-hidden="true" />
       <div className="flex min-w-0 items-center gap-2">
         <AlertTitle className="shrink-0 whitespace-nowrap">{title}</AlertTitle>
-        <AlertDescription className="truncate">{description}</AlertDescription>
+        <AlertDescription className="block min-w-0 truncate">
+          {description}
+        </AlertDescription>
       </div>
       <Button
         type="button"
