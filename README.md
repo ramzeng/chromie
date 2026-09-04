@@ -1,5 +1,9 @@
 <h1 align="center">
-  <img src="./resources/chromie-logo-knot.svg" alt="Chromie" width="72" /><br />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./resources/chromie-logo-knot-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="./resources/chromie-logo-knot.svg" />
+    <img src="./resources/chromie-logo-knot.svg" alt="Chromie" width="72" />
+  </picture><br />
   Chromie
 </h1>
 
