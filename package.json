@@ -1,6 +1,6 @@
 {
   "name": "chromie",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "A local-first asset manager for macOS",
   "main": "./out/main/index.js",
