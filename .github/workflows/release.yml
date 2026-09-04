@@ -1,0 +1,158 @@
+name: Release macOS
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, notarize, and release
+    runs-on: macos-15
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.15.9 --activate
+
+      - name: Verify release version
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          tag_version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p "require('./package.json').version")"
+
+          if [[ "$tag_version" != "$package_version" ]]; then
+            echo "Tag version $tag_version does not match package.json version $package_version." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Prepare signing credentials
+        env:
+          MAC_CSC_LINK_B64: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD_VALUE: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8_B64: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID_VALUE: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_VALUE: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+
+          missing=()
+          [[ -n "$MAC_CSC_LINK_B64" ]] || missing+=(MAC_CSC_LINK)
+          [[ -n "$MAC_CSC_KEY_PASSWORD_VALUE" ]] || missing+=(MAC_CSC_KEY_PASSWORD)
+          [[ -n "$APPLE_API_KEY_P8_B64" ]] || missing+=(APPLE_API_KEY_P8)
+          [[ -n "$APPLE_API_KEY_ID_VALUE" ]] || missing+=(APPLE_API_KEY_ID)
+          [[ -n "$APPLE_API_ISSUER_VALUE" ]] || missing+=(APPLE_API_ISSUER)
+
+          if (( ${#missing[@]} > 0 )); then
+            echo "Missing GitHub Actions secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
+          api_key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID_VALUE}.p8"
+
+          printf '%s' "$MAC_CSC_LINK_B64" | base64 --decode > "$certificate_path"
+          printf '%s' "$APPLE_API_KEY_P8_B64" | base64 --decode > "$api_key_path"
+          chmod 600 "$certificate_path" "$api_key_path"
+
+          {
+            echo "CSC_LINK=$certificate_path"
+            echo "CSC_KEY_PASSWORD=$MAC_CSC_KEY_PASSWORD_VALUE"
+            echo "APPLE_API_KEY=$api_key_path"
+            echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID_VALUE"
+            echo "APPLE_API_ISSUER=$APPLE_API_ISSUER_VALUE"
+          } >> "$GITHUB_ENV"
+
+      - name: Build, sign, and notarize universal app
+        run: |
+          pnpm icons:mac
+          pnpm build
+          pnpm exec electron-builder --mac dmg zip --universal --publish never -c.forceCodeSigning=true
+
+      - name: Verify signed and notarized app
+        run: |
+          set -euo pipefail
+          app_path="$(find dist -maxdepth 2 -type d -name 'Chromie.app' -print -quit)"
+
+          if [[ -z "$app_path" ]]; then
+            echo "Packaged Chromie.app was not found." >&2
+            exit 1
+          fi
+
+          architectures="$(lipo -archs "$app_path/Contents/MacOS/Chromie")"
+          [[ "$architectures" == *arm64* ]] || { echo "Universal app is missing arm64." >&2; exit 1; }
+          [[ "$architectures" == *x86_64* ]] || { echo "Universal app is missing x86_64." >&2; exit 1; }
+
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          xcrun stapler validate "$app_path"
+          spctl --assess --type execute --verbose=4 "$app_path"
+
+      - name: Create checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          shasum -a 256 ./*.dmg ./*.zip > SHA256SUMS.txt
+
+      - name: Remove temporary credentials
+        if: always()
+        run: rm -f "$CSC_LINK" "$APPLE_API_KEY"
+
+      - name: Upload test artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chromie-macOS-${{ github.sha }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/*.dmg \
+              dist/*.zip \
+              dist/SHA256SUMS.txt \
+              --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/*.dmg \
+              dist/*.zip \
+              dist/SHA256SUMS.txt \
+              --verify-tag \
+              --generate-notes \
+              --title "Chromie $GITHUB_REF_NAME"
+          fi
