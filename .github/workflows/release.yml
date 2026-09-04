@@ -100,18 +100,64 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Import Developer ID certificate
+        timeout-minutes: 3
         uses: apple-actions/import-codesign-certs@v7
         with:
           p12-file-base64: ${{ secrets.MAC_CSC_LINK }}
           p12-password: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
 
-      - name: Build, sign, and notarize universal app
+      - name: Validate Apple notarization credentials
+        timeout-minutes: 3
+        run: bash scripts/notarize-macos.sh validate
+
+      - name: Build and sign universal app
+        timeout-minutes: 25
         run: |
           pnpm icons:mac
           pnpm build
-          pnpm exec electron-builder --mac dmg zip --universal --publish never -c.forceCodeSigning=true
+          pnpm exec electron-builder \
+            --mac dir \
+            --universal \
+            --publish never \
+            -c.mac.notarize=false \
+            -c.forceCodeSigning=true
+
+      - name: Verify signed universal app
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          app_path="dist/mac-universal/Chromie.app"
+
+          architectures="$(lipo -archs "$app_path/Contents/MacOS/Chromie")"
+          [[ "$architectures" == *arm64* ]] || { echo "Universal app is missing arm64." >&2; exit 1; }
+          [[ "$architectures" == *x86_64* ]] || { echo "Universal app is missing x86_64." >&2; exit 1; }
+
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+
+      - name: Submit app for notarization
+        id: submit_notarization
+        timeout-minutes: 15
+        run: bash scripts/notarize-macos.sh submit dist/mac-universal/Chromie.app
+
+      - name: Wait for and staple notarization
+        timeout-minutes: 30
+        env:
+          NOTARY_SUBMISSION_ID: ${{ steps.submit_notarization.outputs.submission_id }}
+          NOTARY_WAIT_TIMEOUT: 25m
+        run: bash scripts/notarize-macos.sh wait dist/mac-universal/Chromie.app
+
+      - name: Package release artifacts
+        timeout-minutes: 15
+        run: |
+          pnpm exec electron-builder \
+            --mac dmg zip \
+            --universal \
+            --prepackaged dist/mac-universal/Chromie.app \
+            --publish never \
+            -c.mac.notarize=false
 
       - name: Verify signed and notarized app
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           app_path="$(find dist -maxdepth 2 -type d -name 'Chromie.app' -print -quit)"
