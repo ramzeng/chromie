@@ -119,7 +119,12 @@ test('MCP tag and account CRUD reads and writes portfolio data', async () => {
 
   const createdTag = await module.callMcpTool(
     'chromie_create_tag',
-    { workspace_id: workspaceId, name: '长期', color: 'blue' },
+    {
+      workspace_id: workspaceId,
+      name: '长期',
+      color: 'blue',
+      note: '关注长期回报'
+    },
     fullAccess
   )
   const tagId = dataOf<{ tag: { id: string } }>(createdTag).tag.id
@@ -131,11 +136,20 @@ test('MCP tag and account CRUD reads and writes portfolio data', async () => {
       workspace_id: workspaceId,
       tag_id: tagId,
       name: '长期持有',
-      color: 'purple'
+      color: 'purple',
+      note: '  每半年复盘一次  '
     },
     fullAccess
   )
-  assert.equal(dataOf<{ tag: { name: string } }>(updatedTag).tag.name, '长期持有')
+  assert.deepEqual(
+    dataOf<{ tag: { name: string; note: string } }>(updatedTag).tag,
+    {
+      id: tagId,
+      name: '长期持有',
+      color: 'purple',
+      note: '每半年复盘一次'
+    }
+  )
   assertValidOutput('chromie_update_tag', updatedTag)
 
   const createdAccount = await module.callMcpTool(
@@ -222,7 +236,7 @@ test('MCP tag and account CRUD reads and writes portfolio data', async () => {
   )
   const workspaceData = dataOf<{
     workspace: {
-      tags: Array<{ id: string; name: string }>
+      tags: Array<{ id: string; name: string; note: string }>
       accounts: Array<{
         tag_ids: string[]
         sync: Record<string, unknown>
@@ -231,7 +245,7 @@ test('MCP tag and account CRUD reads and writes portfolio data', async () => {
     }
   }>(workspace).workspace
   assert.deepEqual(workspaceData.tags, [
-    { id: tagId, name: '长期持有', color: 'purple' }
+    { id: tagId, name: '长期持有', color: 'purple', note: '每半年复盘一次' }
   ])
   assert.deepEqual(workspaceData.accounts[0].tag_ids, [tagId])
   assert.equal(workspaceData.accounts[0].positions, undefined)

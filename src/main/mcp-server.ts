@@ -80,12 +80,12 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
   },
   chromie_create_tag: {
     title: '添加标签',
-    description: '在指定 Chromie 工作区中添加带颜色、可用于账户和持仓的标签。',
+    description: '在指定 Chromie 工作区中添加带颜色和可选备注、可用于账户和持仓的标签。',
     annotations: additiveAnnotations
   },
   chromie_update_tag: {
     title: '更新标签',
-    description: '修改已有标签的名称和颜色。',
+    description: '修改已有标签的名称、颜色和备注。',
     annotations: updateAnnotations
   },
   chromie_set_account_tags: {

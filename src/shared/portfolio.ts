@@ -68,6 +68,7 @@ export const TAG_COLORS = [
 export type TagColor = (typeof TAG_COLORS)[number]
 
 export const DEFAULT_TAG_COLOR: TagColor = 'gray'
+export const MAX_TAG_NOTE_LENGTH = 100
 
 export const tagColorLabels: Record<TagColor, string> = {
   gray: '灰色',
@@ -83,6 +84,7 @@ export type Tag = {
   id: string
   name: string
   color: TagColor
+  note: string
 }
 
 export type Account = {
@@ -145,7 +147,7 @@ export type AccountInput = Pick<
   integration?: AccountIntegrationInput
 }
 export type PositionInput = Omit<Position, 'id' | 'tagIds'> & { tagIds?: string[] }
-export type TagInput = Pick<Tag, 'name' | 'color'>
+export type TagInput = Pick<Tag, 'name' | 'color' | 'note'>
 
 export type PortfolioCommand =
   | { type: 'set-active-workspace'; id: string }

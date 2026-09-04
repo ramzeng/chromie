@@ -6,12 +6,13 @@ import {
   MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
 } from './exchange-rates'
-import { TAG_COLORS } from './portfolio'
+import { MAX_TAG_NOTE_LENGTH, TAG_COLORS } from './portfolio'
 
 const id = z.string().trim().min(1).max(128)
 const accountName = z.string().trim().min(1).max(50)
 const positionName = z.string().trim().min(1).max(60)
 const tagName = z.string().trim().min(1).max(40)
+const tagNote = z.string().trim().max(MAX_TAG_NOTE_LENGTH)
 const host = z.string().trim().min(1).max(253)
 const port = z.number().int().min(1).max(65535)
 const secret = z.string().min(1).max(512)
@@ -117,7 +118,8 @@ const positionInput = z.object({
 
 const tagInput = z.object({
   name: tagName,
-  color: z.enum(TAG_COLORS)
+  color: z.enum(TAG_COLORS),
+  note: tagNote
 }).strict()
 
 const workspaceInput = z.object({

@@ -7,6 +7,7 @@ import {
 import { type AccountIntegration, type IntegrationData } from '../../shared/integrations'
 import {
   DEFAULT_SYNC_INTERVAL,
+  MAX_TAG_NOTE_LENGTH,
   type AccountSync,
   type AccountType,
   type AppData,
@@ -179,6 +180,8 @@ function isValidBackupWorkspace(value: unknown): boolean {
       tagIds.has(tag.id) ||
       typeof tag.name !== 'string' ||
       !tag.name.trim() ||
+      typeof tag.note !== 'string' ||
+      tag.note.trim().length > MAX_TAG_NOTE_LENGTH ||
       !isTagColor(tag.color)
     )
       return false

@@ -89,7 +89,8 @@ export function TagSelector({
     try {
       const tagId = await onCreateTag({
         name: normalizedQuery,
-        color: randomTagColor()
+        color: randomTagColor(),
+        note: ''
       })
       if (!selectedIdsRef.current.includes(tagId)) {
         onSelectedIdsChange([...selectedIdsRef.current, tagId])

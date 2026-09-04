@@ -5,6 +5,7 @@ import { PortfolioService } from '../src/main/service/portfolio-service'
 import { normalizeStoredPosition } from '../src/main/service/portfolio-storage'
 import { createPositionInputSchema } from '../src/shared/mcp'
 import { portfolioCommandSchema } from '../src/shared/portfolio-command'
+import { MAX_TAG_NOTE_LENGTH } from '../src/shared/portfolio'
 
 class MemoryRepository {
   content: string | null = null
@@ -35,6 +36,38 @@ test('portfolio command schema rejects internal, oversized and unknown input', (
     id: 'workspace-1',
     unexpected: true
   }).success, false)
+  assert.equal(portfolioCommandSchema.safeParse({
+    type: 'create-tag',
+    workspaceId: 'workspace-1',
+    input: {
+      name: '长期',
+      color: 'blue',
+      note: 'a'.repeat(MAX_TAG_NOTE_LENGTH + 1)
+    }
+  }).success, false)
+})
+
+test('tag notes are trimmed before they are stored', async () => {
+  const portfolio = new PortfolioService(
+    new MemoryRepository(),
+    new MemoryRepository()
+  )
+  const createdWorkspace = await portfolio.execute({
+    type: 'create-workspace',
+    input: { name: '备注测试', baseCurrency: 'CNY' }
+  })
+  await portfolio.execute({
+    type: 'create-tag',
+    workspaceId: createdWorkspace.result as string,
+    input: {
+      name: '长期',
+      color: 'blue',
+      note: '  每半年复盘一次  '
+    }
+  })
+
+  const tag = (await portfolio.load()).data.workspaces[0].tags[0]
+  assert.equal(tag.note, '每半年复盘一次')
 })
 
 test('accepts mainland OTC funds across storage, command and MCP boundaries', () => {

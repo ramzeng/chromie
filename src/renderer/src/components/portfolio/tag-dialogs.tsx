@@ -13,8 +13,16 @@ import {
 import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
+import { Textarea } from '@/components/ui/textarea'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { TAG_COLORS, tagColorLabels, type Tag, type TagColor, type TagInput } from '@/lib/portfolio'
+import {
+  MAX_TAG_NOTE_LENGTH,
+  TAG_COLORS,
+  tagColorLabels,
+  type Tag,
+  type TagColor,
+  type TagInput
+} from '@/lib/portfolio'
 import {
   randomTagColor,
   reportOperationError,
@@ -35,6 +43,7 @@ export function TagDialog({
   onSubmit: (input: TagInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
+  const [note, setNote] = useState('')
   const [color, setColor] = useState<TagColor>()
   const [error, setError] = useState('')
   const { submitting, submissionInFlight, beginSubmission, endSubmission } = useSubmissionGuard()
@@ -42,6 +51,7 @@ export function TagDialog({
   useEffect(() => {
     if (!open) return
     setName(tag?.name ?? '')
+    setNote(tag?.note ?? '')
     setColor(tag?.color)
     setError('')
   }, [open, tag])
@@ -61,7 +71,11 @@ export function TagDialog({
     try {
       const resolvedColor = color ?? randomTagColor()
       setColor(resolvedColor)
-      await onSubmit({ name: normalizedName, color: resolvedColor })
+      await onSubmit({
+        name: normalizedName,
+        color: resolvedColor,
+        note: note.trim()
+      })
       onOpenChange(false)
     } catch (submitError) {
       reportOperationError(tag ? '更新标签失败' : '添加标签失败', submitError)
@@ -81,7 +95,7 @@ export function TagDialog({
         <DialogHeader>
           <DialogTitle>{tag ? '编辑标签' : '添加标签'}</DialogTitle>
           <DialogDescription className="sr-only">
-            {tag ? '修改标签名称和颜色' : '添加可用于账户和持仓的标签'}
+            {tag ? '修改标签名称、颜色和备注' : '添加可用于账户和持仓的标签'}
           </DialogDescription>
         </DialogHeader>
         <form className="contents" onSubmit={handleSubmit}>
@@ -100,6 +114,17 @@ export function TagDialog({
                   placeholder="长期投资"
                   maxLength={40}
                   autoFocus
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="tag-note">备注</FieldLabel>
+                <Textarea
+                  id="tag-note"
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  placeholder="记录标签的用途或关注重点"
+                  maxLength={MAX_TAG_NOTE_LENGTH}
+                  rows={2}
                 />
               </Field>
               <FieldSet className="gap-2">

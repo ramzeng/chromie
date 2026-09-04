@@ -74,13 +74,18 @@ export class PortfolioMcpCommands {
     const response = await this.portfolio.execute({
       type: 'create-tag',
       workspaceId: input.workspace_id,
-      input: { name: input.name, color: input.color }
+      input: { name: input.name, color: input.color, note: input.note }
     })
     if (typeof response.result !== 'string') {
       throw new Error('添加标签后无法读取结果')
     }
     return success(`已添加标签“${input.name}”`, {
-      tag: { id: response.result, name: input.name, color: input.color }
+      tag: {
+        id: response.result,
+        name: input.name,
+        color: input.color,
+        note: input.note
+      }
     })
   }
 
@@ -91,14 +96,15 @@ export class PortfolioMcpCommands {
     if (!existing) {
       throw new McpOperationError('NOT_FOUND', '没有找到对应的标签')
     }
+    const note = input.note ?? existing.note
     await this.portfolio.execute({
       type: 'update-tag',
       workspaceId: workspace.id,
       tagId: existing.id,
-      input: { name: input.name, color: input.color }
+      input: { name: input.name, color: input.color, note }
     })
     return success(`已更新标签“${input.name}”`, {
-      tag: { id: existing.id, name: input.name, color: input.color }
+      tag: { id: existing.id, name: input.name, color: input.color, note }
     })
   }
 

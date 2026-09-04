@@ -8,7 +8,6 @@ import {
 } from '@/components/portfolio/overview'
 import { PortfolioPage, PortfolioPageHeader } from '@/components/portfolio/page-shell'
 import { TableEmptyState } from '@/components/portfolio/table-empty-state'
-import { TagColorDot } from '@/components/portfolio/tag-badge'
 import { ValueSummaryCard } from '@/components/portfolio/value-summary-card'
 import { type ExchangeRateView } from '@/components/portfolio/view-helpers'
 import { type Tag, type Workspace } from '@/lib/portfolio'
@@ -44,11 +43,15 @@ export function TagDetail({
   return (
     <PortfolioPage>
       <PortfolioPageHeader>
-        <div className="flex min-w-0 flex-[1_1_20rem] items-center gap-3">
-          <TagColorDot color={tag.color} className="size-3.5" />
+        <div className="min-w-0 flex-[1_1_20rem]">
           <h1 className="truncate text-2xl font-semibold tracking-[-0.035em]">
             {tag.name}
           </h1>
+          {tag.note && (
+            <p className="mt-1 max-w-3xl whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground">
+              {tag.note}
+            </p>
+          )}
         </div>
       </PortfolioPageHeader>
 

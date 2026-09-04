@@ -1,6 +1,7 @@
 import { isExchangeRateCurrency, type ExchangeRateSnapshot } from '../../shared/exchange-rates'
 import { type IntegrationData } from '../../shared/integrations'
 import {
+  MAX_TAG_NOTE_LENGTH,
   type Account,
   type AppData,
   type Position,
@@ -198,15 +199,28 @@ export function normalizeStoredWorkspace(value: unknown): Workspace | null {
   const usedTagIds = new Set<string>()
   const tagByNormalizedName = new Map<string, Tag>()
   const tags: Tag[] = []
-  function addTag(rawId: unknown, rawName: unknown, rawColor: unknown): Tag | null {
-    if (typeof rawName !== 'string' || !rawName.trim() || !isTagColor(rawColor)) return null
+  function addTag(
+    rawId: unknown,
+    rawName: unknown,
+    rawColor: unknown,
+    rawNote: unknown
+  ): Tag | null {
+    if (
+      typeof rawName !== 'string' ||
+      !rawName.trim() ||
+      !isTagColor(rawColor) ||
+      typeof rawNote !== 'string' ||
+      rawNote.trim().length > MAX_TAG_NOTE_LENGTH
+    )
+      return null
     const name = rawName.trim()
+    const note = rawNote.trim()
     const key = name.toLocaleLowerCase()
     if (tagByNormalizedName.has(key)) return null
     const requestedId = typeof rawId === 'string' ? rawId.trim() : ''
     if (!requestedId || usedTagIds.has(requestedId)) return null
     const id = requestedId
-    const tag = { id, name, color: rawColor }
+    const tag = { id, name, color: rawColor, note }
     usedTagIds.add(id)
     tagByNormalizedName.set(key, tag)
     tags.push(tag)
@@ -224,8 +238,11 @@ export function normalizeStoredWorkspace(value: unknown): Workspace | null {
       id?: unknown
       name?: unknown
       color?: unknown
+      note?: unknown
     }
-    if (!addTag(storedTag.id, storedTag.name, storedTag.color)) hasInvalidTag = true
+    if (!addTag(storedTag.id, storedTag.name, storedTag.color, storedTag.note)) {
+      hasInvalidTag = true
+    }
   })
   if (hasInvalidTag) return null
 

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { TAG_COLORS } from './portfolio'
+import { MAX_TAG_NOTE_LENGTH, TAG_COLORS } from './portfolio'
 
 export const MCP_TOOL_NAMES = [
   'chromie_list_workspaces',
@@ -43,6 +43,7 @@ const accountType = z.enum([
   'Boc'
 ])
 const tagColor = z.enum(TAG_COLORS)
+const tagNote = z.string().trim().max(MAX_TAG_NOTE_LENGTH)
 const integrationProvider = z.enum(['Futu', 'Okx', 'Ibkr', 'Hstong', 'Binance'])
 
 export const mcpViewSchema = z.discriminatedUnion('kind', [
@@ -112,14 +113,16 @@ export const updateWorkspaceInputSchema = z.object({
 export const createTagInputSchema = z.object({
   workspace_id: id,
   name,
-  color: tagColor
+  color: tagColor,
+  note: tagNote.optional().default('')
 }).strict()
 
 export const updateTagInputSchema = z.object({
   workspace_id: id,
   tag_id: id,
   name,
-  color: tagColor
+  color: tagColor,
+  note: tagNote.optional()
 }).strict()
 
 export const setAccountTagsInputSchema = z.object({
@@ -235,7 +238,8 @@ const count = z.number().int().nonnegative()
 const tagOutputSchema = z.object({
   id,
   name,
-  color: tagColor
+  color: tagColor,
+  note: tagNote
 }).strict()
 const positionOutputSchema = z.object({
   id,

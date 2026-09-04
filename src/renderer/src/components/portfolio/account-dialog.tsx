@@ -170,7 +170,6 @@ export function AccountDialog({
                 <FieldLabel htmlFor="account-name">账户名称</FieldLabel>
                 <Input
                   id="account-name"
-                  className="h-9"
                   value={name}
                   onChange={(event) => {
                     setName(event.target.value)
@@ -196,7 +195,7 @@ export function AccountDialog({
                       setError('')
                     }}
                   >
-                    <SelectTrigger id="account-auto-sync" className="h-9">
+                    <SelectTrigger id="account-auto-sync">
                       <SelectValue placeholder="选择自动同步状态" />
                     </SelectTrigger>
                     <SelectContent>

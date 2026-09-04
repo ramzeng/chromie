@@ -38,7 +38,7 @@ async function createOkxPortfolio() {
     {
       type: 'create-tag',
       workspaceId,
-      input: { name: 'Moon', color: 'blue' }
+      input: { name: 'Moon', color: 'blue', note: '' }
     }
   )
   const tagId = createdTag.result as string

@@ -175,7 +175,12 @@ export function createPortfolioOperations(
     if (workspace.tags.some((tag) => tag.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
       throw new Error(`标签“${name}”已存在`)
     }
-    const tag: Tag = { id: createId(), name, color: input.color }
+    const tag: Tag = {
+      id: createId(),
+      name,
+      color: input.color,
+      note: input.note.trim()
+    }
     setData((current) => ({
       ...current,
       workspaces: current.workspaces.map((item) =>
@@ -204,7 +209,9 @@ export function createPortfolioOperations(
           ? {
               ...item,
               tags: item.tags.map((tag) =>
-                tag.id === tagId ? { ...tag, name, color: input.color } : tag
+                tag.id === tagId
+                  ? { ...tag, name, color: input.color, note: input.note.trim() }
+                  : tag
               )
             }
           : item

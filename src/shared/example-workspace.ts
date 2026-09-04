@@ -42,12 +42,42 @@ function createWorkspace(): Workspace {
     stockQuoteProvider: 'eastmoney',
     cryptoQuoteProvider: 'coinbase',
     tags: [
-      { id: 'example-tag-core', name: '核心持仓', color: 'blue' },
-      { id: 'example-tag-growth', name: '成长', color: 'purple' },
-      { id: 'example-tag-steady', name: '稳健', color: 'green' },
-      { id: 'example-tag-income', name: '现金流', color: 'orange' },
-      { id: 'example-tag-overseas', name: '海外配置', color: 'gray' },
-      { id: 'example-tag-digital', name: '数字资产', color: 'yellow' }
+      {
+        id: 'example-tag-core',
+        name: '核心持仓',
+        color: 'blue',
+        note: '长期持有、低频调整的核心资产。'
+      },
+      {
+        id: 'example-tag-growth',
+        name: '成长',
+        color: 'purple',
+        note: '关注长期成长空间和估值变化。'
+      },
+      {
+        id: 'example-tag-steady',
+        name: '稳健',
+        color: 'green',
+        note: '波动较低、用于平衡组合风险。'
+      },
+      {
+        id: 'example-tag-income',
+        name: '现金流',
+        color: 'orange',
+        note: '以股息、利息等现金流为主要目标。'
+      },
+      {
+        id: 'example-tag-overseas',
+        name: '海外配置',
+        color: 'gray',
+        note: '用于分散单一市场风险的境外资产。'
+      },
+      {
+        id: 'example-tag-digital',
+        name: '数字资产',
+        color: 'yellow',
+        note: '高波动数字资产，严格控制仓位。'
+      }
     ],
     accounts: [
       {
