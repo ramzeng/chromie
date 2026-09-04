@@ -3,6 +3,7 @@ import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { TableEmptyState } from '@/components/portfolio/table-empty-state'
+import { SavedCredentialInput } from '@/components/portfolio/saved-credential-input'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -243,19 +244,20 @@ function ProxyProfileDialog({
                       id="proxy-profile-username"
                       value={username}
                       onChange={(event) => setUsername(event.target.value)}
-                      placeholder={profile?.credentialConfigured ? '已保存' : 'gentoo'}
+                      placeholder="gentoo"
                       autoComplete="off"
                       maxLength={256}
                     />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="proxy-profile-password">密码</FieldLabel>
-                    <Input
+                    <SavedCredentialInput
                       id="proxy-profile-password"
                       type="password"
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
-                      placeholder={profile?.credentialConfigured ? '留空保持不变' : '请输入密码'}
+                      credentialConfigured={Boolean(profile?.credentialConfigured)}
+                      placeholder="请输入密码"
                       autoComplete="new-password"
                       maxLength={512}
                     />
