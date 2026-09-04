@@ -14,7 +14,14 @@ import {
   MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
   type ExchangeRateProvider
 } from '../../shared/exchange-rates'
-import { type AccountIntegration } from '../../shared/integrations'
+import {
+  DEFAULT_ACCOUNT_NETWORK_ROUTE,
+  PROXY_PROTOCOLS,
+  type AccountIntegration,
+  type AccountNetworkRoute,
+  type ProxyProfile,
+  type ProxyProfileInput
+} from '../../shared/integrations'
 import {
   DEFAULT_BASE_CURRENCY,
   DEFAULT_FUTU_OPEND_HOST,
@@ -239,6 +246,99 @@ export function normalizeAccountSync(value: unknown, type: AccountType): Account
   }
 }
 
+export function normalizeAccountNetworkRoute(value: unknown): AccountNetworkRoute | null {
+  if (value === undefined) return { ...DEFAULT_ACCOUNT_NETWORK_ROUTE }
+  if (!value || typeof value !== 'object') return null
+  const route = value as { mode?: unknown; proxyProfileId?: unknown }
+  if (route.mode === 'system' || route.mode === 'direct') return { mode: route.mode }
+  if (
+    route.mode === 'proxy' &&
+    typeof route.proxyProfileId === 'string' &&
+    route.proxyProfileId.trim()
+  ) {
+    return { mode: 'proxy', proxyProfileId: route.proxyProfileId.trim().slice(0, 128) }
+  }
+  return null
+}
+
+export function normalizeProxyProfile(value: unknown, id?: string): ProxyProfile | null {
+  if (!value || typeof value !== 'object') return null
+  const profile = value as {
+    id?: unknown
+    name?: unknown
+    protocol?: unknown
+    host?: unknown
+    port?: unknown
+    username?: unknown
+    password?: unknown
+  }
+  const normalizedId = id ?? (typeof profile.id === 'string' ? profile.id.trim() : '')
+  const normalizedHost =
+    typeof profile.host === 'string'
+      ? profile.host.trim().replace(/^\[|\]$/g, '')
+      : ''
+  if (
+    !normalizedId ||
+    typeof profile.name !== 'string' ||
+    !profile.name.trim() ||
+    !PROXY_PROTOCOLS.includes(profile.protocol as ProxyProfile['protocol']) ||
+    !normalizedHost ||
+    /[\s/?#@]/.test(normalizedHost) ||
+    typeof profile.port !== 'number' ||
+    !Number.isInteger(profile.port) ||
+    profile.port < 1 ||
+    profile.port > 65535 ||
+    (profile.username !== undefined &&
+      (typeof profile.username !== 'string' || !profile.username.trim())) ||
+    (profile.password !== undefined &&
+      (typeof profile.password !== 'string' || !profile.password)) ||
+    ((profile.username === undefined) !== (profile.password === undefined))
+  ) {
+    return null
+  }
+  return {
+    id: normalizedId.slice(0, 128),
+    name: profile.name.trim().slice(0, 50),
+    protocol: profile.protocol as ProxyProfile['protocol'],
+    host: normalizedHost.slice(0, 253),
+    port: profile.port,
+    ...(typeof profile.username === 'string'
+      ? {
+          username: profile.username.trim().slice(0, 256),
+          password: (profile.password as string).slice(0, 512)
+        }
+      : {})
+  }
+}
+
+export function resolveProxyProfileInput(
+  input: ProxyProfileInput,
+  id: string,
+  existing?: ProxyProfile
+): ProxyProfile {
+  const credential = input.credential
+  if (credential.mode === 'keep' && (!existing?.username || !existing.password)) {
+    throw new Error('没有可保留的代理凭据，请重新填写')
+  }
+  const auth =
+    credential.mode === 'keep'
+      ? existing?.username && existing.password
+        ? { username: existing.username, password: existing.password }
+        : undefined
+      : credential.mode === 'replace'
+        ? credential.value
+        : undefined
+  const normalized = normalizeProxyProfile(
+    {
+      ...input,
+      ...(auth ? auth : {})
+    },
+    id
+  )
+  if (!normalized) throw new Error('代理配置无效')
+  return normalized
+}
+
 export function normalizeIntegration(
   value: unknown,
   accountId?: string
@@ -250,6 +350,7 @@ export function normalizeIntegration(
     websocket?: unknown
     gateway?: unknown
     api?: unknown
+    network?: unknown
   }
   const normalizedAccountId =
     accountId ?? (typeof integration.accountId === 'string' ? integration.accountId.trim() : '')
@@ -325,6 +426,8 @@ export function normalizeIntegration(
       return null
     }
     if (integration.provider === 'Okx') {
+      const network = normalizeAccountNetworkRoute(integration.network)
+      if (!network) return null
       return {
         accountId: normalizedAccountId,
         provider: 'Okx',
@@ -332,16 +435,20 @@ export function normalizeIntegration(
           apiKey: api.apiKey.trim().slice(0, 256),
           secretKey: api.secretKey.slice(0, 512),
           passphrase: (api.passphrase as string).slice(0, 256)
-        }
+        },
+        network
       }
     }
+    const network = normalizeAccountNetworkRoute(integration.network)
+    if (!network) return null
     return {
       accountId: normalizedAccountId,
       provider: 'Binance',
       api: {
         apiKey: api.apiKey.trim().slice(0, 256),
         secretKey: api.secretKey.slice(0, 512)
-      }
+      },
+      network
     }
   }
 
@@ -415,13 +522,20 @@ export function resolveIntegrationInput(
     if (existing?.provider !== input.provider) {
       throw new Error(`没有可保留的 ${input.provider} API 凭据，请重新填写`)
     }
-    return structuredClone(existing)
+    return normalizeIntegration(
+      {
+        ...structuredClone(existing),
+        network: input.network ?? existing.network
+      },
+      accountId
+    )
   }
 
   return normalizeIntegration(
     {
       provider: input.provider,
-      api: input.api.credential.value
+      api: input.api.credential.value,
+      network: input.network
     },
     accountId
   )

@@ -32,7 +32,7 @@ import {
 } from './dialog-utils'
 import type { BaseDialogProps, StorageLocationStatus } from './dialog-shared'
 
-export type WorkspaceSettingsSection = 'basic' | 'currency' | 'quotes' | 'mcp'
+export type WorkspaceSettingsSection = 'basic' | 'currency' | 'quotes' | 'proxy' | 'mcp'
 
 export function useWorkspaceSettingsForm({
   open,
@@ -59,7 +59,7 @@ export function useWorkspaceSettingsForm({
   const [cryptoQuoteProvider, setCryptoQuoteProvider] = useState<CryptoQuoteProvider>(
     DEFAULT_CRYPTO_QUOTE_PROVIDER
   )
-  const [section, setSection] = useState<'basic' | 'currency' | 'quotes' | 'mcp'>('basic')
+  const [section, setSection] = useState<WorkspaceSettingsSection>('basic')
   const [mcpConnection, setMcpConnection] = useState<McpConnectionSettings | null>(null)
   const [mcpAccess, setMcpAccess] = useState<McpAccessSettings>({
     ...DEFAULT_MCP_ACCESS_SETTINGS

@@ -10,6 +10,7 @@ export type BackupImportPreview = {
   positionCount: number
   snapshotCount: number
   integrationCount: number
+  proxyProfileCount: number
 }
 
 export type BackupImportResult =

@@ -5,7 +5,8 @@ import { app, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electro
 import type { PortfolioCommand } from '../../shared/portfolio'
 import {
   portfolioAccountTargetSchema,
-  portfolioCommandSchema
+  portfolioCommandSchema,
+  portfolioProxyTestSchema
 } from '../../shared/portfolio-command'
 import type { McpAccessSettings } from '../../shared/mcp'
 import type { DesktopOperations } from '../service/desktop-service'
@@ -100,6 +101,12 @@ export function registerDesktopIpc(
       return portfolio.syncAccount(parsed.data.workspaceId, parsed.data.accountId)
     }
   )
+  ipcMain.handle('portfolio:test-proxy', (event, profileId: unknown, target: unknown) => {
+    assertTrustedSender(event, validateSender)
+    const parsed = portfolioProxyTestSchema.safeParse({ profileId, target })
+    if (!parsed.success) throw new Error('代理测试请求无效')
+    return portfolio.testProxyProfile(parsed.data.profileId, parsed.data.target)
+  })
   ipcMain.handle('backup:export', async (event) => {
     assertTrustedSender(event, validateSender)
     return service.exportBackup(
@@ -140,7 +147,8 @@ export function registerDesktopIpc(
           0
         ),
         snapshotCount: backup.snapshots.length,
-        integrationCount: backup.integrations.length
+        integrationCount: backup.integrations.length,
+        proxyProfileCount: backup.proxyProfiles.length
       }
     }
   })

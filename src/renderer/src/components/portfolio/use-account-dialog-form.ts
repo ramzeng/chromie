@@ -11,7 +11,9 @@ import {
   type Account,
   type AccountInput,
   type AccountIntegrationView,
-  type AccountType
+  type AccountNetworkRoute,
+  type AccountType,
+  type ProxyProfileView
 } from '@/lib/portfolio'
 import { reportOperationError, reportValidationError, useSubmissionGuard } from './dialog-utils'
 import { defaultAccountName, type BaseDialogProps } from './dialog-shared'
@@ -21,10 +23,12 @@ export function useAccountDialogForm({
   onOpenChange,
   account,
   integration,
+  proxyProfiles,
   onSubmit
 }: BaseDialogProps & {
   account?: Account
   integration?: AccountIntegrationView
+  proxyProfiles: ProxyProfileView[]
   onSubmit: (input: AccountInput) => Promise<void>
 }) {
   const [name, setName] = useState('')
@@ -45,6 +49,7 @@ export function useAccountDialogForm({
   const [hstongTradingPassword, setHstongTradingPassword] = useState('')
   const [binanceApiKey, setBinanceApiKey] = useState('')
   const [binanceSecretKey, setBinanceSecretKey] = useState('')
+  const [networkRoute, setNetworkRoute] = useState('system')
   const [error, setError] = useState('')
   const { submitting, submissionInFlight, beginSubmission, endSubmission } = useSubmissionGuard()
   const supportsAutoSync =
@@ -92,6 +97,15 @@ export function useAccountDialogForm({
     setHstongTradingPassword('')
     setBinanceApiKey('')
     setBinanceSecretKey('')
+    const storedNetwork =
+      integration?.provider === 'Okx' || integration?.provider === 'Binance'
+        ? integration.network
+        : undefined
+    setNetworkRoute(
+      storedNetwork?.mode === 'proxy'
+        ? `proxy:${storedNetwork.proxyProfileId}`
+        : (storedNetwork?.mode ?? 'system')
+    )
     setError('')
     // Background syncs refresh account props while this dialog is open. Do not
     // discard credential replacements or other edits that the user is typing.
@@ -138,6 +152,11 @@ export function useAccountDialogForm({
       account?.type === 'Binance' && integration?.provider === 'Binance'
     const hasAnyBinanceCredential = Boolean(binanceApiKey.trim() || binanceSecretKey)
     const hasHstongTradingPassword = hstongTradingPassword.length > 0
+    const network: AccountNetworkRoute = networkRoute.startsWith('proxy:')
+      ? { mode: 'proxy', proxyProfileId: networkRoute.slice('proxy:'.length) }
+      : networkRoute === 'direct'
+        ? { mode: 'direct' }
+        : { mode: 'system' }
     if (type === 'Futu' && syncEnabled && !syncHost.trim()) {
       failValidation('请输入 Futu OpenD 地址')
       return
@@ -196,6 +215,15 @@ export function useAccountDialogForm({
         (hasAnyBinanceCredential && (!binanceApiKey.trim() || !binanceSecretKey)))
     ) {
       failValidation('请填写完整的币安 API 配置')
+      return
+    }
+    if (
+      (type === 'Okx' || type === 'Binance') &&
+      syncEnabled &&
+      network.mode === 'proxy' &&
+      !proxyProfiles.some((profile) => profile.id === network.proxyProfileId)
+    ) {
+      failValidation('请选择有效的代理配置')
       return
     }
     const parsedHstongGatewayPort = Number(hstongGatewayPort)
@@ -303,7 +331,8 @@ export function useAccountDialogForm({
                                     }
                                   }
                                 : { mode: 'keep' as const }
-                            }
+                            },
+                            network
                           }
                         : {
                             provider: 'Binance' as const,
@@ -317,7 +346,8 @@ export function useAccountDialogForm({
                                     }
                                   }
                                 : { mode: 'keep' as const }
-                            }
+                            },
+                            network
                           }
             }
           : {})
@@ -366,6 +396,8 @@ export function useAccountDialogForm({
     setBinanceApiKey,
     binanceSecretKey,
     setBinanceSecretKey,
+    networkRoute,
+    setNetworkRoute,
     error,
     setError,
     submitting,

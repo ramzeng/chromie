@@ -1,4 +1,4 @@
-import { ChartCandlestick, Coins, SlidersHorizontal, Trash2, Upload, Wrench } from 'lucide-react'
+import { ChartCandlestick, Coins, Network, SlidersHorizontal, Trash2, Upload, Wrench } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +39,10 @@ import {
   type BaseCurrency,
   type CryptoQuoteProvider,
   type ExchangeRateProvider,
+  type ProxyProfileInput,
+  type ProxyProfileView,
+  type ProxyTestResult,
+  type ProxyTestTarget,
   type StockQuoteProvider,
   type Workspace,
   type WorkspaceSettingsInput
@@ -47,6 +51,7 @@ import { cn } from '@/lib/utils'
 
 import { type BaseDialogProps } from './dialog-shared'
 import { McpSettingsSection } from './mcp-settings-section'
+import { ProxySettingsSection } from './proxy-settings-section'
 import { useWorkspaceSettingsForm } from './use-workspace-settings-form'
 export function WorkspaceSettingsDialog({
   open,
@@ -54,12 +59,22 @@ export function WorkspaceSettingsDialog({
   workspace,
   initialSection = 'basic',
   onSubmit,
+  proxyProfiles,
+  onCreateProxyProfile,
+  onUpdateProxyProfile,
+  onDeleteProxyProfile,
+  onTestProxy,
   onRequestExport,
   onRequestDelete
 }: BaseDialogProps & {
   workspace: Workspace
-  initialSection?: 'basic' | 'currency' | 'quotes' | 'mcp'
+  initialSection?: 'basic' | 'currency' | 'quotes' | 'proxy' | 'mcp'
   onSubmit: (input: WorkspaceSettingsInput) => Promise<void>
+  proxyProfiles: ProxyProfileView[]
+  onCreateProxyProfile: (input: ProxyProfileInput) => Promise<string>
+  onUpdateProxyProfile: (id: string, input: ProxyProfileInput) => Promise<void>
+  onDeleteProxyProfile: (id: string) => Promise<void>
+  onTestProxy: (id: string, target: ProxyTestTarget) => Promise<ProxyTestResult>
   onRequestExport: () => void
   onRequestDelete: () => void
 }) {
@@ -111,7 +126,7 @@ export function WorkspaceSettingsDialog({
         <DialogHeader>
           <DialogTitle>工作区设置</DialogTitle>
           <DialogDescription className="sr-only">
-            管理工作区基础信息、币种与汇率、行情数据、MCP 协议和工作区状态
+            管理工作区基础信息、币种与汇率、行情数据、网络代理、MCP 协议和工作区状态
           </DialogDescription>
         </DialogHeader>
         <form
@@ -160,6 +175,19 @@ export function WorkspaceSettingsDialog({
                 >
                   <ChartCandlestick className="size-4" />
                   行情数据
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    'h-9 justify-start gap-2.5 px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    section === 'proxy' &&
+                      'bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent'
+                  )}
+                  onClick={() => setSection('proxy')}
+                >
+                  <Network data-icon="inline-start" className="size-4" />
+                  网络代理
                 </Button>
                 <Button
                   type="button"
@@ -444,6 +472,15 @@ export function WorkspaceSettingsDialog({
                       />
                     )}
                   </div>
+                )}
+                {section === 'proxy' && (
+                  <ProxySettingsSection
+                    profiles={proxyProfiles}
+                    onCreate={onCreateProxyProfile}
+                    onUpdate={onUpdateProxyProfile}
+                    onDelete={onDeleteProxyProfile}
+                    onTest={onTestProxy}
+                  />
                 )}
               </div>
             </ScrollArea>

@@ -1,6 +1,8 @@
 import type {
   AccountIntegration,
-  AccountIntegrationView
+  AccountIntegrationView,
+  ProxyProfile,
+  ProxyProfileView
 } from '../../shared/integrations'
 import type {
   PortfolioClientCommandResponse,
@@ -48,7 +50,16 @@ export function toAccountIntegrationView(
   return {
     accountId: integration.accountId,
     provider: integration.provider,
-    credentialConfigured: true
+    credentialConfigured: true,
+    network: structuredClone(integration.network)
+  }
+}
+
+export function toProxyProfileView(profile: ProxyProfile): ProxyProfileView {
+  const { password: _password, ...view } = profile
+  return {
+    ...view,
+    credentialConfigured: Boolean(profile.username && profile.password)
   }
 }
 
@@ -63,7 +74,8 @@ function toClientLoadResponse(
 ): PortfolioClientLoadResponse {
   return {
     data: response.data,
-    integrations: redactIntegrations(response.integrations)
+    integrations: redactIntegrations(response.integrations),
+    proxyProfiles: response.proxyProfiles.map(toProxyProfileView)
   }
 }
 
@@ -73,6 +85,7 @@ function toClientCommandResponse(
   return {
     data: response.data,
     integrations: redactIntegrations(response.integrations),
+    proxyProfiles: response.proxyProfiles.map(toProxyProfileView),
     ...(response.result === undefined ? {} : { result: response.result })
   }
 }

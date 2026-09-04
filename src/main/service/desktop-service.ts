@@ -25,11 +25,23 @@ import type { FutuSyncOptions, FutuSyncResult } from '../../shared/futu'
 import type { IbkrSyncOptions, IbkrSyncResult } from '../../shared/ibkr'
 import type { HstongSyncOptions, HstongSyncResult } from '../../shared/hstong'
 import type { OkxSyncOptions, OkxSyncResult } from '../../shared/okx'
+import type {
+  AccountNetworkRoute,
+  ProxyProfile,
+  ProxyTestResult,
+  ProxyTestTarget
+} from '../../shared/integrations'
+import type { FetchLike } from '../infra/proxy-http'
+
+type NetworkSyncConfig = {
+  route: AccountNetworkRoute
+  proxyProfile?: ProxyProfile
+}
 
 export type AssetSyncRequest =
   | { provider: 'futu'; options?: FutuSyncOptions }
-  | { provider: 'okx'; options?: OkxSyncOptions }
-  | { provider: 'binance'; options?: BinanceSyncOptions }
+  | { provider: 'okx'; options?: OkxSyncOptions; network: NetworkSyncConfig }
+  | { provider: 'binance'; options?: BinanceSyncOptions; network: NetworkSyncConfig }
   | { provider: 'ibkr'; options?: IbkrSyncOptions }
   | { provider: 'hstong'; options?: HstongSyncOptions }
 
@@ -42,8 +54,11 @@ export type AssetSyncResult =
 
 export type DesktopServiceDependencies = {
   syncFutuPositions: (options?: FutuSyncOptions) => Promise<FutuSyncResult>
-  syncOkxPositions: (options?: OkxSyncOptions) => Promise<OkxSyncResult>
-  syncBinancePositions: (options?: BinanceSyncOptions) => Promise<BinanceSyncResult>
+  syncOkxPositions: (options: OkxSyncOptions | undefined, fetchImpl: FetchLike) => Promise<OkxSyncResult>
+  syncBinancePositions: (
+    options: BinanceSyncOptions | undefined,
+    fetchImpl: FetchLike
+  ) => Promise<BinanceSyncResult>
   syncIbkrPositions: (options?: IbkrSyncOptions) => Promise<IbkrSyncResult>
   syncHstongPositions: (options?: HstongSyncOptions) => Promise<HstongSyncResult>
   fetchExchangeRates: (provider: ExchangeRateProvider) => Promise<ExchangeRateSnapshot>
@@ -51,6 +66,13 @@ export type DesktopServiceDependencies = {
   lookupAssetQuote?: (input: AssetQuoteLookupInput) => Promise<AssetQuote | null>
   exportBackup: (ownerId: number, content: unknown) => Promise<BackupExportResult>
   importBackup: (ownerId: number) => Promise<BackupFileImportResult>
+  systemFetch: FetchLike
+  directFetch: FetchLike
+  createProxyFetch: (profile: ProxyProfile) => FetchLike
+  testProxyConnection: (
+    profile: ProxyProfile,
+    target: ProxyTestTarget
+  ) => Promise<ProxyTestResult>
 }
 
 export interface DesktopOperations {
@@ -60,6 +82,7 @@ export interface DesktopOperations {
   lookupAssetQuote?(input: unknown): Promise<AssetQuoteLookupResult>
   exportBackup(ownerId: number, content: unknown): Promise<BackupExportResult>
   importBackup(ownerId: number): Promise<BackupFileImportResult>
+  testProxy?(profile: ProxyProfile, target: ProxyTestTarget): Promise<ProxyTestResult>
 }
 
 export class DesktopService implements DesktopOperations {
@@ -70,9 +93,15 @@ export class DesktopService implements DesktopOperations {
       case 'futu':
         return this.dependencies.syncFutuPositions(request.options)
       case 'okx':
-        return this.dependencies.syncOkxPositions(request.options)
+        return this.dependencies.syncOkxPositions(
+          request.options,
+          this.resolveNetworkFetch(request.network)
+        )
       case 'binance':
-        return this.dependencies.syncBinancePositions(request.options)
+        return this.dependencies.syncBinancePositions(
+          request.options,
+          this.resolveNetworkFetch(request.network)
+        )
       case 'ibkr':
         return this.dependencies.syncIbkrPositions(request.options)
       case 'hstong':
@@ -139,4 +168,16 @@ export class DesktopService implements DesktopOperations {
     return this.dependencies.importBackup(ownerId)
   }
 
+  testProxy(profile: ProxyProfile, target: ProxyTestTarget): Promise<ProxyTestResult> {
+    return this.dependencies.testProxyConnection(profile, target)
+  }
+
+  private resolveNetworkFetch(network: NetworkSyncConfig): FetchLike {
+    if (network.route.mode === 'system') return this.dependencies.systemFetch
+    if (network.route.mode === 'direct') return this.dependencies.directFetch
+    if (!network.proxyProfile || network.proxyProfile.id !== network.route.proxyProfileId) {
+      throw new Error('账户引用的代理配置已不存在')
+    }
+    return this.dependencies.createProxyFetch(network.proxyProfile)
+  }
 }

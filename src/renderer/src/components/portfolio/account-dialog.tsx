@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -40,6 +40,7 @@ import {
   type AccountInput,
   type AccountIntegrationView,
   type AccountType,
+  type ProxyProfileView,
   type Tag,
   type TagInput
 } from '@/lib/portfolio'
@@ -53,12 +54,14 @@ export function AccountDialog({
   onOpenChange,
   account,
   integration,
+  proxyProfiles,
   tags,
   onCreateTag,
   onSubmit
 }: BaseDialogProps & {
   account?: Account
   integration?: AccountIntegrationView
+  proxyProfiles: ProxyProfileView[]
   tags: Tag[]
   onCreateTag: (input: TagInput) => Promise<string>
   onSubmit: (input: AccountInput) => Promise<void>
@@ -99,6 +102,8 @@ export function AccountDialog({
     setBinanceApiKey,
     binanceSecretKey,
     setBinanceSecretKey,
+    networkRoute,
+    setNetworkRoute,
     error,
     setError,
     submitting,
@@ -111,6 +116,7 @@ export function AccountDialog({
     onOpenChange,
     account,
     integration,
+    proxyProfiles,
     onSubmit
   })
 
@@ -349,6 +355,32 @@ export function AccountDialog({
                       />
                     </Field>
                   </div>
+                  <Field>
+                    <FieldLabel htmlFor="account-okx-network">网络连接</FieldLabel>
+                    <Select
+                      value={networkRoute}
+                      onValueChange={(value) => {
+                        setNetworkRoute(value)
+                        setError('')
+                      }}
+                    >
+                      <SelectTrigger id="account-okx-network">
+                        <SelectValue placeholder="选择网络连接" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="system">跟随系统</SelectItem>
+                          <SelectItem value="direct">强制直连</SelectItem>
+                          {proxyProfiles.map((profile) => (
+                            <SelectItem key={profile.id} value={`proxy:${profile.id}`}>
+                              {profile.name}（{profile.host}:{profile.port}）
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>代理配置可在“工作区设置 → 网络代理”中管理</FieldDescription>
+                  </Field>
                   <Field className="max-w-72">
                     <FieldLabel htmlFor="account-okx-sync-interval">间隔（秒）</FieldLabel>
                     <Input
@@ -540,6 +572,32 @@ export function AccountDialog({
                       autoComplete="new-password"
                       maxLength={512}
                     />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="account-binance-network">网络连接</FieldLabel>
+                    <Select
+                      value={networkRoute}
+                      onValueChange={(value) => {
+                        setNetworkRoute(value)
+                        setError('')
+                      }}
+                    >
+                      <SelectTrigger id="account-binance-network">
+                        <SelectValue placeholder="选择网络连接" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectItem value="system">跟随系统</SelectItem>
+                          <SelectItem value="direct">强制直连</SelectItem>
+                          {proxyProfiles.map((profile) => (
+                            <SelectItem key={profile.id} value={`proxy:${profile.id}`}>
+                              {profile.name}（{profile.host}:{profile.port}）
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>代理配置可在“工作区设置 → 网络代理”中管理</FieldDescription>
                   </Field>
                   <Field className="max-w-72">
                     <FieldLabel htmlFor="account-binance-sync-interval">间隔（秒）</FieldLabel>
