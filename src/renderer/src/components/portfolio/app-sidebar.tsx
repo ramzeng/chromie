@@ -215,9 +215,6 @@ export function AppSidebar({
               onEdit={onEditAccount}
               onDelete={onDeleteAccount}
             />
-            {readOnly && !workspace.accounts.length && (
-              <p className="px-3 py-2 text-xs leading-5 text-muted-foreground">暂无账户</p>
-            )}
 
             <div className="mb-2 mt-5 flex items-center gap-1">
               <p className="flex h-7 min-w-0 flex-1 items-center px-1 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">

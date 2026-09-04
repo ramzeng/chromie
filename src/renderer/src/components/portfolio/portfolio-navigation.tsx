@@ -8,6 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import { Empty, EmptyDescription } from '@/components/ui/empty'
 import { cn } from '@/lib/utils'
 import type { Account, Tag } from '@/lib/portfolio'
 import { TagColorDot } from './tag-badge'
@@ -15,6 +16,14 @@ import { AccountTypeIcon } from './view-helpers'
 
 export const SELECTED_NAVIGATION_CLASS_NAME =
   'bg-sidebar-accent text-sidebar-accent-foreground'
+
+function NavigationEmptyState({ label }: { label: string }) {
+  return (
+    <Empty className="min-h-10 gap-0 p-2 md:p-2">
+      <EmptyDescription className="text-xs/5">{label}</EmptyDescription>
+    </Empty>
+  )
+}
 
 export function AccountNavigation({
   accounts,
@@ -33,6 +42,7 @@ export function AccountNavigation({
 }) {
   return (
     <div className="grid min-w-0 gap-1">
+      {!accounts.length && <NavigationEmptyState label="暂无账户" />}
       {accounts.map((account) => {
         const selected = selectedAccountId === account.id
         return (
@@ -107,6 +117,7 @@ export function TagNavigation({
 }) {
   return (
     <div className="grid min-w-0 gap-1">
+      {!tags.length && <NavigationEmptyState label="暂无标签" />}
       {tags.map((tag) => {
         const selected = selectedTagId === tag.id
         return (
