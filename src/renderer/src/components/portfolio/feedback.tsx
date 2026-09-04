@@ -105,21 +105,24 @@ export function AppLoadingScreen() {
   return (
     <main
       data-slot="app-content"
-      className="relative grid h-screen min-h-[600px] place-items-center bg-background"
+      className="fixed inset-0 grid place-items-center bg-background p-8"
       role="status"
       aria-label="Chromie 正在启动"
     >
       <div className="window-drag absolute inset-x-0 top-0 h-12" />
       <div className="flex flex-col items-center gap-4 text-center">
-        <img
-          className="size-14 object-contain invert"
-          src={CHROMIE_LOGO_URL}
-          alt=""
-          aria-hidden="true"
-        />
+        <span className="grid size-12 place-items-center rounded-sm bg-primary">
+          <img
+            className="size-[30px] object-contain"
+            src={CHROMIE_LOGO_URL}
+            alt=""
+            aria-hidden="true"
+          />
+        </span>
+        <p className="text-lg font-semibold tracking-[-0.02em]">Chromie</p>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner aria-hidden="true" />
-          <span>Chromie 正在启动...</span>
+          <span>正在启动 Chromie…</span>
         </div>
       </div>
     </main>
