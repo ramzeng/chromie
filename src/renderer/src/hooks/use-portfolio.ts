@@ -247,6 +247,18 @@ export function usePortfolio() {
         workspaceId,
         accountId
       )
+    },
+    refreshPositionPrices: async (
+      workspaceId: string,
+      accountId?: string
+    ) => {
+      if (!window.desktop.portfolio?.refreshPositionPrices) {
+        throw new Error('持仓价格刷新组件尚未加载，请重启 Chromie')
+      }
+      return window.desktop.portfolio.refreshPositionPrices(
+        workspaceId,
+        accountId
+      )
     }
   }
 }

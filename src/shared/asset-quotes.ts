@@ -20,6 +20,15 @@ export const cryptoQuoteProviderLabels: Record<CryptoQuoteProvider, string> = {
   yahoo: 'Yahoo Finance'
 }
 
+export function resolveAssetQuoteProvider(
+  market: Market,
+  stockProvider: StockQuoteProvider,
+  cryptoProvider: CryptoQuoteProvider
+): AssetQuoteProvider {
+  if (market === 'CN_OTC') return 'eastmoney'
+  return market === 'CC' ? cryptoProvider : stockProvider
+}
+
 export type AssetQuoteQuery = {
   market: Market
   symbol: string

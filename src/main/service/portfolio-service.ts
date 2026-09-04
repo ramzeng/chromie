@@ -1,6 +1,10 @@
 import { isDeepStrictEqual } from 'node:util'
 
 import {
+  resolveAssetQuoteProvider,
+  type AssetQuoteProvider
+} from '../../shared/asset-quotes'
+import {
   EMPTY_INTEGRATION_DATA,
   type AccountIntegration,
   type IntegrationData,
@@ -12,6 +16,7 @@ import {
   type PortfolioCommand,
   type PortfolioCommandResponse,
   type PortfolioLoadResponse,
+  type Position,
   type PositionInput,
   type WorkspaceBackup
 } from '../../shared/portfolio'
@@ -28,10 +33,28 @@ import {
   parseWorkspaceBackup,
   reconcileIntegrations
 } from './portfolio-backup'
-import { parseStoredData, parseStoredIntegrationData } from './portfolio-data'
+import {
+  isCurrencyCode,
+  parseStoredData,
+  parseStoredIntegrationData
+} from './portfolio-data'
 import { createPortfolioOperations } from './portfolio-operations'
 
 export { createWorkspaceBackup, parseWorkspaceBackup } from './portfolio-backup'
+export type PositionPriceUpdate = {
+  accountId: string
+  positionId: string
+  provider: AssetQuoteProvider
+  expected: Pick<Position, 'market' | 'symbol' | 'currency' | 'price'>
+  price: number
+  currency: string
+}
+
+export type PositionPriceUpdateResult = {
+  appliedCount: number
+  conflictCount: number
+}
+
 export interface PortfolioOperations {
   load(): Promise<PortfolioLoadResponse>
   execute(command: PortfolioCommand): Promise<PortfolioCommandResponse>
@@ -43,6 +66,10 @@ export interface PortfolioOperations {
     syncedAt: string,
     expectedProxyProfile?: ProxyProfile
   ): Promise<void>
+  applyManualPositionPriceUpdates(
+    workspaceId: string,
+    updates: PositionPriceUpdate[]
+  ): Promise<PositionPriceUpdateResult>
   inspectBackup(content: unknown): WorkspaceBackup | null
   exportActiveWorkspace(): Promise<string>
   importBackup(content: unknown): Promise<string>
@@ -241,6 +268,116 @@ export class PortfolioService implements PortfolioOperations {
       await this.persist(nextData, this.integrationData)
       this.data = nextData
       this.notifyListeners()
+    })
+  }
+
+  applyManualPositionPriceUpdates(
+    workspaceId: string,
+    updates: PositionPriceUpdate[]
+  ): Promise<PositionPriceUpdateResult> {
+    return this.runExclusive(async () => {
+      await this.initialize()
+
+      const normalizedUpdates = new Map<
+        string,
+        PositionPriceUpdate & { currency: string }
+      >()
+      updates.forEach((update) => {
+        if (!Number.isFinite(update.price) || update.price < 0) {
+          throw new Error('行情服务返回了无效的价格')
+        }
+        if (!isCurrencyCode(update.currency)) {
+          throw new Error('行情服务返回了无效的币种')
+        }
+        const key = `${update.accountId}\u0000${update.positionId}`
+        if (normalizedUpdates.has(key)) {
+          throw new Error('持仓价格更新包含重复项目')
+        }
+        normalizedUpdates.set(key, {
+          ...update,
+          currency: update.currency.trim().toUpperCase()
+        })
+      })
+
+      const workspace = this.data.workspaces.find((item) => item.id === workspaceId)
+      if (!workspace) {
+        return { appliedCount: 0, conflictCount: normalizedUpdates.size }
+      }
+
+      const acceptedUpdates = new Map<string, { price: number; currency: string }>()
+      let conflictCount = 0
+      normalizedUpdates.forEach((update, key) => {
+        const account = workspace.accounts.find((item) => item.id === update.accountId)
+        const position = account?.positions.find((item) => item.id === update.positionId)
+        const currentProvider = position
+          ? resolveAssetQuoteProvider(
+              position.market,
+              workspace.stockQuoteProvider,
+              workspace.cryptoQuoteProvider
+            )
+          : undefined
+        if (
+          !account ||
+          account.sync ||
+          !position ||
+          position.market !== update.expected.market ||
+          position.symbol !== update.expected.symbol.trim().toUpperCase() ||
+          position.currency !== update.expected.currency.trim().toUpperCase() ||
+          position.price !== update.expected.price ||
+          currentProvider !== update.provider
+        ) {
+          conflictCount += 1
+          return
+        }
+        acceptedUpdates.set(key, {
+          price: update.price,
+          currency: update.currency
+        })
+      })
+
+      let changed = false
+      const nextData: AppData = {
+        ...this.data,
+        workspaces: this.data.workspaces.map((currentWorkspace) =>
+          currentWorkspace.id === workspaceId
+            ? {
+                ...currentWorkspace,
+                accounts: currentWorkspace.accounts.map((account) => ({
+                  ...account,
+                  positions: account.positions.map((position) => {
+                    const update = acceptedUpdates.get(
+                      `${account.id}\u0000${position.id}`
+                    )
+                    if (!update) return position
+                    if (
+                      position.price === update.price &&
+                      position.currency === update.currency
+                    ) {
+                      return position
+                    }
+                    changed = true
+                    return {
+                      ...position,
+                      price: update.price,
+                      currency: update.currency
+                    }
+                  })
+                }))
+              }
+            : currentWorkspace
+        )
+      }
+
+      if (changed) {
+        await this.persist(nextData, this.integrationData)
+        this.data = nextData
+        this.notifyListeners()
+      }
+
+      return {
+        appliedCount: acceptedUpdates.size,
+        conflictCount
+      }
     })
   }
 

@@ -10,6 +10,7 @@ import {
   PortfolioPage,
   PortfolioPageHeader
 } from '@/components/portfolio/page-shell'
+import { PositionPriceSyncDialog } from '@/components/portfolio/position-price-sync-dialog'
 import {
   SortableTableHead,
   compareOptionalNumbers,
@@ -47,6 +48,8 @@ import {
   formatNumber,
   marketMeta,
   type Account,
+  type PortfolioPriceRefreshResponse,
+  type PortfolioSyncResponse,
   type Position,
   type Workspace
 } from '@/lib/portfolio'
@@ -449,11 +452,23 @@ export function PortfolioPositionTable({
 export function Overview({
   workspace,
   exchangeRates,
-  onOpenAccount
+  readOnly,
+  onOpenAccount,
+  onSyncAccount,
+  onRefreshPositionPrices
 }: {
   workspace: Workspace
   exchangeRates: ExchangeRateView
+  readOnly: boolean
   onOpenAccount: (id: string) => void
+  onSyncAccount: (
+    workspaceId: string,
+    accountId: string
+  ) => Promise<PortfolioSyncResponse>
+  onRefreshPositionPrices: (
+    workspaceId: string,
+    accountId: string
+  ) => Promise<PortfolioPriceRefreshResponse>
 }) {
   const positions = workspace.accounts.flatMap(
     (account) => account.positions
@@ -469,6 +484,14 @@ export function Overview({
             资产概览
           </h1>
         </div>
+        {!readOnly && (
+          <PositionPriceSyncDialog
+            key={workspace.id}
+            workspace={workspace}
+            syncAccount={onSyncAccount}
+            refreshPositionPrices={onRefreshPositionPrices}
+          />
+        )}
       </PortfolioPageHeader>
 
       <section className="mt-5">

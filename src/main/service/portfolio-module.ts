@@ -9,13 +9,20 @@ import type {
   PortfolioCommand,
   PortfolioCommandResponse,
   PortfolioLoadResponse,
+  PortfolioPriceRefreshResponse,
   PortfolioSyncResponse,
   PositionInput
 } from '../../shared/portfolio'
 import { AccountSyncCoordinator } from './account-sync-coordinator'
 import type { DesktopOperations } from './desktop-service'
 import { PortfolioMcpController } from './portfolio-mcp-controller'
-import type { PortfolioChangeListener, PortfolioOperations } from './portfolio-service'
+import { PositionPriceRefreshCoordinator } from './position-price-refresh-coordinator'
+import type {
+  PortfolioChangeListener,
+  PortfolioOperations,
+  PositionPriceUpdate,
+  PositionPriceUpdateResult
+} from './portfolio-service'
 
 export { McpOperationError, type McpErrorCode } from './mcp-operation-error'
 
@@ -26,11 +33,16 @@ export interface PortfolioModuleOperations extends PortfolioOperations {
     access?: McpAccessSettings
   ): Promise<McpToolSuccess>
   syncAccount(workspaceId: string, accountId: string): Promise<PortfolioSyncResponse>
+  refreshPositionPrices(
+    workspaceId: string,
+    accountId?: string
+  ): Promise<PortfolioPriceRefreshResponse>
   testProxyProfile(profileId: string, target: ProxyTestTarget): Promise<ProxyTestResult>
 }
 
 export class PortfolioModule implements PortfolioModuleOperations {
   private readonly accountSync: AccountSyncCoordinator
+  private readonly positionPrices: PositionPriceRefreshCoordinator
   private readonly mcp: PortfolioMcpController
 
   constructor(
@@ -38,6 +50,7 @@ export class PortfolioModule implements PortfolioModuleOperations {
     desktop: DesktopOperations
   ) {
     this.accountSync = new AccountSyncCoordinator(portfolio, desktop)
+    this.positionPrices = new PositionPriceRefreshCoordinator(portfolio, desktop)
     this.mcp = new PortfolioMcpController(portfolio, desktop, (workspaceId, accountId) =>
       this.accountSync.syncAccount(workspaceId, accountId)
     )
@@ -69,6 +82,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
     )
   }
 
+  applyManualPositionPriceUpdates(
+    workspaceId: string,
+    updates: PositionPriceUpdate[]
+  ): Promise<PositionPriceUpdateResult> {
+    return this.portfolio.applyManualPositionPriceUpdates(workspaceId, updates)
+  }
+
   inspectBackup(content: unknown) {
     return this.portfolio.inspectBackup(content)
   }
@@ -95,6 +115,13 @@ export class PortfolioModule implements PortfolioModuleOperations {
 
   syncAccount(workspaceId: string, accountId: string): Promise<PortfolioSyncResponse> {
     return this.accountSync.syncAccount(workspaceId, accountId)
+  }
+
+  refreshPositionPrices(
+    workspaceId: string,
+    accountId?: string
+  ): Promise<PortfolioPriceRefreshResponse> {
+    return this.positionPrices.refreshPositionPrices(workspaceId, accountId)
   }
 
   async testProxyProfile(profileId: string, target: ProxyTestTarget): Promise<ProxyTestResult> {

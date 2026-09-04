@@ -506,6 +506,8 @@ export function App(): React.JSX.Element {
         onSyncAccount={async () => {
           if (selectedAccount) await syncAccount(selectedAccount.id)
         }}
+        onSyncPortfolioAccount={portfolio.syncAccount}
+        onRefreshPositionPrices={portfolio.refreshPositionPrices}
         onManagePositionTags={(position) => {
           if (selectedAccount) {
             setTagAssignmentTarget({ accountId: selectedAccount.id, position })

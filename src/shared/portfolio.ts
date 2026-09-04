@@ -16,6 +16,7 @@ import {
 import {
   DEFAULT_CRYPTO_QUOTE_PROVIDER,
   DEFAULT_STOCK_QUOTE_PROVIDER,
+  resolveAssetQuoteProvider,
   type CryptoQuoteProvider,
   type StockQuoteProvider
 } from './asset-quotes'
@@ -260,6 +261,15 @@ export type PortfolioSyncResponse = {
   syncedAt: string
 }
 
+export type PortfolioPriceRefreshResponse = {
+  positionCount: number
+  refreshedCount: number
+  notFoundCount: number
+  unavailableCount: number
+  conflictCount: number
+  completedAt: string
+}
+
 export const EMPTY_PORTFOLIO_DATA: AppData = {
   version: 1,
   activeWorkspaceId: null,
@@ -283,7 +293,8 @@ export {
   DEFAULT_STOCK_QUOTE_PROVIDER,
   EXCHANGE_RATE_PROVIDERS,
   MAX_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
-  MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES
+  MIN_EXCHANGE_RATE_REFRESH_INTERVAL_MINUTES,
+  resolveAssetQuoteProvider
 }
 export type { ExchangeRateProvider }
 export type { CryptoQuoteProvider, StockQuoteProvider }

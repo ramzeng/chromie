@@ -6,6 +6,7 @@ import type { PortfolioCommand } from '../../shared/portfolio'
 import {
   portfolioAccountTargetSchema,
   portfolioCommandSchema,
+  portfolioPriceRefreshTargetSchema,
   portfolioProxyTestSchema
 } from '../../shared/portfolio-command'
 import type { McpAccessSettings } from '../../shared/mcp'
@@ -99,6 +100,21 @@ export function registerDesktopIpc(
       })
       if (!parsed.success) throw new Error('账户同步请求无效')
       return portfolio.syncAccount(parsed.data.workspaceId, parsed.data.accountId)
+    }
+  )
+  ipcMain.handle(
+    'portfolio:refresh-position-prices',
+    (event, workspaceId: unknown, accountId?: unknown) => {
+      assertTrustedSender(event, validateSender)
+      const parsed = portfolioPriceRefreshTargetSchema.safeParse({
+        workspaceId,
+        accountId
+      })
+      if (!parsed.success) throw new Error('持仓价格刷新请求无效')
+      return portfolio.refreshPositionPrices(
+        parsed.data.workspaceId,
+        parsed.data.accountId
+      )
     }
   )
   ipcMain.handle('portfolio:test-proxy', (event, profileId: unknown, target: unknown) => {

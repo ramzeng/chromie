@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 
 import {
   defaultCurrencyByMarket,
+  resolveAssetQuoteProvider,
   type CryptoQuoteProvider,
   type Market,
   type Position,
@@ -98,11 +99,11 @@ export function usePositionDialogForm({
         return
       }
 
-      const provider = market === 'CN_OTC'
-        ? 'eastmoney'
-        : market === 'CC'
-          ? cryptoQuoteProvider
-          : stockQuoteProvider
+      const provider = resolveAssetQuoteProvider(
+        market,
+        stockQuoteProvider,
+        cryptoQuoteProvider
+      )
       void lookup({ market, symbol: normalizedSymbol, provider })
         .then((result) => {
           if (requestId !== quoteLookupRequestRef.current) return
@@ -205,11 +206,11 @@ export function usePositionDialogForm({
     }
 
     const requestId = ++quoteLookupRequestRef.current
-    const provider = market === 'CN_OTC'
-      ? 'eastmoney'
-      : market === 'CC'
-        ? cryptoQuoteProvider
-        : stockQuoteProvider
+    const provider = resolveAssetQuoteProvider(
+      market,
+      stockQuoteProvider,
+      cryptoQuoteProvider
+    )
     setName('')
     setCurrency(defaultCurrencyByMarket[market])
     setPrice('')
