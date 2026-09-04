@@ -15,7 +15,7 @@ import {
   WorkspaceSettingsDialog
 } from '@/components/portfolio/dialogs'
 import {
-  AppLoadingSkeleton,
+  AppLoadingScreen,
   EmptyWorkspace,
   PortfolioLoadError,
   reportPortfolioError
@@ -212,7 +212,7 @@ export function App(): React.JSX.Element {
   }
 
   if (portfolio.loading) {
-    return <AppLoadingSkeleton />
+    return <AppLoadingScreen />
   }
 
   if (portfolio.error) {
