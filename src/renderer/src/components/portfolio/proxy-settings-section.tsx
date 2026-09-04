@@ -323,7 +323,7 @@ export function ProxySettingsSection({
         <div className="grid gap-1">
           <h3 className="text-base font-semibold">网络代理</h3>
           <p className="text-xs leading-5 text-muted-foreground">
-            为 OKX、币安等远端数据源创建可复用代理，再在账户中单独选择
+            为欧易、币安等远端数据源创建可复用代理，再在账户中单独选择
           </p>
         </div>
         <Button type="button" size="sm" onClick={() => setDialog({ open: true })}>
