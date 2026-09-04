@@ -105,14 +105,6 @@ base64 < DeveloperIDApplication.p12 | tr -d '\n' | pbcopy
 base64 < AuthKey_KEYID.p8 | tr -d '\n' | pbcopy
 ```
 
-如果从“钥匙串访问”导出的 `.p12` 使用旧式 RC2 加密，可以先重新封装为 CI 兼容且不含 RC2 的格式。脚本会安全提示输入新旧密码，明文私钥只经过内存文件描述符，不会写入磁盘，并会用临时 macOS 钥匙串验证结果：
-
-```bash
-./scripts/repack-p12-for-ci.sh DeveloperIDApplication.p12
-```
-
-随后将生成的 `DeveloperIDApplication-ci.p12` 编码后覆盖 `MAC_CSC_LINK`，并将 `MAC_CSC_KEY_PASSWORD` 更新为转换时设置的新密码。
-
 公证必须使用 Team API Key，Individual API Key 不支持 `notarytool`。证书和私钥文件不得提交到仓库。
 
 发布新版本时，先更新并提交 `package.json` 中的版本号，再创建并推送标签。例如发布 `0.3.0`：
