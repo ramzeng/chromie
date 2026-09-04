@@ -88,13 +88,15 @@ pnpm build:mac
 
 向 GitHub 推送与 `package.json` 版本一致的 `v*` 标签后，Release 工作流会运行测试和类型检查，构建同时支持 Apple 芯片与 Intel 芯片的通用 DMG，完成 Developer ID 签名及 Apple 公证，然后创建 GitHub Release。ZIP 包一并保留，供后续接入应用内自动更新。
 
+工作流使用 `apple-actions/import-codesign-certs@v7` 将 `.p12` 导入临时 Keychain，并在任务结束后自动清理。macOS 构建被明确限制为 distribution 签名，因此 `MAC_CSC_LINK` 必须包含 `Developer ID Application` 证书及其私钥，不能使用 `Apple Development` 证书。
+
 在仓库的“Settings → Secrets and variables → Actions”中配置以下 Secrets：
 
 | Secret | 内容 |
 | --- | --- |
 | `MAC_CSC_LINK` | Developer ID Application `.p12` 文件的 Base64 内容 |
 | `MAC_CSC_KEY_PASSWORD` | 导出 `.p12` 时设置的密码 |
-| `APPLE_API_KEY_P8` | App Store Connect Team API Key `.p8` 文件的 Base64 内容 |
+| `APPLE_API_KEY_P8` | App Store Connect Team API Key `.p8` 文件的 Base64 内容（也兼容完整 PEM 原文） |
 | `APPLE_API_KEY_ID` | App Store Connect API Key ID |
 | `APPLE_API_ISSUER` | App Store Connect API Issuer ID |
 
@@ -104,6 +106,8 @@ pnpm build:mac
 base64 < DeveloperIDApplication.p12 | tr -d '\n' | pbcopy
 base64 < AuthKey_KEYID.p8 | tr -d '\n' | pbcopy
 ```
+
+如果 `notarytool` 报告 `invalidPrivateKeyContents`，通常是 `APPLE_API_KEY_P8` 中保存了错误内容或重复进行了 Base64 编码。请用 Apple 下载的原始 `AuthKey_*.p8` 文件重新执行上面的第二条命令并覆盖 Secret。Release 工作流会在开始构建前解析私钥，并在内容无效时直接失败。
 
 公证必须使用 Team API Key，Individual API Key 不支持 `notarytool`。证书和私钥文件不得提交到仓库。
 

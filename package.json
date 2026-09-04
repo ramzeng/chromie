@@ -74,6 +74,7 @@
       "category": "public.app-category.finance",
       "icon": "resources/chromie-app-icon-knot.icns",
       "hardenedRuntime": true,
+      "type": "distribution",
       "notarize": true,
       "target": [
         "dmg",
