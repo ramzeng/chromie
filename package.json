@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "build": "npm run typecheck && electron-vite build",
     "icons:mac": "sh scripts/generate-macos-icon.sh",
-    "build:mac": "npm run icons:mac && npm run build && electron-builder --mac"
+    "build:mac": "npm run icons:mac && npm run build && electron-builder --mac",
+    "build:mac:universal": "npm run icons:mac && npm run build && electron-builder --mac dmg zip --universal --publish never"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -72,11 +73,13 @@
     "mac": {
       "category": "public.app-category.finance",
       "icon": "resources/chromie-app-icon-knot.icns",
+      "hardenedRuntime": true,
+      "notarize": true,
       "target": [
         "dmg",
         "zip"
       ]
     }
   },
-  "packageManager": "pnpm@8.12.1"
+  "packageManager": "pnpm@9.15.9"
 }

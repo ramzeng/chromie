@@ -84,6 +84,36 @@ pnpm build:mac
 
 `pnpm build:mac` 会在 `dist/` 下生成 macOS 安装包。正式分发还需要 Apple Developer 签名和 notarization。
 
+## 发布 macOS 安装包
+
+向 GitHub 推送与 `package.json` 版本一致的 `v*` 标签后，Release 工作流会运行测试和类型检查，构建同时支持 Apple 芯片与 Intel 芯片的通用 DMG，完成 Developer ID 签名及 Apple 公证，然后创建 GitHub Release。ZIP 包一并保留，供后续接入应用内自动更新。
+
+在仓库的“Settings → Secrets and variables → Actions”中配置以下 Secrets：
+
+| Secret | 内容 |
+| --- | --- |
+| `MAC_CSC_LINK` | Developer ID Application `.p12` 文件的 Base64 内容 |
+| `MAC_CSC_KEY_PASSWORD` | 导出 `.p12` 时设置的密码 |
+| `APPLE_API_KEY_P8` | App Store Connect Team API Key `.p8` 文件的 Base64 内容 |
+| `APPLE_API_KEY_ID` | App Store Connect API Key ID |
+| `APPLE_API_ISSUER` | App Store Connect API Issuer ID |
+
+在 macOS 上可以用下面的命令复制文件的 Base64 内容：
+
+```bash
+base64 < DeveloperIDApplication.p12 | tr -d '\n' | pbcopy
+base64 < AuthKey_KEYID.p8 | tr -d '\n' | pbcopy
+```
+
+公证必须使用 Team API Key，Individual API Key 不支持 `notarytool`。证书和私钥文件不得提交到仓库。
+
+发布新版本时，先更新并提交 `package.json` 中的版本号，再创建并推送标签。例如发布 `0.3.0`：
+
+```bash
+git tag -a v0.3.0 -m "Release v0.3.0"
+git push origin v0.3.0
+```
+
 ## 开发
 
 项目使用 Electron、electron-vite、React、TypeScript、Tailwind CSS v4、shadcn/ui 和 pnpm。
