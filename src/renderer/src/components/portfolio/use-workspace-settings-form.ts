@@ -32,7 +32,7 @@ import {
 } from './dialog-utils'
 import type { BaseDialogProps, StorageLocationStatus } from './dialog-shared'
 
-export type WorkspaceSettingsSection = 'basic' | 'currency' | 'quotes' | 'proxy' | 'mcp'
+export type WorkspaceSettingsSection = 'basic' | 'currency' | 'quotes' | 'proxy' | 'mcp' | 'about'
 
 export function useWorkspaceSettingsForm({
   open,
@@ -193,6 +193,10 @@ export function useWorkspaceSettingsForm({
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (submissionInFlight.current) return
+    if (section === 'about') {
+      onOpenChange(false)
+      return
+    }
     if (section === 'mcp') {
       if (!window.desktop.mcp) {
         const message = 'MCP 协议组件尚未加载，请重启 Chromie'
