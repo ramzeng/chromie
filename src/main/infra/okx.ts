@@ -1,12 +1,11 @@
 import { createHmac } from 'node:crypto'
 
-import { net } from 'electron'
-
 import type {
   OkxSyncedPosition,
   OkxSyncOptions,
   OkxSyncResult
 } from '../../shared/okx'
+import type { FetchLike } from './proxy-http'
 
 const OKX_BASE_URL = 'https://www.okx.com'
 const REQUEST_TIMEOUT_MS = 10_000
@@ -69,11 +68,11 @@ function getMessage(value: unknown): string | undefined {
   return undefined
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<OkxResponse<T>> {
+async function request<T>(fetchImpl: FetchLike, path: string, init?: RequestInit): Promise<OkxResponse<T>> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
-    const response = await net.fetch(`${OKX_BASE_URL}${path}`, {
+    const response = await fetchImpl(`${OKX_BASE_URL}${path}`, {
       ...init,
       signal: controller.signal
     })
@@ -97,12 +96,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<OkxResponse
   }
 }
 
-async function privateGet<T>(path: string, options: OkxSyncOptions): Promise<T> {
+async function privateGet<T>(fetchImpl: FetchLike, path: string, options: OkxSyncOptions): Promise<T> {
   const timestamp = new Date().toISOString()
   const signature = createHmac('sha256', options.secretKey)
     .update(`${timestamp}GET${path}`)
     .digest('base64')
-  const response = await request<T>(path, {
+  const response = await request<T>(fetchImpl, path, {
     method: 'GET',
     headers: {
       'OK-ACCESS-KEY': options.apiKey,
@@ -117,8 +116,8 @@ async function privateGet<T>(path: string, options: OkxSyncOptions): Promise<T> 
   return response.data
 }
 
-async function publicGet<T>(path: string): Promise<T> {
-  const response = await request<T>(path)
+async function publicGet<T>(fetchImpl: FetchLike, path: string): Promise<T> {
+  const response = await request<T>(fetchImpl, path)
   if (response.code !== '0' || !response.data) {
     throw new Error(response.msg || `OKX 返回错误（${response.code || '未知代码'}）`)
   }
@@ -234,13 +233,16 @@ function toPositions(
     })
 }
 
-export async function syncOkxPositions(options?: OkxSyncOptions): Promise<OkxSyncResult> {
+export async function syncOkxPositions(
+  options: OkxSyncOptions | undefined,
+  fetchImpl: FetchLike
+): Promise<OkxSyncResult> {
   const credentials = requireOptions(options)
   try {
     const [tradingBalances, fundingBalances, tickers] = await Promise.all([
-      privateGet<TradingBalance[]>('/api/v5/account/balance', credentials),
-      privateGet<FundingBalance[]>('/api/v5/asset/balances', credentials),
-      publicGet<SpotTicker[]>('/api/v5/market/tickers?instType=SPOT')
+      privateGet<TradingBalance[]>(fetchImpl, '/api/v5/account/balance', credentials),
+      privateGet<FundingBalance[]>(fetchImpl, '/api/v5/asset/balances', credentials),
+      publicGet<SpotTicker[]>(fetchImpl, '/api/v5/market/tickers?instType=SPOT')
     ])
     return {
       positions: toPositions(tradingBalances, fundingBalances, buildUsdPrices(tickers)),

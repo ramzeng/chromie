@@ -64,14 +64,12 @@ function StatusBanner({
   return (
     <Alert
       role="status"
-      className="flex min-h-10 items-center justify-center gap-3 border-border/70 bg-muted/25 py-2 [&>svg]:static [&>svg]:shrink-0 [&>svg+div]:translate-y-0 [&>svg~*]:pl-0"
+      className="flex min-h-10 items-center justify-center gap-3 border-border/70 bg-muted/25 py-2"
     >
       <Icon aria-hidden="true" />
       <div className="flex min-w-0 items-center gap-2">
-        <AlertTitle className="mb-0 shrink-0 whitespace-nowrap">{title}</AlertTitle>
-        <AlertDescription className="truncate text-muted-foreground">
-          {description}
-        </AlertDescription>
+        <AlertTitle className="shrink-0 whitespace-nowrap">{title}</AlertTitle>
+        <AlertDescription className="truncate">{description}</AlertDescription>
       </div>
       <Button
         type="button"

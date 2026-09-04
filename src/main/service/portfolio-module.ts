@@ -1,5 +1,10 @@
 import type { McpAccessSettings, McpToolName, McpToolSuccess } from '../../shared/mcp'
-import type { AccountIntegration } from '../../shared/integrations'
+import type {
+  AccountIntegration,
+  ProxyProfile,
+  ProxyTestResult,
+  ProxyTestTarget
+} from '../../shared/integrations'
 import type {
   PortfolioCommand,
   PortfolioCommandResponse,
@@ -21,6 +26,7 @@ export interface PortfolioModuleOperations extends PortfolioOperations {
     access?: McpAccessSettings
   ): Promise<McpToolSuccess>
   syncAccount(workspaceId: string, accountId: string): Promise<PortfolioSyncResponse>
+  testProxyProfile(profileId: string, target: ProxyTestTarget): Promise<ProxyTestResult>
 }
 
 export class PortfolioModule implements PortfolioModuleOperations {
@@ -50,14 +56,16 @@ export class PortfolioModule implements PortfolioModuleOperations {
     accountId: string,
     expectedIntegration: AccountIntegration,
     positions: PositionInput[],
-    syncedAt: string
+    syncedAt: string,
+    expectedProxyProfile?: ProxyProfile
   ): Promise<void> {
     return this.portfolio.replaceSynchronizedPositions(
       workspaceId,
       accountId,
       expectedIntegration,
       positions,
-      syncedAt
+      syncedAt,
+      expectedProxyProfile
     )
   }
 
@@ -87,5 +95,12 @@ export class PortfolioModule implements PortfolioModuleOperations {
 
   syncAccount(workspaceId: string, accountId: string): Promise<PortfolioSyncResponse> {
     return this.accountSync.syncAccount(workspaceId, accountId)
+  }
+
+  async testProxyProfile(profileId: string, target: ProxyTestTarget): Promise<ProxyTestResult> {
+    const state = await this.portfolio.load()
+    const profile = state.proxyProfiles.find((item) => item.id === profileId)
+    if (!profile) throw new Error('没有找到对应的代理配置')
+    return this.accountSync.testProxy(profile, target)
   }
 }

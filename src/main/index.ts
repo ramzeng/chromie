@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 
-import { app, BrowserWindow, nativeImage, nativeTheme, net, shell } from 'electron'
+import { app, BrowserWindow, nativeImage, nativeTheme, net, session, shell } from 'electron'
 
 import { exportBackup, importBackup } from './infra/backup'
 import { syncBinancePositions } from './infra/binance'
@@ -14,6 +14,7 @@ import { syncIbkrPositions } from './infra/ibkr'
 import { syncHstongPositions } from './infra/hstong'
 import { syncOkxPositions } from './infra/okx'
 import { fetchAssetQuote } from './infra/asset-quotes'
+import { createProxyFetch, testProxyConnection } from './infra/proxy-http'
 import {
   resolveStoragePath,
   StorageLocationService
@@ -125,6 +126,8 @@ async function startApplication(
   )
   const portfolioService = new PortfolioService(portfolioStateRepository)
   const exchangeRateService = new ExchangeRateService(exchangeRateRepository)
+  const directSession = session.fromPartition('chromie-direct', { cache: false })
+  await directSession.setProxy({ mode: 'direct' })
   const desktopService = new DesktopService({
     syncFutuPositions,
     syncOkxPositions,
@@ -136,7 +139,11 @@ async function startApplication(
     loadExchangeRates: (legacyContent) => exchangeRateService.load(legacyContent),
     lookupAssetQuote: (input) => fetchAssetQuote(input, net.fetch),
     exportBackup,
-    importBackup
+    importBackup,
+    systemFetch: (input, init) => net.fetch(input.toString(), init),
+    directFetch: (input, init) => directSession.fetch(input.toString(), init),
+    createProxyFetch,
+    testProxyConnection
   })
   const portfolioModule = new PortfolioModule(portfolioService, desktopService)
   const mcpSettingsService = new McpSettingsService(mcpSettingsRepository)

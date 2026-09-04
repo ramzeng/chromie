@@ -103,7 +103,7 @@ export function App(): React.JSX.Element {
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false)
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false)
   const [workspaceSettingsSection, setWorkspaceSettingsSection] = useState<
-    'basic' | 'currency' | 'quotes'
+    'basic' | 'currency' | 'quotes' | 'proxy'
   >('basic')
   const [accountDialog, setAccountDialog] = useState<AccountDialogState>({ open: false })
   const [positionDialog, setPositionDialog] = useState<PositionDialogState>({ open: false })
@@ -247,6 +247,7 @@ export function App(): React.JSX.Element {
           positionCount={pendingImport?.positionCount ?? 0}
           snapshotCount={pendingImport?.snapshotCount ?? 0}
           integrationCount={pendingImport?.integrationCount ?? 0}
+          proxyProfileCount={pendingImport?.proxyProfileCount ?? 0}
           onConfirm={confirmImportWorkspace}
         />
       </>
@@ -553,6 +554,11 @@ export function App(): React.JSX.Element {
         workspace={activeWorkspace}
         initialSection={workspaceSettingsSection}
         onSubmit={submitWorkspaceSettings}
+        proxyProfiles={portfolio.proxyProfiles}
+        onCreateProxyProfile={portfolio.createProxyProfile}
+        onUpdateProxyProfile={portfolio.updateProxyProfile}
+        onDeleteProxyProfile={portfolio.deleteProxyProfile}
+        onTestProxy={portfolio.testProxy}
         onRequestExport={() => setExportDialogOpen(true)}
         onRequestDelete={() => setDeleteTarget({ kind: 'workspace', workspace: activeWorkspace })}
       />
@@ -567,6 +573,7 @@ export function App(): React.JSX.Element {
             ? portfolio.getAccountIntegration(accountDialog.account.id)
             : undefined
         }
+        proxyProfiles={portfolio.proxyProfiles}
         tags={activeWorkspace.tags}
         onCreateTag={createTag}
         onSubmit={submitAccount}
@@ -634,6 +641,7 @@ export function App(): React.JSX.Element {
         positionCount={pendingImport?.positionCount ?? 0}
         snapshotCount={pendingImport?.snapshotCount ?? 0}
         integrationCount={pendingImport?.integrationCount ?? 0}
+        proxyProfileCount={pendingImport?.proxyProfileCount ?? 0}
         onConfirm={confirmImportWorkspace}
       />
       <ExportBackupDialog

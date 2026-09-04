@@ -24,6 +24,7 @@ export function ImportBackupDialog({
   positionCount,
   snapshotCount,
   integrationCount,
+  proxyProfileCount,
   onConfirm
 }: BaseDialogProps & {
   workspaceName: string
@@ -32,6 +33,7 @@ export function ImportBackupDialog({
   positionCount: number
   snapshotCount: number
   integrationCount: number
+  proxyProfileCount: number
   onConfirm: () => void | Promise<void>
 }) {
   const { submitting, beginSubmission, endSubmission } = useSubmissionGuard()
@@ -66,6 +68,7 @@ export function ImportBackupDialog({
             <AlertDescription>
               {accountCount} 个账户、{tagCount} 个标签、{positionCount} 项持仓和 {snapshotCount}{' '}
               个历史快照，其中 {integrationCount} 个账户带有同步配置
+              {proxyProfileCount > 0 ? `，并包含 ${proxyProfileCount} 个代理配置` : ''}
             </AlertDescription>
           </Alert>
         </DialogBody>
@@ -130,7 +133,7 @@ export function ExportBackupDialog({
             <Upload aria-hidden="true" />
             <AlertTitle>备份包含同步凭据</AlertTitle>
             <AlertDescription>
-              连接参数和 API 凭据会写入备份文件，请将文件保存在可信位置
+              连接参数、API 凭据及被引用代理的明文认证信息会写入备份文件，请将文件保存在可信位置
             </AlertDescription>
           </Alert>
         </DialogBody>

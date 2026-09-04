@@ -27,6 +27,7 @@ import type {
   AssetQuoteLookupInput,
   AssetQuoteLookupResult
 } from '../../../shared/asset-quotes'
+import type { ProxyTestResult, ProxyTestTarget } from '../../../shared/integrations'
 
 declare global {
   interface Window {
@@ -46,6 +47,7 @@ declare global {
           workspaceId: string,
           accountId: string
         ) => Promise<PortfolioSyncResponse>
+        testProxy: (profileId: string, target: ProxyTestTarget) => Promise<ProxyTestResult>
         onChanged: (listener: () => void) => () => void
       }
       backup?: {

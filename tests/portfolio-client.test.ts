@@ -207,7 +207,8 @@ test('client portfolio responses redact credentials and preserve them on edit', 
         apiKey: 'api-key-secret',
         secretKey: 'secret-key-secret',
         passphrase: 'passphrase-secret'
-      }
+      },
+      network: { mode: 'system' }
     }
   ])
   assert.equal(portfolio.inspectBackup(JSON.stringify(backup))?.workspace.id, workspaceId)
@@ -215,7 +216,8 @@ test('client portfolio responses redact credentials and preserve them on edit', 
     {
       accountId,
       provider: 'Okx',
-      credentialConfigured: true
+      credentialConfigured: true,
+      network: { mode: 'system' }
     }
   ])
 
@@ -266,12 +268,176 @@ test('workspace backup restores synchronization credentials under remapped accou
     {
       accountId: importedAccount.id,
       provider: 'Okx',
-      credentialConfigured: true
+      credentialConfigured: true,
+      network: { mode: 'system' }
     }
   ])
   assert.match(restoredIntegrationRepository.content ?? '', /api-key-secret/)
   assert.match(restoredIntegrationRepository.content ?? '', /secret-key-secret/)
   assert.match(restoredIntegrationRepository.content ?? '', /passphrase-secret/)
+})
+
+test('proxy profiles are redacted for clients, exported with credentials and remapped on import', async () => {
+  const { portfolio, workspaceId, accountId } = await createOkxPortfolio()
+  const createdProfile = await portfolio.execute({
+    type: 'create-proxy-profile',
+    input: {
+      name: '香港远端代理',
+      protocol: 'socks5h',
+      host: 'proxy.example.com',
+      port: 1080,
+      credential: {
+        mode: 'replace',
+        value: { username: 'gentoo', password: 'proxy-password-secret' }
+      }
+    }
+  })
+  const profileId = createdProfile.result as string
+  const account = (await portfolio.load()).data.workspaces[0].accounts[0]
+  await portfolio.execute({
+    type: 'update-account',
+    workspaceId,
+    accountId,
+    input: {
+      name: account.name,
+      type: 'Okx',
+      sync: account.sync,
+      tagIds: account.tagIds,
+      integration: {
+        provider: 'Okx',
+        api: { credential: { mode: 'keep' } },
+        network: { mode: 'proxy', proxyProfileId: profileId }
+      }
+    }
+  })
+
+  const clientState = await loadPortfolioClientState(portfolio)
+  assert.equal(JSON.stringify(clientState).includes('proxy-password-secret'), false)
+  assert.deepEqual(clientState.proxyProfiles, [
+    {
+      id: profileId,
+      name: '香港远端代理',
+      protocol: 'socks5h',
+      host: 'proxy.example.com',
+      port: 1080,
+      username: 'gentoo',
+      credentialConfigured: true
+    }
+  ])
+  assert.deepEqual(clientState.integrations[0], {
+    accountId,
+    provider: 'Okx',
+    credentialConfigured: true,
+    network: { mode: 'proxy', proxyProfileId: profileId }
+  })
+
+  await assert.rejects(
+    portfolio.execute({ type: 'delete-proxy-profile', id: profileId }),
+    /仍被账户使用/
+  )
+
+  const content = await portfolio.exportActiveWorkspace()
+  const backup = JSON.parse(content) as {
+    version: number
+    proxyProfiles: Array<{ id: string; password?: string }>
+  }
+  assert.equal(backup.version, 2)
+  assert.equal(backup.proxyProfiles[0].id, profileId)
+  assert.equal(backup.proxyProfiles[0].password, 'proxy-password-secret')
+
+  const restored = new PortfolioService(new MemoryRepository(), new MemoryRepository())
+  await restored.importBackup(content)
+  const restoredState = await restored.load()
+  const restoredProfile = restoredState.proxyProfiles[0]
+  const restoredIntegration = restoredState.integrations[0]
+  assert.notEqual(restoredProfile.id, profileId)
+  assert.equal(restoredProfile.password, 'proxy-password-secret')
+  assert.equal(
+    restoredIntegration.provider === 'Okx' && restoredIntegration.network.mode === 'proxy'
+      ? restoredIntegration.network.proxyProfileId
+      : undefined,
+    restoredProfile.id
+  )
+})
+
+test('legacy remote integrations migrate to the system network route', async () => {
+  const portfolioRepository = new MemoryRepository()
+  const integrationRepository = new MemoryRepository()
+  portfolioRepository.content = JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'workspace-1',
+    workspaces: [
+      {
+        id: 'workspace-1',
+        name: '旧工作区',
+        baseCurrency: 'CNY',
+        exchangeRateProvider: 'coinbase',
+        exchangeRateRefreshIntervalMinutes: 15,
+        stockQuoteProvider: 'eastmoney',
+        cryptoQuoteProvider: 'coinbase',
+        tags: [],
+        accounts: [
+          {
+            id: 'account-1',
+            name: 'OKX',
+            type: 'Okx',
+            sync: { interval: 30 },
+            tagIds: [],
+            positions: []
+          }
+        ]
+      }
+    ],
+    snapshots: []
+  })
+  integrationRepository.content = JSON.stringify({
+    version: 1,
+    integrations: [
+      {
+        accountId: 'account-1',
+        provider: 'Okx',
+        api: { apiKey: 'key', secretKey: 'secret', passphrase: 'passphrase' }
+      }
+    ]
+  })
+
+  const state = await new PortfolioService(portfolioRepository, integrationRepository).load()
+  assert.deepEqual(state.integrations[0], {
+    accountId: 'account-1',
+    provider: 'Okx',
+    api: { apiKey: 'key', secretKey: 'secret', passphrase: 'passphrase' },
+    network: { mode: 'system' }
+  })
+  assert.deepEqual(state.proxyProfiles, [])
+})
+
+test('stored tags created before notes were introduced migrate with an empty note', async () => {
+  const portfolioRepository = new MemoryRepository()
+  portfolioRepository.content = JSON.stringify({
+    version: 1,
+    activeWorkspaceId: 'workspace-1',
+    workspaces: [
+      {
+        id: 'workspace-1',
+        name: '旧工作区',
+        baseCurrency: 'CNY',
+        exchangeRateProvider: 'coinbase',
+        exchangeRateRefreshIntervalMinutes: 15,
+        stockQuoteProvider: 'eastmoney',
+        cryptoQuoteProvider: 'coinbase',
+        tags: [{ id: 'tag-1', name: '长期持有', color: 'blue' }],
+        accounts: []
+      }
+    ],
+    snapshots: []
+  })
+  const portfolio = new PortfolioService(portfolioRepository, new MemoryRepository())
+
+  const state = await portfolio.load()
+
+  assert.deepEqual(state.data.workspaces[0].tags, [
+    { id: 'tag-1', name: '长期持有', color: 'blue', note: '' }
+  ])
 })
 
 test('workspace backups without synchronization credentials remain importable', async () => {
