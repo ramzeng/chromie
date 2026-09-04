@@ -231,9 +231,10 @@ function ComboboxChips({
   ComboboxPrimitive.Chips.Props) {
   return (
     <ComboboxPrimitive.Chips
+      render={<InputGroup />}
       data-slot="combobox-chips"
       className={cn(
-        "flex min-h-9 flex-wrap items-center gap-1.5 rounded-sm border border-input bg-input/30 bg-clip-padding px-3 py-1 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-within:ring-1 focus-within:ring-ring has-aria-invalid:border-destructive has-aria-invalid:ring-1 has-aria-invalid:ring-destructive/20 has-data-[slot=combobox-chip]:px-1.5",
+        "h-auto min-h-9 flex-wrap gap-1.5 px-3 py-1 text-sm focus-within:ring-1 focus-within:ring-ring has-aria-invalid:border-destructive has-aria-invalid:ring-1 has-aria-invalid:ring-destructive/20 has-data-[slot=combobox-chip]:px-1.5",
         className
       )}
       {...props}
@@ -280,7 +281,10 @@ function ComboboxChipsInput({
   return (
     <ComboboxPrimitive.Input
       data-slot="combobox-chip-input"
-      className={cn("min-w-16 flex-1 outline-none", className)}
+      className={cn(
+        "min-w-16 flex-1 outline-none placeholder:text-muted-foreground/70",
+        className
+      )}
       {...props}
     />
   )

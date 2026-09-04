@@ -260,7 +260,7 @@ export function createExampleWorkspaceData(
       daysAgo: 30,
       priceMultipliers: {
         CN: 0.98,
-        CN_OTC_FUND: 0.98,
+        CN_OTC: 0.98,
         HK: 0.96,
         US: 0.95,
         CC: 0.9
@@ -271,7 +271,7 @@ export function createExampleWorkspaceData(
       daysAgo: 90,
       priceMultipliers: {
         CN: 0.94,
-        CN_OTC_FUND: 0.94,
+        CN_OTC: 0.94,
         HK: 0.91,
         US: 0.88,
         CC: 0.78
@@ -282,7 +282,7 @@ export function createExampleWorkspaceData(
       daysAgo: 180,
       priceMultipliers: {
         CN: 0.91,
-        CN_OTC_FUND: 0.91,
+        CN_OTC: 0.91,
         HK: 0.84,
         US: 0.82,
         CC: 0.64
@@ -293,7 +293,7 @@ export function createExampleWorkspaceData(
       daysAgo: 365,
       priceMultipliers: {
         CN: 0.86,
-        CN_OTC_FUND: 0.86,
+        CN_OTC: 0.86,
         HK: 0.76,
         US: 0.72,
         CC: 0.52

@@ -160,7 +160,7 @@ export function PositionDialog({
                       placeholder={
                         market === 'CN'
                           ? '600519'
-                          : market === 'CN_OTC_FUND'
+                          : market === 'CN_OTC'
                             ? '017641'
                             : market === 'HK'
                               ? '00700'

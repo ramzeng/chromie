@@ -152,7 +152,7 @@ function eastMoneyMarketMatch(
   const classify = textValue(item.Classify)
   const marketNumber = textValue(item.MktNum)
   if (market === 'CN') return marketNumber === '0' || marketNumber === '1'
-  if (market === 'CN_OTC_FUND') {
+  if (market === 'CN_OTC') {
     return marketNumber === '150' || classify === 'OTCFUND'
   }
   if (market === 'HK') return marketNumber === '116' || classify === 'HK'
@@ -410,7 +410,7 @@ export function yahooAssetSymbol(input: AssetQuoteQuery): string | undefined {
     if (/^(?:4|8|92)/.test(symbol)) return `${symbol}.BJ`
     return `${symbol}.${/^(?:5|6|9)/.test(symbol) ? 'SS' : 'SZ'}`
   }
-  if (input.market === 'CN_OTC_FUND') return undefined
+  if (input.market === 'CN_OTC') return undefined
 
   return rawSymbol
     .replace(/^US[.:]/, '')
@@ -454,7 +454,7 @@ export async function fetchAssetQuote(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
-    if (input.market === 'CN_OTC_FUND' && input.provider !== 'eastmoney') {
+    if (input.market === 'CN_OTC' && input.provider !== 'eastmoney') {
       throw new Error('行情数据源与市场不匹配')
     }
     if (input.provider === 'yahoo') {

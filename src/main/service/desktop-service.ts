@@ -102,14 +102,14 @@ export class DesktopService implements DesktopOperations {
       : ''
     if (
       (market !== 'CN' &&
-        market !== 'CN_OTC_FUND' &&
+        market !== 'CN_OTC' &&
         market !== 'HK' &&
         market !== 'US' &&
         market !== 'CC') ||
       !symbol ||
       symbol.length > 24 ||
       !/^[A-Z0-9.^=/:_-]+$/.test(symbol) ||
-      (market === 'CN_OTC_FUND'
+      (market === 'CN_OTC'
         ? provider !== 'eastmoney'
         : market === 'CC'
           ? !CRYPTO_QUOTE_PROVIDERS.includes(provider as CryptoQuoteProvider)

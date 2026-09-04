@@ -16,7 +16,7 @@ const host = z.string().trim().min(1).max(253)
 const port = z.number().int().min(1).max(65535)
 const secret = z.string().min(1).max(512)
 const tagIds = z.array(id).max(1000)
-const market = z.enum(['CN', 'CN_OTC_FUND', 'HK', 'US', 'CC'])
+const market = z.enum(['CN', 'CN_OTC', 'HK', 'US', 'CC'])
 const baseCurrency = z.enum(['CNY', 'HKD', 'USD'])
 const accountType = z.enum([
   'Futu',

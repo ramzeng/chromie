@@ -36,12 +36,12 @@ test('example workspace covers the main portfolio views without sync credentials
 })
 
 test('exposes mainland OTC funds as a separate market', () => {
-  assert.deepEqual(marketOrder, ['CN', 'CN_OTC_FUND', 'HK', 'US', 'CC'])
-  assert.deepEqual(marketMeta.CN_OTC_FUND, {
-    label: '场外基金',
-    shortLabel: '基金'
+  assert.deepEqual(marketOrder, ['CN', 'CN_OTC', 'HK', 'US', 'CC'])
+  assert.deepEqual(marketMeta.CN_OTC, {
+    label: 'CN_OTC',
+    shortLabel: 'CN_OTC'
   })
-  assert.equal(defaultCurrencyByMarket.CN_OTC_FUND, 'CNY')
+  assert.equal(defaultCurrencyByMarket.CN_OTC, 'CNY')
 })
 
 test('example snapshots are deterministic historical copies of the workspace', () => {

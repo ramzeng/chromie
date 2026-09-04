@@ -193,7 +193,7 @@ export function normalizeStoredMarket(value: unknown): Market | null {
   if (typeof value !== 'string') return null
   const market = value.toUpperCase()
   return market === 'CN' ||
-    market === 'CN_OTC_FUND' ||
+    market === 'CN_OTC' ||
     market === 'US' ||
     market === 'HK' ||
     market === 'CC'

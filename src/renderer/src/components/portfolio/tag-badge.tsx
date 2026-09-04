@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react'
 
-import { Badge, badgeVariants } from '@/components/ui/badge'
+import { Badge } from '@/components/ui/badge'
 import { ComboboxChip } from '@/components/ui/combobox'
 import { cn } from '@/lib/utils'
 import type { Tag, TagColor } from '@/lib/portfolio'
@@ -15,10 +15,7 @@ const tagColorClassNames: Record<TagColor, string> = {
   purple: 'bg-tag-purple'
 }
 
-const tagBadgeClassName = cn(
-  badgeVariants({ variant: 'outline' }),
-  'h-auto gap-2 bg-transparent px-3 py-1 text-sm'
-)
+const tagBadgeClassName = 'h-6 px-2 py-0 text-sm'
 
 export function TagColorDot({
   color,
@@ -40,8 +37,7 @@ export function TagBadge({
   ...props
 }: Omit<ComponentProps<typeof Badge>, 'children'> & { tag: Tag }) {
   return (
-    <Badge variant="outline" className={cn(tagBadgeClassName, className)} {...props}>
-      <TagColorDot color={tag.color} className="size-3" />
+    <Badge variant="secondary" className={cn(tagBadgeClassName, className)} {...props}>
       {tag.name}
     </Badge>
   )
@@ -52,8 +48,11 @@ export function UntaggedBadge({
   ...props
 }: Omit<ComponentProps<typeof Badge>, 'children'>) {
   return (
-    <Badge variant="outline" className={cn(tagBadgeClassName, className)} {...props}>
-      <TagColorDot color="gray" className="size-3" />
+    <Badge
+      variant="outline"
+      className={cn(tagBadgeClassName, 'text-muted-foreground', className)}
+      {...props}
+    >
       暂无标签
     </Badge>
   )
@@ -67,13 +66,11 @@ export function TagComboboxChip({
   return (
     <ComboboxChip
       className={cn(
-        tagBadgeClassName,
-        'has-data-[slot=combobox-chip-remove]:pr-0',
+        'h-6 bg-secondary px-2 text-sm text-secondary-foreground has-data-[slot=combobox-chip-remove]:pr-0 [&_[data-slot=combobox-chip-remove]]:hover:bg-foreground/10 [&_[data-slot=combobox-chip-remove]]:hover:text-secondary-foreground',
         className
       )}
       {...props}
     >
-      <TagColorDot color={tag.color} className="size-3" />
       {tag.name}
     </ComboboxChip>
   )
