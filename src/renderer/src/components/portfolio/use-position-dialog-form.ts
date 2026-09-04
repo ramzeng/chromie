@@ -98,7 +98,7 @@ export function usePositionDialogForm({
         return
       }
 
-      const provider = market === 'CN_OTC_FUND'
+      const provider = market === 'CN_OTC'
         ? 'eastmoney'
         : market === 'CC'
           ? cryptoQuoteProvider
@@ -205,7 +205,7 @@ export function usePositionDialogForm({
     }
 
     const requestId = ++quoteLookupRequestRef.current
-    const provider = market === 'CN_OTC_FUND'
+    const provider = market === 'CN_OTC'
       ? 'eastmoney'
       : market === 'CC'
         ? cryptoQuoteProvider

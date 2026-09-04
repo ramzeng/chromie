@@ -118,7 +118,7 @@ export function TagDialog({
                       value={tagColor}
                       aria-label={tagColorLabels[tagColor]}
                       title={tagColorLabels[tagColor]}
-                      className="group size-10 min-w-10 justify-start bg-transparent p-0 data-[state=on]:bg-transparent"
+                      className="group size-10 min-w-10 bg-transparent p-0 data-[state=on]:bg-transparent"
                     >
                       <TagColorDot
                         color={tagColor}

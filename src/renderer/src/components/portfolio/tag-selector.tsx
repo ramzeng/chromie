@@ -18,7 +18,7 @@ import {
   useComboboxAnchor
 } from '@/components/ui/combobox'
 import { Field, FieldLabel } from '@/components/ui/field'
-import { InputGroupButton } from '@/components/ui/input-group'
+import { InputGroupAddon, InputGroupButton } from '@/components/ui/input-group'
 import type { Tag, TagInput } from '@/lib/portfolio'
 import { randomTagColor, reportOperationError } from './dialog-utils'
 import { TagColorDot, TagComboboxChip } from './tag-badge'
@@ -105,7 +105,7 @@ export function TagSelector({
   }
 
   return (
-    <Field className="gap-2.5" data-disabled={disabled || creating}>
+    <Field data-disabled={disabled || creating}>
       {!hideLabel && <FieldLabel htmlFor={fieldId}>标签</FieldLabel>}
       <Combobox
         multiple
@@ -134,7 +134,10 @@ export function TagSelector({
             .includes(query.trim().toLocaleLowerCase())
         }
       >
-        <ComboboxChips ref={anchor}>
+        <ComboboxChips
+          ref={anchor}
+          className="pr-0 has-data-[slot=combobox-chip]:px-3 has-data-[slot=combobox-chip]:pr-0"
+        >
           <ComboboxValue>
             {(values: string[]) => (
               <>
@@ -156,14 +159,16 @@ export function TagSelector({
               </>
             )}
           </ComboboxValue>
-          <ComboboxTrigger
-            render={
-              <InputGroupButton
-                size="icon-xs"
-                aria-label="选择标签"
-              />
-            }
-          />
+          <InputGroupAddon align="inline-end" className="py-0">
+            <ComboboxTrigger
+              render={
+                <InputGroupButton
+                  size="icon-xs"
+                  aria-label="选择标签"
+                />
+              }
+            />
+          </InputGroupAddon>
         </ComboboxChips>
         <ComboboxContent anchor={anchor}>
           <ComboboxEmpty>

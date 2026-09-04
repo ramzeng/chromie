@@ -68,7 +68,7 @@ export function TagComboboxChip({
     <ComboboxChip
       className={cn(
         tagBadgeClassName,
-        'has-data-[slot=combobox-chip-remove]:pr-0',
+        'h-6 py-0 has-data-[slot=combobox-chip-remove]:pr-0',
         className
       )}
       {...props}

@@ -322,7 +322,7 @@ test('allows an exchange-traded and OTC fund with the same code', async () => {
     {
       workspace_id: workspaceId,
       account_id: accountId,
-      market: 'CN_OTC_FUND',
+      market: 'CN_OTC',
       symbol: '161725',
       name: '招商中证白酒指数(LOF)A',
       currency: 'CNY',
@@ -342,7 +342,7 @@ test('allows an exchange-traded and OTC fund with the same code', async () => {
   }>(listed).positions
   assert.deepEqual(
     positions.map(({ market, symbol }) => `${market}:${symbol}`).sort(),
-    ['CN:161725', 'CN_OTC_FUND:161725']
+    ['CN:161725', 'CN_OTC:161725']
   )
   assertValidOutput('chromie_list_positions', listed)
 })

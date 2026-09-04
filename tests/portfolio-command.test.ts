@@ -40,7 +40,7 @@ test('portfolio command schema rejects internal, oversized and unknown input', (
 test('accepts mainland OTC funds across storage, command and MCP boundaries', () => {
   const position = {
     id: 'position-fund',
-    market: 'CN_OTC_FUND',
+    market: 'CN_OTC',
     symbol: '017641',
     name: '摩根标普500指数(QDII)人民币A',
     currency: 'CNY',
@@ -49,7 +49,7 @@ test('accepts mainland OTC funds across storage, command and MCP boundaries', ()
     tagIds: []
   }
 
-  assert.equal(normalizeStoredPosition(position)?.market, 'CN_OTC_FUND')
+  assert.equal(normalizeStoredPosition(position)?.market, 'CN_OTC')
   assert.equal(portfolioCommandSchema.safeParse({
     type: 'save-position',
     workspaceId: 'workspace-1',

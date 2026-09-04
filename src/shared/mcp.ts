@@ -28,7 +28,7 @@ export type McpToolName = (typeof MCP_TOOL_NAMES)[number]
 const id = z.string().trim().min(1).max(128)
 const name = z.string().trim().min(1).max(60)
 const currency = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,12}$/)
-const market = z.enum(['CN', 'CN_OTC_FUND', 'HK', 'US', 'CC'])
+const market = z.enum(['CN', 'CN_OTC', 'HK', 'US', 'CC'])
 const baseCurrency = z.enum(['CNY', 'HKD', 'USD'])
 const accountType = z.enum([
   'Futu',
