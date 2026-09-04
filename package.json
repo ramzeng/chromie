@@ -60,7 +60,7 @@
     "vite": "^7.0.0"
   },
   "build": {
-    "appId": "com.ramzeng.chromie",
+    "appId": "com.ramzeng.Chromie",
     "productName": "Chromie",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
