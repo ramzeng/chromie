@@ -55,7 +55,7 @@ jobs:
         env:
           MAC_CSC_LINK_B64: ${{ secrets.MAC_CSC_LINK }}
           MAC_CSC_KEY_PASSWORD_VALUE: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_API_KEY_P8_B64: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_P8_VALUE: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY_ID_VALUE: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER_VALUE: ${{ secrets.APPLE_API_ISSUER }}
         run: |
@@ -64,7 +64,7 @@ jobs:
           missing=()
           [[ -n "$MAC_CSC_LINK_B64" ]] || missing+=(MAC_CSC_LINK)
           [[ -n "$MAC_CSC_KEY_PASSWORD_VALUE" ]] || missing+=(MAC_CSC_KEY_PASSWORD)
-          [[ -n "$APPLE_API_KEY_P8_B64" ]] || missing+=(APPLE_API_KEY_P8)
+          [[ -n "$APPLE_API_KEY_P8_VALUE" ]] || missing+=(APPLE_API_KEY_P8)
           [[ -n "$APPLE_API_KEY_ID_VALUE" ]] || missing+=(APPLE_API_KEY_ID)
           [[ -n "$APPLE_API_ISSUER_VALUE" ]] || missing+=(APPLE_API_ISSUER)
 
@@ -73,20 +73,37 @@ jobs:
             exit 1
           fi
 
-          certificate_path="$RUNNER_TEMP/developer-id-application.p12"
           api_key_path="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID_VALUE}.p8"
 
-          printf '%s' "$MAC_CSC_LINK_B64" | base64 --decode > "$certificate_path"
-          printf '%s' "$APPLE_API_KEY_P8_B64" | base64 --decode > "$api_key_path"
-          chmod 600 "$certificate_path" "$api_key_path"
+          # Accept the documented Base64 value as well as the complete PEM text.
+          # macOS base64 can silently turn a pasted PEM into garbage, so validate
+          # the decoded file before electron-builder reaches notarytool.
+          if [[ "$APPLE_API_KEY_P8_VALUE" == *"-----BEGIN PRIVATE KEY-----"* ]]; then
+            printf '%s' "$APPLE_API_KEY_P8_VALUE" > "$api_key_path"
+          elif ! printf '%s' "$APPLE_API_KEY_P8_VALUE" | base64 --decode > "$api_key_path"; then
+            echo "APPLE_API_KEY_P8 is neither a PEM private key nor valid Base64." >&2
+            exit 1
+          fi
+
+          if ! openssl pkey -in "$api_key_path" -noout >/dev/null 2>&1; then
+            echo "APPLE_API_KEY_P8 did not produce a valid PEM private key." >&2
+            echo "Store the complete AuthKey_*.p8 file as Base64 (recommended) or raw PEM text." >&2
+            exit 1
+          fi
+
+          chmod 600 "$api_key_path"
 
           {
-            echo "CSC_LINK=$certificate_path"
-            echo "CSC_KEY_PASSWORD=$MAC_CSC_KEY_PASSWORD_VALUE"
             echo "APPLE_API_KEY=$api_key_path"
             echo "APPLE_API_KEY_ID=$APPLE_API_KEY_ID_VALUE"
             echo "APPLE_API_ISSUER=$APPLE_API_ISSUER_VALUE"
           } >> "$GITHUB_ENV"
+
+      - name: Import Developer ID certificate
+        uses: apple-actions/import-codesign-certs@v7
+        with:
+          p12-file-base64: ${{ secrets.MAC_CSC_LINK }}
+          p12-password: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
 
       - name: Build, sign, and notarize universal app
         run: |
@@ -118,9 +135,9 @@ jobs:
           cd dist
           shasum -a 256 ./*.dmg ./*.zip > SHA256SUMS.txt
 
-      - name: Remove temporary credentials
+      - name: Remove temporary notarization credential
         if: always()
-        run: rm -f "$CSC_LINK" "$APPLE_API_KEY"
+        run: rm -f "$APPLE_API_KEY"
 
       - name: Upload test artifacts
         if: github.event_name == 'workflow_dispatch'
