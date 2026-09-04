@@ -18,7 +18,6 @@ import {
   EmptyMedia,
   EmptyTitle
 } from '@/components/ui/empty'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import { CHROMIE_LOGO_URL } from '@/lib/brand'
 
@@ -102,61 +101,28 @@ export function EmptyWorkspace({
   )
 }
 
-export function AppLoadingSkeleton() {
+export function AppLoadingScreen() {
   return (
-    <div
-      className="flex h-screen min-h-[600px] overflow-hidden bg-sidebar"
+    <main
+      data-slot="app-content"
+      className="relative grid h-screen min-h-[600px] place-items-center bg-background"
       role="status"
-      aria-label="正在加载资产数据"
+      aria-label="Chromie 正在启动"
     >
-      <div className="window-drag fixed inset-x-0 top-0 z-40 h-2" />
-      <aside data-slot="app-sidebar" className="w-64 shrink-0 bg-sidebar pt-8">
-        <div className="flex h-10 items-center gap-2 px-4">
-          <img
-            className="size-6 shrink-0 object-contain invert"
-            src={CHROMIE_LOGO_URL}
-            alt=""
-            aria-hidden="true"
-          />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="ml-auto size-7" />
+      <div className="window-drag absolute inset-x-0 top-0 h-12" />
+      <div className="flex flex-col items-center gap-4 text-center">
+        <img
+          className="size-14 object-contain invert"
+          src={CHROMIE_LOGO_URL}
+          alt=""
+          aria-hidden="true"
+        />
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner aria-hidden="true" />
+          <span>Chromie 正在启动...</span>
         </div>
-        <div className="mt-2 grid gap-3 px-5">
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-4 w-28" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="mt-4 h-4 w-20" />
-          <Skeleton className="h-9 w-full" />
-          <Skeleton className="h-9 w-4/5" />
-        </div>
-      </aside>
-      <main
-        data-slot="app-content"
-        className="@container min-w-0 flex-1 border-l border-border bg-background"
-      >
-        <div className="mx-auto w-full max-w-[96rem] px-4 pb-6 pt-10 lg:px-6">
-          <Skeleton className="h-8 w-40" />
-          <div className="mt-5 grid gap-2 @min-[36rem]:grid-cols-2 @min-[68rem]:grid-cols-4">
-            <Skeleton className="h-[104px] w-full" />
-            <Skeleton className="h-[104px] w-full" />
-            <Skeleton className="h-[104px] w-full" />
-            <Skeleton className="h-[104px] w-full" />
-          </div>
-          <div className="mt-6 grid gap-3 @min-[68rem]:grid-cols-2">
-            <Skeleton className="h-[300px] w-full" />
-            <Skeleton className="h-[300px] w-full" />
-          </div>
-          <div className="mt-6 overflow-hidden rounded-sm border border-border/70 bg-card p-4">
-            <Skeleton className="h-8 w-full" />
-            {[0, 1, 2, 3].map((item) => (
-              <Skeleton key={item} className="mt-3 h-10 w-full" />
-            ))}
-          </div>
-        </div>
-      </main>
-      <span className="sr-only">正在加载资产数据…</span>
-    </div>
+      </div>
+    </main>
   )
 }
 

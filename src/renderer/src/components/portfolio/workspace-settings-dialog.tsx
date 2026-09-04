@@ -1,4 +1,13 @@
-import { ChartCandlestick, Coins, Network, SlidersHorizontal, Trash2, Upload, Wrench } from 'lucide-react'
+import {
+  ChartCandlestick,
+  Coins,
+  Info,
+  Network,
+  SlidersHorizontal,
+  Trash2,
+  Upload,
+  Wrench
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -49,10 +58,14 @@ import {
 } from '@/lib/portfolio'
 import { cn } from '@/lib/utils'
 
+import { AboutSettingsSection } from './about-settings-section'
 import { type BaseDialogProps } from './dialog-shared'
 import { McpSettingsSection } from './mcp-settings-section'
 import { ProxySettingsSection } from './proxy-settings-section'
-import { useWorkspaceSettingsForm } from './use-workspace-settings-form'
+import {
+  useWorkspaceSettingsForm,
+  type WorkspaceSettingsSection
+} from './use-workspace-settings-form'
 export function WorkspaceSettingsDialog({
   open,
   onOpenChange,
@@ -68,7 +81,7 @@ export function WorkspaceSettingsDialog({
   onRequestDelete
 }: BaseDialogProps & {
   workspace: Workspace
-  initialSection?: 'basic' | 'currency' | 'quotes' | 'proxy' | 'mcp'
+  initialSection?: WorkspaceSettingsSection
   onSubmit: (input: WorkspaceSettingsInput) => Promise<void>
   proxyProfiles: ProxyProfileView[]
   onCreateProxyProfile: (input: ProxyProfileInput) => Promise<string>
@@ -126,12 +139,12 @@ export function WorkspaceSettingsDialog({
         <DialogHeader>
           <DialogTitle>工作区设置</DialogTitle>
           <DialogDescription className="sr-only">
-            管理工作区基础信息、币种与汇率、行情数据、网络代理、MCP 协议和工作区状态
+            管理工作区基础信息、币种与汇率、行情数据、网络代理、MCP 协议和应用信息
           </DialogDescription>
         </DialogHeader>
         <form
           className="contents"
-          aria-invalid={section !== 'mcp' && Boolean(error)}
+          aria-invalid={section !== 'mcp' && section !== 'about' && Boolean(error)}
           onSubmit={handleSubmit}
         >
           <DialogBody className="grid grid-cols-[10.5rem_minmax(0,1fr)] overflow-hidden p-0">
@@ -201,6 +214,19 @@ export function WorkspaceSettingsDialog({
                 >
                   <Wrench className="size-4" />
                   MCP 协议
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={cn(
+                    'h-9 justify-start gap-2.5 px-3 font-normal hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                    section === 'about' &&
+                      'bg-sidebar-accent font-medium text-sidebar-accent-foreground hover:bg-sidebar-accent'
+                  )}
+                  onClick={() => setSection('about')}
+                >
+                  <Info />
+                  关于
                 </Button>
               </nav>
             </aside>
@@ -482,35 +508,45 @@ export function WorkspaceSettingsDialog({
                     onTest={onTestProxy}
                   />
                 )}
+                {section === 'about' && <AboutSettingsSection />}
               </div>
             </ScrollArea>
           </DialogBody>
 
           <DialogFooter className="items-center sm:justify-end">
-            <div className="flex gap-2">
+            {section === 'about' ? (
               <Button
                 type="button"
-                variant="outline"
-                disabled={submitting}
                 onClick={() => onOpenChange(false)}
               >
-                取消
+                关闭
               </Button>
-              <Button
-                type="submit"
-                disabled={
-                  submitting ||
-                  (section !== 'mcp' &&
-                    (storageLocationStatus === 'loading' ||
-                      storageLocationStatus === 'unavailable')) ||
-                  (section === 'mcp' && (mcpLoading || Boolean(mcpError && !mcpConnection)))
-                }
-                aria-busy={submitting}
-              >
-                {submitting && <Spinner data-icon="inline-start" />}
-                {submitting ? '保存中…' : '保存'}
-              </Button>
-            </div>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={submitting}
+                  onClick={() => onOpenChange(false)}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={
+                    submitting ||
+                    (section !== 'mcp' &&
+                      (storageLocationStatus === 'loading' ||
+                        storageLocationStatus === 'unavailable')) ||
+                    (section === 'mcp' && (mcpLoading || Boolean(mcpError && !mcpConnection)))
+                  }
+                  aria-busy={submitting}
+                >
+                  {submitting && <Spinner data-icon="inline-start" />}
+                  {submitting ? '保存中…' : '保存'}
+                </Button>
+              </div>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
