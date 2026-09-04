@@ -107,7 +107,7 @@ export function AppLoadingScreen() {
       data-slot="app-content"
       className="relative grid h-screen min-h-[600px] place-items-center bg-background"
       role="status"
-      aria-label="正在加载资产数据"
+      aria-label="Chromie 正在启动"
     >
       <div className="window-drag absolute inset-x-0 top-0 h-12" />
       <div className="flex flex-col items-center gap-4 text-center">
@@ -119,7 +119,7 @@ export function AppLoadingScreen() {
         />
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner aria-hidden="true" />
-          <span>正在加载资产数据…</span>
+          <span>Chromie 正在启动...</span>
         </div>
       </div>
     </main>
