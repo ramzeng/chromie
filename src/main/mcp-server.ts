@@ -211,7 +211,7 @@ function registerTool(
 
 function buildServer(client: McpSocketClient): McpServer {
   const server = new McpServer(
-    { name: 'chromie', version: '0.2.0' },
+    { name: 'chromie', version: '0.3.0' },
     {
       instructions:
         'Chromie manages local financial portfolio data. Snapshot views are read-only. Never ask for or expose brokerage/API credentials; configure them only in the Chromie UI.'

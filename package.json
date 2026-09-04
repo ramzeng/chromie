@@ -1,6 +1,6 @@
 {
   "name": "chromie",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "A local-first asset manager for macOS",
   "main": "./out/main/index.js",
@@ -60,7 +60,7 @@
     "vite": "^7.0.0"
   },
   "build": {
-    "appId": "com.chromie.app",
+    "appId": "com.ramzeng.chromie",
     "productName": "Chromie",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
