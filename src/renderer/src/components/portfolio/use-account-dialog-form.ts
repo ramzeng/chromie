@@ -195,7 +195,7 @@ export function useAccountDialogForm({
       syncEnabled &&
       !['127.0.0.1', 'localhost', '::1'].includes(normalizedIbkrGatewayHost)
     ) {
-      failValidation('IBKR Client Portal Gateway 地址必须是本地回环地址')
+      failValidation('IB Gateway 地址必须是本地回环地址')
       return
     }
     if (
@@ -205,7 +205,7 @@ export function useAccountDialogForm({
         parsedIbkrGatewayPort < 1 ||
         parsedIbkrGatewayPort > 65535)
     ) {
-      failValidation('IBKR Client Portal Gateway 端口需为 1 至 65535')
+      failValidation('IB Gateway 端口需为 1 至 65535')
       return
     }
     if (
