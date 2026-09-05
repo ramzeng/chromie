@@ -1,17 +1,19 @@
-import { Badge } from '@/components/ui/badge'
-import { CHROMIE_APP_ICON_URL, CHROMIE_VERSION } from '@/lib/brand'
+import { Button } from '@/components/ui/button'
+import { CHROMIE_APP_ICON_URL, CHROMIE_GITHUB_URL, CHROMIE_VERSION } from '@/lib/brand'
 
 export function AboutSettingsSection() {
   return (
-    <section className="flex min-h-[430px] flex-col gap-5">
-      <h3 className="text-base font-semibold">关于</h3>
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 pb-10 text-center">
+    <section className="grid min-h-[430px] place-items-center pb-8 text-center">
+      <h3 className="sr-only">关于</h3>
+      <div className="flex max-w-full flex-col items-center">
         <img className="size-24" src={CHROMIE_APP_ICON_URL} alt="Chromie 标志" />
-        <h4 className="mt-2 text-xl font-semibold">Chromie</h4>
-        <p className="text-sm text-muted-foreground">运行在本地的 macOS 资产管理工具</p>
-        <Badge variant="secondary" className="mt-2">
-          v{CHROMIE_VERSION}
-        </Badge>
+        <h4 className="mt-5 text-2xl font-semibold tracking-tight">Chromie</h4>
+        <p className="mt-8 text-sm text-muted-foreground">版本 {CHROMIE_VERSION}</p>
+        <Button asChild variant="link" size="sm" className="mt-7 h-auto max-w-full p-0">
+          <a href={CHROMIE_GITHUB_URL} target="_blank" rel="noopener noreferrer">
+            <span className="truncate">github.com/ramzeng/chromie</span>
+          </a>
+        </Button>
       </div>
     </section>
   )

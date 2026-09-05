@@ -11,3 +11,5 @@ export const CHROMIE_APP_ICON_URL = new URL(
 ).href
 
 export const CHROMIE_VERSION = packageMetadata.version
+
+export const CHROMIE_GITHUB_URL = 'https://github.com/ramzeng/chromie'
