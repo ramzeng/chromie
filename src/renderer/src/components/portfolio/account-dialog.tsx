@@ -214,7 +214,7 @@ export function AccountDialog({
                   </Select>
                 </Field>
               )}
-              {type === 'Futu' && autoSync && (
+              {type === 'Futu' && (
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-medium">Futu OpenD 配置</p>
@@ -291,7 +291,7 @@ export function AccountDialog({
                   </div>
                 </div>
               )}
-              {type === 'Okx' && autoSync && (
+              {type === 'Okx' && (
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-medium">OKX API 配置</p>
@@ -450,7 +450,7 @@ export function AccountDialog({
                   </Field>
                 </div>
               )}
-              {type === 'Hstong' && autoSync && (
+              {type === 'Hstong' && (
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-medium">华盛 OpenAPI Gateway 配置</p>
@@ -525,7 +525,7 @@ export function AccountDialog({
                   </FieldGroup>
                 </div>
               )}
-              {type === 'Binance' && autoSync && (
+              {type === 'Binance' && (
                 <div className="grid gap-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-medium">币安 API 配置</p>
