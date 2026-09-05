@@ -280,14 +280,14 @@ export function AccountDetail({
           <span className="grid size-12 shrink-0 place-items-center">
             <AccountTypeIcon
               type={account.type}
-              className={account.type === 'Futu' ? 'size-12' : 'size-11'}
+              className="size-12"
             />
           </span>
           <div className="min-w-0">
             <h1 className="truncate text-2xl font-semibold tracking-[-0.035em]">
               {account.name}
             </h1>
-            <div className="mt-1.5 min-h-6">
+            <div className="mt-1.5 flex min-h-6">
               {account.tagIds.length > 0 ? (
                 <TagBadges tagIds={account.tagIds} tags={tags} />
               ) : (
