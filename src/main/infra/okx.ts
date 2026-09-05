@@ -29,6 +29,11 @@ type FundingBalance = {
   bal?: string
 }
 
+type SimpleEarnBalance = {
+  ccy?: string
+  amt?: string
+}
+
 type SpotTicker = {
   instId?: string
   last?: string
@@ -185,6 +190,7 @@ function addBalance(
 function toPositions(
   tradingBalances: TradingBalance[],
   fundingBalances: FundingBalance[],
+  simpleEarnBalances: SimpleEarnBalance[],
   prices: Map<string, number>
 ): OkxSyncedPosition[] {
   const balances = new Map<string, MergedBalance>()
@@ -213,6 +219,11 @@ function toPositions(
     addBalance(balances, symbol, balance.bal, symbol ? prices.get(symbol) : undefined)
   })
 
+  simpleEarnBalances.forEach((balance) => {
+    const symbol = balance.ccy?.toUpperCase()
+    addBalance(balances, symbol, balance.amt, symbol ? prices.get(symbol) : undefined)
+  })
+
   return [...balances.values()]
     .filter((balance) => Math.abs(balance.quantity) > Number.EPSILON)
     .filter((balance) => !balance.hasCompleteValue || Math.abs(balance.value) >= 1)
@@ -239,13 +250,23 @@ export async function syncOkxPositions(
 ): Promise<OkxSyncResult> {
   const credentials = requireOptions(options)
   try {
-    const [tradingBalances, fundingBalances, tickers] = await Promise.all([
+    const [tradingBalances, fundingBalances, simpleEarnBalances, tickers] = await Promise.all([
       privateGet<TradingBalance[]>(fetchImpl, '/api/v5/account/balance', credentials),
       privateGet<FundingBalance[]>(fetchImpl, '/api/v5/asset/balances', credentials),
+      privateGet<SimpleEarnBalance[]>(
+        fetchImpl,
+        '/api/v5/finance/savings/balance',
+        credentials
+      ),
       publicGet<SpotTicker[]>(fetchImpl, '/api/v5/market/tickers?instType=SPOT')
     ])
     return {
-      positions: toPositions(tradingBalances, fundingBalances, buildUsdPrices(tickers)),
+      positions: toPositions(
+        tradingBalances,
+        fundingBalances,
+        simpleEarnBalances,
+        buildUsdPrices(tickers)
+      ),
       syncedAt: new Date().toISOString()
     }
   } catch (error) {
