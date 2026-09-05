@@ -91,11 +91,13 @@ function createWindow(): void {
   }
 }
 
-function setDevelopmentAppIcon(): void {
-  if (process.platform !== 'darwin' || app.isPackaged) return
+function setDockIcon(): void {
+  if (process.platform !== 'darwin') return
 
   const icon = nativeImage.createFromPath(
-    join(__dirname, '../../resources/chromie-app-icon-knot.png')
+    app.isPackaged
+      ? join(process.resourcesPath, 'chromie-app-icon-knot.png')
+      : join(__dirname, '../../resources/chromie-app-icon-knot.png')
   )
   if (!icon.isEmpty()) app.dock?.setIcon(icon)
 }
@@ -197,7 +199,7 @@ app.whenReady().then(async () => {
     })
     return
   }
-  setDevelopmentAppIcon()
+  setDockIcon()
   await startApplication(
     dataPath,
     new StorageLocationService(dataPath, defaultDataPath, storageSettings)

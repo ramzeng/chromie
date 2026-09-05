@@ -2,6 +2,9 @@
 
 set -eu
 
+# This is an asset-authoring command. Commit its output and let release builds
+# consume that reviewed ICNS instead of rerasterizing the SVG with the runner's
+# macOS-specific version of sips.
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 source_svg="$project_dir/resources/chromie-app-icon-knot.svg"
 output_png="$project_dir/resources/chromie-app-icon-knot.png"

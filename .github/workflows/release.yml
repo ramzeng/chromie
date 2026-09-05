@@ -110,10 +110,12 @@ jobs:
         timeout-minutes: 3
         run: bash scripts/notarize-macos.sh validate
 
+      - name: Validate committed macOS icon
+        run: sh scripts/verify-macos-icon.sh
+
       - name: Build and sign universal app
         timeout-minutes: 25
         run: |
-          pnpm icons:mac
           pnpm build
           pnpm exec electron-builder \
             --mac dir \
@@ -133,6 +135,7 @@ jobs:
           [[ "$architectures" == *x86_64* ]] || { echo "Universal app is missing x86_64." >&2; exit 1; }
 
           codesign --verify --deep --strict --verbose=2 "$app_path"
+          sh scripts/verify-macos-icon.sh "$app_path"
 
       - name: Submit app for notarization
         id: submit_notarization
