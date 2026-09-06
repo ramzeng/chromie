@@ -86,9 +86,9 @@ pnpm typecheck
 pnpm build:mac
 ```
 
-`pnpm build:mac` 会在 `dist/` 下生成 macOS 安装包。正式分发还需要 Apple Developer 签名、notarization，以及 Xcode 26 或更高版本来编译 Icon Composer 资源。
+`pnpm build:mac` 会在 `dist/` 下生成 macOS 安装包。正式分发还需要 Apple Developer 签名和 notarization。
 
-macOS 26 使用仓库中的 `resources/Chromie.icon`，其中图层已关闭玻璃、高光、阴影和透明材质；旧系统与 DMG 卷图标继续使用 `.icns`。修改图标 SVG 后，先运行 `pnpm icons:mac`，检查生成效果，再一并提交 PNG、ICNS 和 `.icon` 成品。
+macOS 构建会校验并使用仓库中已提交的 `.icns`。修改图标 SVG 后，先运行 `pnpm icons:mac`，检查生成效果，再一并提交 PNG 和 ICNS 成品。
 
 ## 开发
 
