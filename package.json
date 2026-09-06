@@ -54,7 +54,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
     "electron": "^44.0.0",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "tailwindcss": "^4.1.12",
     "tsx": "^4.23.13",
@@ -80,7 +80,7 @@
     ],
     "mac": {
       "category": "public.app-category.finance",
-      "icon": "resources/chromie-app-icon-knot.icns",
+      "icon": "resources/Chromie.icon",
       "hardenedRuntime": true,
       "type": "distribution",
       "notarize": true,
@@ -88,6 +88,9 @@
         "dmg",
         "zip"
       ]
+    },
+    "dmg": {
+      "icon": "resources/chromie-app-icon-knot.icns"
     }
   },
   "packageManager": "pnpm@9.15.9"
