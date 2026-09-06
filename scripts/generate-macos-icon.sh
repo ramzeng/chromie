@@ -2,13 +2,13 @@
 
 set -eu
 
-# This is an asset-authoring command. Commit its output and let release builds
-# consume that reviewed ICNS instead of rerasterizing the SVG with the runner's
-# macOS-specific version of sips.
+# This is an asset-authoring command. Commit its output so development, legacy
+# macOS/DMG icons, and the modern Icon Composer package share reviewed artwork.
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 source_svg="$project_dir/resources/chromie-app-icon-knot.svg"
 output_png="$project_dir/resources/chromie-app-icon-knot.png"
 output_icns="$project_dir/resources/chromie-app-icon-knot.icns"
+composer_svg="$project_dir/resources/Chromie.icon/Assets/chromie-knot.svg"
 icon_tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/chromie-icon.XXXXXX")
 iconset_dir="$icon_tmp_dir/Chromie.iconset"
 
@@ -54,5 +54,10 @@ render_icon 1024 icon_512x512@2x.png 48
 iconutil -c icns "$iconset_dir" -o "$icon_tmp_dir/Chromie.icns"
 cp "$iconset_dir/icon_512x512@2x.png" "$output_png"
 cp "$icon_tmp_dir/Chromie.icns" "$output_icns"
+sed \
+  -e '/<title /d' \
+  -e '/<rect /d' \
+  -e 's/ role="img" aria-labelledby="title"//' \
+  "$source_svg" > "$composer_svg"
 
-echo "Generated $output_png and $output_icns"
+echo "Generated $output_png, $output_icns, and $composer_svg"

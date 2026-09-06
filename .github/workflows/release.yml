@@ -28,6 +28,16 @@ jobs:
         with:
           node-version: 22
 
+      - name: Select Xcode 26 for Icon Composer assets
+        run: |
+          set -euo pipefail
+          xcode_app="$(find /Applications -maxdepth 1 -type d -name 'Xcode_26*.app' -print | sort | tail -n 1)"
+          [[ -n "$xcode_app" ]] || { echo "Xcode 26 is required to compile resources/Chromie.icon." >&2; exit 1; }
+          sudo xcode-select --switch "$xcode_app/Contents/Developer"
+          dirname "$(xcrun --find actool)" >> "$GITHUB_PATH"
+          xcodebuild -version
+          xcrun actool --version
+
       - name: Set up pnpm
         run: |
           corepack enable
