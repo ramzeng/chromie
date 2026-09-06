@@ -17,12 +17,18 @@ import type {
   PortfolioOperations,
   PositionPriceUpdate
 } from './portfolio-service'
+import {
+  diagnosticErrorMessage,
+  type SyncDiagnosticLogger
+} from './sync-diagnostics'
 
 const MAX_CONCURRENT_PRICE_LOOKUPS = 4
 
 type PriceRefreshTarget = {
   accountId: string
+  accountName: string
   positionId: string
+  positionName: string
   provider: AssetQuoteProvider
   expected: Pick<Position, 'market' | 'symbol' | 'currency' | 'price'>
 }
@@ -30,7 +36,7 @@ type PriceRefreshTarget = {
 type PriceLookupOutcome =
   | { status: 'found'; price: number; currency?: string }
   | { status: 'not-found' }
-  | { status: 'unavailable' }
+  | { status: 'unavailable'; reason: string }
 
 function requireWorkspace(data: AppData, workspaceId: string): Workspace {
   const workspace = data.workspaces.find((item) => item.id === workspaceId)
@@ -85,7 +91,8 @@ export class PositionPriceRefreshCoordinator {
 
   constructor(
     private readonly portfolio: PortfolioOperations,
-    private readonly desktop: Pick<DesktopOperations, 'lookupAssetQuote'>
+    private readonly desktop: Pick<DesktopOperations, 'lookupAssetQuote'>,
+    private readonly diagnostics?: SyncDiagnosticLogger
   ) {}
 
   refreshPositionPrices(
@@ -94,13 +101,47 @@ export class PositionPriceRefreshCoordinator {
   ): Promise<PortfolioPriceRefreshResponse> {
     const key = `${workspaceId}\u0000${accountId ?? '*'}`
     const existing = this.refreshingScopes.get(key)
-    if (existing) return existing
+    if (existing) {
+      this.diagnostics?.('info', 'price-refresh.coalesced', {
+        workspaceId,
+        accountId: accountId ?? null
+      })
+      return existing
+    }
 
-    const pending = this.performRefresh(workspaceId, accountId).finally(() => {
-      if (this.refreshingScopes.get(key) === pending) {
-        this.refreshingScopes.delete(key)
-      }
+    const startedAt = Date.now()
+    this.diagnostics?.('info', 'price-refresh.started', {
+      workspaceId,
+      accountId: accountId ?? null
     })
+    const pending = this.performRefresh(workspaceId, accountId)
+      .then((result) => {
+        this.diagnostics?.('info', 'price-refresh.completed', {
+          workspaceId,
+          accountId: accountId ?? null,
+          positionCount: result.positionCount,
+          refreshedCount: result.refreshedCount,
+          notFoundCount: result.notFoundCount,
+          unavailableCount: result.unavailableCount,
+          conflictCount: result.conflictCount,
+          durationMs: Date.now() - startedAt
+        })
+        return result
+      })
+      .catch((error: unknown) => {
+        this.diagnostics?.('error', 'price-refresh.failed', {
+          workspaceId,
+          accountId: accountId ?? null,
+          error: diagnosticErrorMessage(error),
+          durationMs: Date.now() - startedAt
+        })
+        throw error
+      })
+      .finally(() => {
+        if (this.refreshingScopes.get(key) === pending) {
+          this.refreshingScopes.delete(key)
+        }
+      })
     this.refreshingScopes.set(key, pending)
     return pending
   }
@@ -119,7 +160,9 @@ export class PositionPriceRefreshCoordinator {
         ? []
         : account.positions.map((position) => ({
             accountId: account.id,
+            accountName: account.name,
             positionId: position.id,
+            positionName: position.name,
             provider: resolveAssetQuoteProvider(
               position.market,
               workspace.stockQuoteProvider,
@@ -137,6 +180,13 @@ export class PositionPriceRefreshCoordinator {
     const uniqueTargets = [
       ...new Map(targets.map((target) => [priceLookupKey(target), target])).values()
     ]
+    this.diagnostics?.('info', 'price-refresh.targets-resolved', {
+      workspaceId,
+      accountId: accountId ?? null,
+      accountCount: accounts.length,
+      positionCount: targets.length,
+      uniqueQuoteCount: uniqueTargets.length
+    })
     const outcomes = await mapWithConcurrency(
       uniqueTargets,
       MAX_CONCURRENT_PRICE_LOOKUPS,
@@ -153,12 +203,26 @@ export class PositionPriceRefreshCoordinator {
       const outcome = outcomesByKey.get(priceLookupKey(target))
       if (!outcome || outcome.status === 'unavailable') {
         unavailableCount += 1
+        this.diagnostics?.('warn', 'price-refresh.position-unavailable', {
+          ...this.targetDiagnosticDetails(target),
+          reason: outcome?.status === 'unavailable'
+            ? outcome.reason
+            : 'lookup-result-missing'
+        })
         return
       }
       if (outcome.status === 'not-found') {
         notFoundCount += 1
+        this.diagnostics?.('warn', 'price-refresh.position-not-found',
+          this.targetDiagnosticDetails(target)
+        )
         return
       }
+      this.diagnostics?.('info', 'price-refresh.position-ready', {
+        ...this.targetDiagnosticDetails(target),
+        nextPrice: outcome.price,
+        nextCurrency: outcome.currency ?? target.expected.currency
+      })
       updates.push({
         accountId: target.accountId,
         positionId: target.positionId,
@@ -173,6 +237,14 @@ export class PositionPriceRefreshCoordinator {
       workspaceId,
       updates
     )
+    if (committed.conflictCount > 0) {
+      this.diagnostics?.('warn', 'price-refresh.commit-conflict', {
+        workspaceId,
+        accountId: accountId ?? null,
+        attemptedUpdateCount: updates.length,
+        conflictCount: committed.conflictCount
+      })
+    }
     return {
       positionCount: targets.length,
       refreshedCount: committed.appliedCount,
@@ -187,7 +259,9 @@ export class PositionPriceRefreshCoordinator {
     target: PriceRefreshTarget
   ): Promise<PriceLookupOutcome> {
     const lookup = this.desktop.lookupAssetQuote
-    if (!lookup) return { status: 'unavailable' }
+    if (!lookup) {
+      return { status: 'unavailable', reason: 'quote-adapter-not-configured' }
+    }
 
     const input: AssetQuoteLookupInput = {
       market: target.expected.market,
@@ -195,8 +269,11 @@ export class PositionPriceRefreshCoordinator {
       provider: target.provider
     }
     try {
-      const result = await lookup(input)
-      if (result.status !== 'found') return result
+      const result = await lookup.call(this.desktop, input)
+      if (result.status === 'not-found') return result
+      if (result.status === 'unavailable') {
+        return { status: 'unavailable', reason: 'quote-provider-unavailable' }
+      }
       const { quote } = result
       const currency = quote.currency?.trim().toUpperCase()
       if (
@@ -208,15 +285,34 @@ export class PositionPriceRefreshCoordinator {
         quote.price < 0 ||
         (currency !== undefined && !isCurrencyCode(currency))
       ) {
-        return { status: 'unavailable' }
+        return { status: 'unavailable', reason: 'invalid-quote-response' }
       }
       return {
         status: 'found',
         price: quote.price,
         ...(currency ? { currency } : {})
       }
-    } catch {
-      return { status: 'unavailable' }
+    } catch (error) {
+      return {
+        status: 'unavailable',
+        reason: `lookup-threw: ${diagnosticErrorMessage(error)}`
+      }
+    }
+  }
+
+  private targetDiagnosticDetails(
+    target: PriceRefreshTarget
+  ): Readonly<Record<string, unknown>> {
+    return {
+      accountId: target.accountId,
+      accountName: target.accountName,
+      positionId: target.positionId,
+      positionName: target.positionName,
+      market: target.expected.market,
+      symbol: target.expected.symbol,
+      provider: target.provider,
+      currentPrice: target.expected.price,
+      currentCurrency: target.expected.currency
     }
   }
 }

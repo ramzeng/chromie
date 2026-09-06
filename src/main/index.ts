@@ -29,6 +29,7 @@ import { ExchangeRateService } from './service/exchange-rate-service'
 import { McpSettingsService } from './service/mcp-settings-service'
 import { PortfolioModule } from './service/portfolio-module'
 import { PortfolioService } from './service/portfolio-service'
+import type { SyncDiagnosticLogger } from './service/sync-diagnostics'
 import { registerDesktopIpc } from './transport/electron-ipc'
 import { McpSocketHost, type McpHostOperations } from './transport/mcp-socket'
 
@@ -106,6 +107,16 @@ async function startApplication(
   dataPath: string,
   storageLocationService: StorageLocationService
 ): Promise<void> {
+  const syncDiagnostics: SyncDiagnosticLogger | undefined = app.isPackaged
+    ? undefined
+    : (level, event, details) => {
+        const write = level === 'error'
+          ? console.error
+          : level === 'warn'
+            ? console.warn
+            : console.info
+        write(`[portfolio-sync] ${event}`, details)
+      }
   const mcpSocketPath = join(dataPath, 'mcp.sock')
   const mcpTokenPath = join(dataPath, 'mcp-token')
 
@@ -146,8 +157,12 @@ async function startApplication(
     directFetch: (input, init) => directSession.fetch(input.toString(), init),
     createProxyFetch,
     testProxyConnection
-  })
-  const portfolioModule = new PortfolioModule(portfolioService, desktopService)
+  }, syncDiagnostics)
+  const portfolioModule = new PortfolioModule(
+    portfolioService,
+    desktopService,
+    syncDiagnostics
+  )
   const mcpSettingsService = new McpSettingsService(mcpSettingsRepository)
   const mcpHost = new McpSocketHost(
     portfolioModule,

@@ -11,6 +11,7 @@ import {
   DesktopService,
   type DesktopServiceDependencies
 } from '../src/main/service/desktop-service'
+import type { SyncDiagnosticLogger } from '../src/main/service/sync-diagnostics'
 import type { AssetQuoteLookupInput } from '../src/shared/asset-quotes'
 
 test('maps mainland and Hong Kong symbols to East Money quote ids', () => {
@@ -68,6 +69,43 @@ test('extracts stock name, scaled price and market currency from East Money', as
     name: '贵州茅台',
     currency: 'CNY',
     price: 1297.5
+  })
+})
+
+test('falls back to the delayed East Money endpoint when the primary endpoint disconnects', async () => {
+  const requestedUrls: string[] = []
+  const quote = await fetchAssetQuote(
+    { market: 'HK', symbol: '00700', provider: 'eastmoney' },
+    async (input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url.startsWith('https://push2.eastmoney.com/')) {
+        throw new Error('net::ERR_EMPTY_RESPONSE')
+      }
+      return new Response(JSON.stringify({
+        data: {
+          f43: 442_800,
+          f57: '00700',
+          f58: '腾讯控股',
+          f59: 3
+        }
+      }), { status: 200 })
+    }
+  )
+
+  assert.equal(requestedUrls.length, 2)
+  assert.match(requestedUrls[0], /^https:\/\/push2\.eastmoney\.com\//)
+  assert.match(requestedUrls[1], /^https:\/\/push2delay\.eastmoney\.com\//)
+  assert.deepEqual(quote && {
+    source: quote.source,
+    name: quote.name,
+    currency: quote.currency,
+    price: quote.price
+  }, {
+    source: 'eastmoney',
+    name: '腾讯控股',
+    currency: 'HKD',
+    price: 442.8
   })
 })
 
@@ -358,16 +396,38 @@ test('loads an editable quote from Yahoo Finance when selected', async () => {
   })
 })
 
-test('keeps provider failures silent for manual entry fallback', async () => {
+test('keeps provider failures silent for manual entry fallback and logs the cause', async () => {
+  const diagnostics: Array<{
+    level: string
+    event: string
+    details: Readonly<Record<string, unknown>>
+  }> = []
+  const logger: SyncDiagnosticLogger = (level, event, details) => {
+    diagnostics.push({ level, event, details })
+  }
   const desktop = new DesktopService({
     lookupAssetQuote: async () => {
       throw new Error('HTTP 429')
     }
-  } as unknown as DesktopServiceDependencies)
+  } as unknown as DesktopServiceDependencies, logger)
 
   assert.deepEqual(await desktop.lookupAssetQuote({
     market: 'US',
     symbol: 'AAPL',
     provider: 'yahoo'
   }), { status: 'unavailable' })
+  assert.deepEqual(
+    diagnostics.map(({ level, event }) => ({ level, event })),
+    [
+      { level: 'info', event: 'quote.lookup.started' },
+      { level: 'error', event: 'quote.lookup.failed' }
+    ]
+  )
+  assert.deepEqual(diagnostics[1].details, {
+    market: 'US',
+    symbol: 'AAPL',
+    provider: 'yahoo',
+    error: 'HTTP 429',
+    durationMs: diagnostics[1].details.durationMs
+  })
 })

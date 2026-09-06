@@ -10,6 +10,11 @@ export type AccountPositionPriceSyncResult = {
   accountId: string
   successCount: number
   failureCount: number
+  failureDetails?: {
+    notFoundCount: number
+    unavailableCount: number
+    conflictCount: number
+  }
   error?: string
 }
 
@@ -26,7 +31,14 @@ export type PositionPriceSyncOperations = {
 
 function cleanOperationError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
-  return message.replace(/^Error invoking remote method '[^']+': Error: /, '')
+  const withoutIpcPrefix = message.replace(
+    /^Error invoking remote method '[^']+':\s*/,
+    ''
+  )
+  return (
+    withoutIpcPrefix.replace(/^(?:[\w$]*Error:\s*)+/, '').trim() ||
+    '未知错误'
+  )
 }
 
 async function syncAccountPositionPrices(
@@ -48,13 +60,23 @@ async function syncAccountPositionPrices(
       workspaceId,
       account.id
     )
+    const failureCount =
+      result.notFoundCount +
+      result.unavailableCount +
+      result.conflictCount
     return {
       accountId: account.id,
       successCount: result.refreshedCount,
-      failureCount:
-        result.notFoundCount +
-        result.unavailableCount +
-        result.conflictCount
+      failureCount,
+      ...(failureCount > 0
+        ? {
+            failureDetails: {
+              notFoundCount: result.notFoundCount,
+              unavailableCount: result.unavailableCount,
+              conflictCount: result.conflictCount
+            }
+          }
+        : {})
     }
   } catch (error) {
     return {

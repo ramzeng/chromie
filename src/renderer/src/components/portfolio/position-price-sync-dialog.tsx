@@ -1,6 +1,5 @@
 import { useRef, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
 
 import { AccountTypeIcon } from '@/components/portfolio/view-helpers'
 import { Badge } from '@/components/ui/badge'
@@ -52,6 +51,68 @@ type PriceSyncRowState =
   | { status: 'pending' | 'syncing' }
   | { status: 'completed'; result: AccountPositionPriceSyncResult }
 
+function formatFailureDetails(result: AccountPositionPriceSyncResult): string {
+  if (result.error) return result.error
+
+  const details = result.failureDetails
+  if (!details) return `${result.failureCount} 项未能更新`
+
+  const message = [
+    details.notFoundCount > 0
+      ? `未找到行情 ${details.notFoundCount} 项`
+      : '',
+    details.unavailableCount > 0
+      ? `数据源暂不可用 ${details.unavailableCount} 项`
+      : '',
+    details.conflictCount > 0
+      ? `持仓已变更、已跳过 ${details.conflictCount} 项`
+      : ''
+  ]
+    .filter(Boolean)
+    .join('，')
+
+  return message || `${result.failureCount} 项未能更新`
+}
+
+function PriceSyncStatus({
+  accountName,
+  state
+}: {
+  accountName: string
+  state?: PriceSyncRowState
+}) {
+  if (state?.status === 'syncing') {
+    return <Badge variant="secondary">处理</Badge>
+  }
+
+  if (state?.status !== 'completed') {
+    return <Badge variant="outline">等待</Badge>
+  }
+
+  const { result } = state
+  if (!result.error && result.failureCount === 0) {
+    return <Badge variant="secondary">成功</Badge>
+  }
+
+  const failureDetails = formatFailureDetails(result)
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          variant="destructive"
+          tabIndex={0}
+          aria-label={`${accountName}同步失败：${failureDetails}`}
+        >
+          失败
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent className="w-fit min-w-0 max-w-72 break-words text-pretty">
+        {failureDetails}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function PositionPriceSyncDialog({
   workspace,
   syncAccount,
@@ -78,12 +139,14 @@ export function PositionPriceSyncDialog({
   const [hasCompleted, setHasCompleted] = useState(false)
   const runningRef = useRef(false)
   const accounts = workspace.accounts
-  const allSelected =
-    accounts.length > 0 &&
-    accounts.every((account) => selectedAccountIds.has(account.id))
-  const someSelected = accounts.some((account) =>
-    selectedAccountIds.has(account.id)
+  const selectedAccountCount = accounts.reduce(
+    (total, account) =>
+      total + (selectedAccountIds.has(account.id) ? 1 : 0),
+    0
   )
+  const allSelected =
+    accounts.length > 0 && selectedAccountCount === accounts.length
+  const someSelected = selectedAccountCount > 0
 
   function handleOpenChange(nextOpen: boolean): void {
     if (runningRef.current) return
@@ -124,7 +187,7 @@ export function PositionPriceSyncDialog({
     )
 
     try {
-      const results = await syncPositionPricesForAccounts({
+      await syncPositionPricesForAccounts({
         workspaceId: workspace.id,
         accounts: selectedAccounts,
         operations: { syncAccount, refreshPositionPrices },
@@ -141,24 +204,6 @@ export function PositionPriceSyncDialog({
           }))
         }
       })
-      const successCount = results.reduce(
-        (total, result) => total + result.successCount,
-        0
-      )
-      const failureCount = results.reduce(
-        (total, result) => total + result.failureCount,
-        0
-      )
-      const failedAccountCount = results.filter((result) => result.error).length
-      if (failureCount === 0 && failedAccountCount === 0) {
-        toast.success(`价格同步完成，共成功 ${successCount} 项`)
-      } else {
-        toast.info(
-          `价格同步完成：成功 ${successCount} 项，失败 ${failureCount} 项${
-            failedAccountCount ? `，${failedAccountCount} 个账户异常` : ''
-          }`
-        )
-      }
       setHasCompleted(true)
     } finally {
       runningRef.current = false
@@ -174,7 +219,16 @@ export function PositionPriceSyncDialog({
           同步价格
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl"
+        showCloseButton={!running}
+        onEscapeKeyDown={(event) => {
+          if (runningRef.current) event.preventDefault()
+        }}
+        onPointerDownOutside={(event) => {
+          if (runningRef.current) event.preventDefault()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>同步持仓价格</DialogTitle>
           <DialogDescription>
@@ -209,15 +263,18 @@ export function PositionPriceSyncDialog({
                             }}
                           />
                         </TableHead>
-                        <TableHead className="min-w-52">账户</TableHead>
-                        <TableHead className="w-24 whitespace-nowrap text-right">
+                        <TableHead className="min-w-40">账户</TableHead>
+                        <TableHead className="w-20 whitespace-nowrap text-right">
                           持仓数
                         </TableHead>
-                        <TableHead className="w-24 whitespace-nowrap text-right">
+                        <TableHead className="w-20 whitespace-nowrap text-right">
                           成功数
                         </TableHead>
-                        <TableHead className="w-24 whitespace-nowrap text-right">
+                        <TableHead className="w-20 whitespace-nowrap text-right">
                           失败数
+                        </TableHead>
+                        <TableHead className="w-24 whitespace-nowrap text-right">
+                          同步状态
                         </TableHead>
                       </TableRow>
                     </TableHeader>
@@ -247,44 +304,25 @@ export function PositionPriceSyncDialog({
                                   type={account.type}
                                   className="size-4 shrink-0"
                                 />
-                                <span className="min-w-0 truncate font-medium">
+                                <span className="min-w-0 flex-1 truncate font-medium">
                                   {account.name}
                                 </span>
-                                {state?.status === 'syncing' && (
-                                  <Spinner aria-label={`${account.name} 正在同步`} />
-                                )}
-                                {result?.error && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Badge
-                                        variant="destructive"
-                                        className="shrink-0"
-                                        tabIndex={0}
-                                      >
-                                        失败
-                                      </Badge>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="max-w-80">
-                                      {result.error}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )}
                               </div>
                             </TableCell>
                             <TableCell className="text-right tabular-nums">
                               {account.positions.length}
                             </TableCell>
-                            <TableCell
-                              className="text-right tabular-nums"
-                              aria-live="polite"
-                            >
+                            <TableCell className="text-right tabular-nums">
                               {result ? result.successCount : '-'}
                             </TableCell>
-                            <TableCell
-                              className="text-right tabular-nums"
-                              aria-live="polite"
-                            >
+                            <TableCell className="text-right tabular-nums">
                               {result ? result.failureCount : '-'}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap text-right">
+                              <PriceSyncStatus
+                                accountName={account.name}
+                                state={state}
+                              />
                             </TableCell>
                           </TableRow>
                         )
@@ -305,7 +343,7 @@ export function PositionPriceSyncDialog({
         </DialogBody>
         <DialogFooter className="items-center sm:justify-between">
           <span className="text-xs text-muted-foreground">
-            已选择 {selectedAccountIds.size} / {accounts.length} 个账户
+            已选择 {selectedAccountCount} / {accounts.length} 个账户
           </span>
           <div className="flex w-full gap-2 sm:w-auto">
             <Button
@@ -320,7 +358,7 @@ export function PositionPriceSyncDialog({
             <Button
               type="button"
               className="flex-1 sm:flex-none"
-              disabled={running || selectedAccountIds.size === 0}
+              disabled={running || selectedAccountCount === 0}
               aria-busy={running}
               onClick={() => void handleStart()}
             >

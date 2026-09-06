@@ -10,6 +10,10 @@ import type { DesktopOperations } from './desktop-service'
 import { PortfolioSyncConflictError, type PortfolioOperations } from './portfolio-service'
 
 import { McpOperationError } from './mcp-operation-error'
+import {
+  diagnosticErrorMessage,
+  type SyncDiagnosticLogger
+} from './sync-diagnostics'
 
 function requireWorkspace(data: AppData, workspaceId: string): Workspace {
   const workspace = data.workspaces.find((item) => item.id === workspaceId)
@@ -30,19 +34,51 @@ export class AccountSyncCoordinator {
 
   constructor(
     private readonly portfolio: PortfolioOperations,
-    private readonly desktop: DesktopOperations
+    private readonly desktop: DesktopOperations,
+    private readonly diagnostics?: SyncDiagnosticLogger
   ) {}
 
   syncAccount(workspaceId: string, accountId: string): Promise<PortfolioSyncResponse> {
     const key = `${workspaceId}\u0000${accountId}`
     const existing = this.syncingAccounts.get(key)
-    if (existing) return existing
+    if (existing) {
+      this.diagnostics?.('info', 'account-sync.coalesced', {
+        workspaceId,
+        accountId
+      })
+      return existing
+    }
 
-    const pending = this.performAccountSync(workspaceId, accountId).finally(() => {
-      if (this.syncingAccounts.get(key) === pending) {
-        this.syncingAccounts.delete(key)
-      }
+    const startedAt = Date.now()
+    this.diagnostics?.('info', 'account-sync.started', {
+      workspaceId,
+      accountId
     })
+    const pending = this.performAccountSync(workspaceId, accountId)
+      .then((result) => {
+        this.diagnostics?.('info', 'account-sync.completed', {
+          workspaceId,
+          accountId,
+          positionCount: result.positionCount,
+          syncedAt: result.syncedAt,
+          durationMs: Date.now() - startedAt
+        })
+        return result
+      })
+      .catch((error: unknown) => {
+        this.diagnostics?.('error', 'account-sync.failed', {
+          workspaceId,
+          accountId,
+          error: diagnosticErrorMessage(error),
+          durationMs: Date.now() - startedAt
+        })
+        throw error
+      })
+      .finally(() => {
+        if (this.syncingAccounts.get(key) === pending) {
+          this.syncingAccounts.delete(key)
+        }
+      })
     this.syncingAccounts.set(key, pending)
     return pending
   }

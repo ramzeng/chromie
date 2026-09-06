@@ -7,12 +7,17 @@ import type {
 } from '../src/shared/asset-quotes'
 import type { PositionInput } from '../src/shared/portfolio'
 import { portfolioPriceRefreshTargetSchema } from '../src/shared/portfolio-command'
-import type { DesktopOperations } from '../src/main/service/desktop-service'
+import {
+  DesktopService,
+  type DesktopOperations,
+  type DesktopServiceDependencies
+} from '../src/main/service/desktop-service'
 import {
   McpOperationError,
   PortfolioModule
 } from '../src/main/service/portfolio-module'
 import { PortfolioService } from '../src/main/service/portfolio-service'
+import type { SyncDiagnosticLogger } from '../src/main/service/sync-diagnostics'
 
 class MemoryRepository {
   content: string | null = null
@@ -56,16 +61,103 @@ function desktopFake(lookupAssetQuote?: QuoteLookup): DesktopOperations {
   }
 }
 
-function createModule(lookupAssetQuote?: QuoteLookup) {
+function createModule(
+  lookupAssetQuote?: QuoteLookup,
+  diagnostics?: SyncDiagnosticLogger
+) {
   const portfolio = new PortfolioService(
     new MemoryRepository(),
     new MemoryRepository()
   )
   return {
-    module: new PortfolioModule(portfolio, desktopFake(lookupAssetQuote)),
+    module: new PortfolioModule(
+      portfolio,
+      desktopFake(lookupAssetQuote),
+      diagnostics
+    ),
     portfolio
   }
 }
+
+test('logs the account, position and reason for unmatched manual quotes', async () => {
+  const diagnostics: Array<{
+    event: string
+    details: Readonly<Record<string, unknown>>
+  }> = []
+  const { module } = createModule(
+    async () => ({ status: 'not-found' }),
+    (_level, event, details) => diagnostics.push({ event, details })
+  )
+  const workspaceId = await createWorkspace(module)
+  const accountId = await createManualAccount(module, workspaceId, '养老金')
+  await savePosition(module, workspaceId, accountId, {
+    market: 'CN_OTC',
+    symbol: '000216',
+    name: '华安黄金ETF联接A',
+    currency: 'CNY',
+    quantity: 1,
+    price: 3.3417
+  })
+
+  await module.refreshPositionPrices(workspaceId, accountId)
+
+  const unmatched = diagnostics.find(
+    ({ event }) => event === 'price-refresh.position-not-found'
+  )
+  assert.deepEqual(unmatched?.details, {
+    accountId,
+    accountName: '养老金',
+    positionId: unmatched?.details.positionId,
+    positionName: '华安黄金ETF联接A',
+    market: 'CN_OTC',
+    symbol: '000216',
+    provider: 'eastmoney',
+    currentPrice: 3.3417,
+    currentCurrency: 'CNY'
+  })
+  assert.ok(diagnostics.some(({ event, details }) =>
+    event === 'price-refresh.completed' &&
+    details.notFoundCount === 1 &&
+    details.refreshedCount === 0
+  ))
+})
+
+test('preserves the DesktopService receiver while refreshing a quote', async () => {
+  const portfolio = new PortfolioService(
+    new MemoryRepository(),
+    new MemoryRepository()
+  )
+  const desktop = new DesktopService({
+    lookupAssetQuote: async (input: AssetQuoteLookupInput) => ({
+      market: input.market,
+      symbol: input.symbol,
+      source: input.provider,
+      currency: 'HKD',
+      price: 450,
+      fetchedAt: '2026-09-06T00:00:00.000Z'
+    })
+  } as unknown as DesktopServiceDependencies)
+  const module = new PortfolioModule(portfolio, desktop)
+  const workspaceId = await createWorkspace(module)
+  const accountId = await createManualAccount(module, workspaceId, '是然中银国际')
+  await savePosition(module, workspaceId, accountId, {
+    market: 'HK',
+    symbol: '00700',
+    name: '腾讯控股',
+    currency: 'HKD',
+    quantity: 571,
+    price: 442.8
+  })
+
+  const result = await module.refreshPositionPrices(workspaceId, accountId)
+
+  assert.equal(result.refreshedCount, 1)
+  assert.equal(result.unavailableCount, 0)
+  assert.equal(
+    (await module.load()).data.workspaces[0].accounts[0].positions[0].price,
+    450
+  )
+})
 
 async function createWorkspace(module: PortfolioModule): Promise<string> {
   const created = await module.execute({

@@ -86,7 +86,12 @@ test('routes automatic accounts to account sync and manual accounts to quote ref
     {
       accountId: 'manual',
       successCount: 2,
-      failureCount: 2
+      failureCount: 2,
+      failureDetails: {
+        notFoundCount: 1,
+        unavailableCount: 1,
+        conflictCount: 0
+      }
     }
   ])
 })
@@ -121,4 +126,46 @@ test('keeps syncing other accounts when one account fails', async () => {
       failureCount: 0
     }
   ])
+})
+
+test('uses a readable fallback when an operation throws an empty error', async () => {
+  const results = await syncPositionPricesForAccounts({
+    workspaceId: 'workspace-1',
+    accounts: [account('broken', 1, true)],
+    operations: {
+      syncAccount: async () => {
+        throw new Error('')
+      },
+      refreshPositionPrices: async () => manualResult(0, 0, 0, 0)
+    }
+  })
+
+  assert.deepEqual(results, [
+    {
+      accountId: 'broken',
+      successCount: 0,
+      failureCount: 1,
+      error: '未知错误'
+    }
+  ])
+})
+
+test('removes Electron and custom error type prefixes', async () => {
+  const results = await syncPositionPricesForAccounts({
+    workspaceId: 'workspace-1',
+    accounts: [account('broken', 1, true)],
+    operations: {
+      syncAccount: async () => {
+        throw new Error(
+          "Error invoking remote method 'portfolio:sync-account': McpOperationError: OKX 同步失败：net::ERR_ADDRESS_UNREACHABLE"
+        )
+      },
+      refreshPositionPrices: async () => manualResult(0, 0, 0, 0)
+    }
+  })
+
+  assert.equal(
+    results[0].error,
+    'OKX 同步失败：net::ERR_ADDRESS_UNREACHABLE'
+  )
 })

@@ -32,6 +32,10 @@ import type {
   ProxyTestTarget
 } from '../../shared/integrations'
 import type { FetchLike } from '../infra/proxy-http'
+import {
+  diagnosticErrorMessage,
+  type SyncDiagnosticLogger
+} from './sync-diagnostics'
 
 type NetworkSyncConfig = {
   route: AccountNetworkRoute
@@ -86,7 +90,10 @@ export interface DesktopOperations {
 }
 
 export class DesktopService implements DesktopOperations {
-  constructor(private readonly dependencies: DesktopServiceDependencies) {}
+  constructor(
+    private readonly dependencies: DesktopServiceDependencies,
+    private readonly diagnostics?: SyncDiagnosticLogger
+  ) {}
 
   syncPositions(request: AssetSyncRequest): Promise<AssetSyncResult> {
     switch (request.provider) {
@@ -122,7 +129,12 @@ export class DesktopService implements DesktopOperations {
   }
 
   async lookupAssetQuote(input: unknown): Promise<AssetQuoteLookupResult> {
-    if (!input || typeof input !== 'object') throw new Error('行情查询请求无效')
+    if (!input || typeof input !== 'object') {
+      this.diagnostics?.('warn', 'quote.lookup.rejected', {
+        reason: 'request-is-not-an-object'
+      })
+      throw new Error('行情查询请求无效')
+    }
     const request = input as Partial<AssetQuoteLookupInput>
     const market = request.market
     const provider = request.provider
@@ -144,18 +156,65 @@ export class DesktopService implements DesktopOperations {
           ? !CRYPTO_QUOTE_PROVIDERS.includes(provider as CryptoQuoteProvider)
           : !STOCK_QUOTE_PROVIDERS.includes(provider as StockQuoteProvider))
     ) {
+      this.diagnostics?.('warn', 'quote.lookup.rejected', {
+        reason: 'invalid-market-symbol-or-provider',
+        market,
+        symbol,
+        provider
+      })
       throw new Error('行情查询请求无效')
     }
-    if (!this.dependencies.lookupAssetQuote) return { status: 'unavailable' }
+    if (!this.dependencies.lookupAssetQuote) {
+      this.diagnostics?.('warn', 'quote.lookup.unavailable', {
+        reason: 'quote-adapter-not-configured',
+        market,
+        symbol,
+        provider
+      })
+      return { status: 'unavailable' }
+    }
 
+    const startedAt = Date.now()
+    this.diagnostics?.('info', 'quote.lookup.started', {
+      market,
+      symbol,
+      provider
+    })
     try {
       const quote = await this.dependencies.lookupAssetQuote({
         market,
         symbol,
         provider: provider as AssetQuoteLookupInput['provider']
       })
-      return quote ? { status: 'found', quote } : { status: 'not-found' }
-    } catch {
+      if (!quote) {
+        this.diagnostics?.('warn', 'quote.lookup.not-found', {
+          market,
+          symbol,
+          provider,
+          durationMs: Date.now() - startedAt
+        })
+        return { status: 'not-found' }
+      }
+      this.diagnostics?.('info', 'quote.lookup.found', {
+        market,
+        symbol,
+        provider,
+        quoteMarket: quote.market,
+        quoteSymbol: quote.symbol,
+        quoteSource: quote.source,
+        price: quote.price,
+        currency: quote.currency,
+        durationMs: Date.now() - startedAt
+      })
+      return { status: 'found', quote }
+    } catch (error) {
+      this.diagnostics?.('error', 'quote.lookup.failed', {
+        market,
+        symbol,
+        provider,
+        error: diagnosticErrorMessage(error),
+        durationMs: Date.now() - startedAt
+      })
       return { status: 'unavailable' }
     }
   }

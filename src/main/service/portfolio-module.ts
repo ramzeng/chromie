@@ -17,6 +17,7 @@ import { AccountSyncCoordinator } from './account-sync-coordinator'
 import type { DesktopOperations } from './desktop-service'
 import { PortfolioMcpController } from './portfolio-mcp-controller'
 import { PositionPriceRefreshCoordinator } from './position-price-refresh-coordinator'
+import type { SyncDiagnosticLogger } from './sync-diagnostics'
 import type {
   PortfolioChangeListener,
   PortfolioOperations,
@@ -47,10 +48,15 @@ export class PortfolioModule implements PortfolioModuleOperations {
 
   constructor(
     private readonly portfolio: PortfolioOperations,
-    desktop: DesktopOperations
+    desktop: DesktopOperations,
+    diagnostics?: SyncDiagnosticLogger
   ) {
-    this.accountSync = new AccountSyncCoordinator(portfolio, desktop)
-    this.positionPrices = new PositionPriceRefreshCoordinator(portfolio, desktop)
+    this.accountSync = new AccountSyncCoordinator(portfolio, desktop, diagnostics)
+    this.positionPrices = new PositionPriceRefreshCoordinator(
+      portfolio,
+      desktop,
+      diagnostics
+    )
     this.mcp = new PortfolioMcpController(portfolio, desktop, (workspaceId, accountId) =>
       this.accountSync.syncAccount(workspaceId, accountId)
     )

@@ -5,6 +5,7 @@ import type {
 } from '../../shared/asset-quotes'
 
 const EASTMONEY_QUOTE_URL = 'https://push2.eastmoney.com/api/qt/stock/get'
+const EASTMONEY_DELAY_QUOTE_URL = 'https://push2delay.eastmoney.com/api/qt/stock/get'
 const EASTMONEY_SEARCH_URL = 'https://searchapi.eastmoney.com/api/suggest/get'
 const EASTMONEY_FUND_NAV_URL = 'https://api.fund.eastmoney.com/f10/lsjz'
 const EASTMONEY_FUND_REFERER = 'https://fundf10.eastmoney.com/'
@@ -259,14 +260,38 @@ async function fetchEastMoneyQuote(
   fetchImpl: FetchLike,
   signal: AbortSignal
 ): Promise<AssetQuote | null> {
-  const url = new URL(EASTMONEY_QUOTE_URL)
-  url.searchParams.set('secid', quoteId)
-  url.searchParams.set('fields', 'f43,f57,f58,f59')
-  const response = await fetchJson<EastMoneyQuoteResponse>(
-    url.toString(),
-    fetchImpl,
-    signal
-  )
+  const quoteUrl = (baseUrl: string): string => {
+    const url = new URL(baseUrl)
+    url.searchParams.set('secid', quoteId)
+    url.searchParams.set('fields', 'f43,f57,f58,f59')
+    return url.toString()
+  }
+  let response: EastMoneyQuoteResponse | null
+  try {
+    response = await fetchJson<EastMoneyQuoteResponse>(
+      quoteUrl(EASTMONEY_QUOTE_URL),
+      fetchImpl,
+      signal
+    )
+  } catch (primaryError) {
+    try {
+      response = await fetchJson<EastMoneyQuoteResponse>(
+        quoteUrl(EASTMONEY_DELAY_QUOTE_URL),
+        fetchImpl,
+        signal
+      )
+    } catch (fallbackError) {
+      const primaryMessage = primaryError instanceof Error
+        ? primaryError.message
+        : String(primaryError)
+      const fallbackMessage = fallbackError instanceof Error
+        ? fallbackError.message
+        : String(fallbackError)
+      throw new Error(
+        `东方财富行情接口不可用（主接口：${primaryMessage}；备用接口：${fallbackMessage}）`
+      )
+    }
+  }
   const data = response?.data
   if (!data) return null
 
