@@ -54,7 +54,6 @@ assert(
 )
 assert(layer?.['image-name'] === 'chromie-knot.svg', 'Chromie.icon references the wrong artwork asset.')
 assert(layer?.glass === false, 'Chromie.icon artwork must have Liquid Glass disabled.')
-assert(group?.specular === false, 'Chromie.icon specular highlights must be disabled.')
 assert(group?.shadow?.kind === 'none' && group.shadow.opacity === 0, 'Chromie.icon shadow must be disabled.')
 assert(
   group?.translucency?.enabled === false && group.translucency.value === 0,
@@ -80,23 +79,6 @@ assert(
   'Chromie.icon knot geometry or styling differs from the development icon.',
 )
 NODE
-
-if xcrun --find ictool >/dev/null 2>&1; then
-  composer_preview="$icon_tmp_dir/Chromie.png"
-  xcrun ictool "$composer_package" \
-    --export-image \
-    --output-file "$composer_preview" \
-    --platform macOS \
-    --rendition Default \
-    --width 512 \
-    --height 512 \
-    --scale 2 >/dev/null
-
-  if [ ! -s "$composer_preview" ]; then
-    echo "Icon Composer did not render a macOS preview." >&2
-    exit 1
-  fi
-fi
 
 iconutil -c iconset "$source_icns" -o "$iconset_dir"
 

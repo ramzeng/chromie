@@ -15,7 +15,6 @@
         "kind": "none",
         "opacity": 0
       },
-      "specular": false,
       "translucency": {
         "enabled": false,
         "value": 0
