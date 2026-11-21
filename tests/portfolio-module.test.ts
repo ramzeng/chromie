@@ -585,3 +585,63 @@ test('account sync is deduplicated and rejects stale results after configuration
   assert.equal(account.type, 'General')
   assert.deepEqual(account.positions, [])
 })
+
+test('MCP compares a snapshot with current data and explains the change', async () => {
+  const module = createModule()
+  const workspaceId = dataOf<{ workspace_id: string }>(await module.callMcpTool(
+    'chromie_create_workspace',
+    { name: '家庭资产', base_currency: 'CNY' },
+    fullAccess
+  )).workspace_id
+  const accountId = dataOf<{ account_id: string }>(await module.callMcpTool(
+    'chromie_create_account',
+    { workspace_id: workspaceId, name: '券商账户', type: 'General' },
+    fullAccess
+  )).account_id
+  const positionId = dataOf<{ position: { id: string } }>(await module.callMcpTool(
+    'chromie_create_position',
+    {
+      workspace_id: workspaceId,
+      account_id: accountId,
+      market: 'US',
+      symbol: 'AAPL',
+      name: 'Apple',
+      currency: 'USD',
+      quantity: 2,
+      price: 100
+    },
+    fullAccess
+  )).position.id
+  await module.callMcpTool('chromie_create_snapshot', { workspace_id: workspaceId }, fullAccess)
+  await module.callMcpTool(
+    'chromie_update_position',
+    { workspace_id: workspaceId, account_id: accountId, position_id: positionId, price: 90 },
+    fullAccess
+  )
+
+  const snapshots = dataOf<{ snapshots: Array<{ id: string }> }>(await module.callMcpTool(
+    'chromie_list_snapshots',
+    { workspace_id: workspaceId },
+    readAccess
+  )).snapshots
+  const compared = await module.callMcpTool(
+    'chromie_compare_snapshots',
+    {
+      workspace_id: workspaceId,
+      from: { kind: 'snapshot', snapshot_id: snapshots[0].id }
+    },
+    readAccess
+  )
+  assertValidOutput('chromie_compare_snapshots', compared)
+  const data = dataOf<{
+    direction: string
+    headline: string
+    total: { change: number; effects: { price: number } }
+    positions: Array<{ symbol: string; kind: string }>
+  }>(compared)
+  assert.equal(data.direction, 'down')
+  assert.equal(data.total.change, -140)
+  assert.equal(data.total.effects.price, -140)
+  assert.equal(data.headline, '资产减少 140.00 CNY（-10.00%）')
+  assert.deepEqual(data.positions.map((item) => [item.symbol, item.kind]), [['AAPL', 'unchanged']])
+})

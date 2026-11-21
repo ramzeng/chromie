@@ -8,6 +8,7 @@ export const MCP_TOOL_NAMES = [
   'chromie_get_portfolio_overview',
   'chromie_list_positions',
   'chromie_list_snapshots',
+  'chromie_compare_snapshots',
   'chromie_create_workspace',
   'chromie_update_workspace',
   'chromie_create_tag',
@@ -84,6 +85,19 @@ export const listPositionsInputSchema = z.object({
 }).strict()
 
 export const listSnapshotsInputSchema = z.object({ workspace_id: id }).strict()
+
+export const compareSnapshotsInputSchema = z.object({
+  workspace_id: id,
+  from: mcpViewSchema.describe('对比起点，通常是较早的快照'),
+  to: mcpViewSchema.describe('对比终点，默认为当前数据').optional(),
+  position_limit: z.number()
+    .int()
+    .min(0)
+    .max(100)
+    .describe('按变动金额绝对值返回的持仓明细数量，默认为 20')
+    .optional()
+    .default(20)
+}).strict()
 
 export const createWorkspaceInputSchema = z.object({
   name: z.string().trim().min(1).max(40),
@@ -215,6 +229,7 @@ export const mcpToolInputSchemas = {
   chromie_get_portfolio_overview: getPortfolioOverviewInputSchema,
   chromie_list_positions: listPositionsInputSchema,
   chromie_list_snapshots: listSnapshotsInputSchema,
+  chromie_compare_snapshots: compareSnapshotsInputSchema,
   chromie_create_workspace: createWorkspaceInputSchema,
   chromie_update_workspace: updateWorkspaceInputSchema,
   chromie_create_tag: createTagInputSchema,
@@ -298,6 +313,12 @@ const valuationOutputSchema = z.object({
   converted_market_value: z.number().optional(),
   missing_currencies: z.array(z.string()),
   missing_price_count: count
+}).strict()
+const comparisonEffectsOutputSchema = z.object({
+  price: z.number(),
+  exchange_rate: z.number(),
+  bought: z.number(),
+  sold: z.number()
 }).strict()
 const errorDataSchema = z.object({
   code: z.string(),
@@ -389,6 +410,64 @@ export const mcpToolOutputSchemas = {
       tag_count: count,
       position_count: count,
       exchange_rates_fetched_at: z.string().nullable()
+    }).strict())
+  }).strict()),
+  chromie_compare_snapshots: toolOutputSchema(z.object({
+    from: viewOutputSchema,
+    to: viewOutputSchema,
+    base_currency: baseCurrency,
+    direction: z.enum(['up', 'down', 'flat']),
+    headline: z.string(),
+    summary: z.string(),
+    reasons: z.array(z.string()),
+    notes: z.array(z.string()),
+    total: z.object({
+      from_value: z.number(),
+      to_value: z.number(),
+      change: z.number(),
+      change_percent: z.number().optional(),
+      market_change: z.number(),
+      market_change_percent: z.number().optional(),
+      trade_change: z.number(),
+      effects: comparisonEffectsOutputSchema,
+      complete: z.boolean(),
+      unavailable_count: count
+    }).strict(),
+    accounts: z.array(z.object({
+      id,
+      name: z.string(),
+      from_value: z.number(),
+      to_value: z.number(),
+      change: z.number(),
+      effects: comparisonEffectsOutputSchema,
+      position_count: count,
+      unavailable_count: count
+    }).strict()),
+    currencies: z.array(z.object({
+      currency: z.string(),
+      from_rate: z.number().optional(),
+      to_rate: z.number().optional(),
+      rate_change_percent: z.number().optional(),
+      exchange_rate_effect: z.number()
+    }).strict()),
+    position_total: count,
+    positions: z.array(z.object({
+      account: z.object({ id, name: z.string() }).strict(),
+      market,
+      symbol: z.string(),
+      name: z.string(),
+      currency: z.string(),
+      kind: z.enum(['opened', 'closed', 'increased', 'decreased', 'unchanged']),
+      from_quantity: z.number().optional(),
+      to_quantity: z.number().optional(),
+      from_price: z.number().optional(),
+      to_price: z.number().optional(),
+      from_value: z.number().optional(),
+      to_value: z.number().optional(),
+      change: z.number().optional(),
+      price_change_percent: z.number().optional(),
+      effects: comparisonEffectsOutputSchema.optional(),
+      unavailable_reason: z.enum(['missing-price', 'missing-rate']).optional()
     }).strict())
   }).strict()),
   chromie_create_workspace: toolOutputSchema(workspaceIdOutputSchema),

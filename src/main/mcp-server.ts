@@ -68,6 +68,11 @@ const TOOL_DEFINITIONS: Record<McpToolName, ToolDefinition> = {
     description: '列出工作区在时间机器中的历史快照及其内容统计。',
     annotations: readOnlyAnnotations
   },
+  chromie_compare_snapshots: {
+    title: '对比资产快照',
+    description: '对比两个时间点（历史快照或当前数据）的资产，判断上涨还是下跌，并把市值变动拆解为市场涨跌（价格、汇率）和买卖调仓（买入、卖出），附带结论、原因以及账户、币种和持仓明细。',
+    annotations: readOnlyAnnotations
+  },
   chromie_create_workspace: {
     title: '创建 Chromie 工作区',
     description: '创建一个新的独立工作区。',
