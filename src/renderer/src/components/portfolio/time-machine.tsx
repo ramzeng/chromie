@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import {
   Ellipsis,
   Eye,
+  GitCompareArrows,
   History,
   Plus,
   RefreshCw,
@@ -24,6 +26,10 @@ import {
   useTablePagination
 } from '@/components/portfolio/table-pagination'
 import { PortfolioPage, PortfolioPageHeader } from '@/components/portfolio/page-shell'
+import {
+  LATEST_COMPARISON_POINT,
+  SnapshotComparison
+} from '@/components/portfolio/snapshot-comparison'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
@@ -74,6 +80,10 @@ export function TimeMachine({
   onViewSnapshot: (snapshotId: string) => void
   onDeleteSnapshot: (snapshot: WorkspaceSnapshot) => void
 }) {
+  const [comparison, setComparison] = useState<{
+    fromId: string
+    toId: string
+  } | null>(null)
   const [sort, onSort] = useTableSort<
     'workspace' | 'time' | 'accounts' | 'positions' | 'value'
   >('time', 'desc')
@@ -145,6 +155,26 @@ export function TimeMachine({
     paginationResetKey
   )
   const visibleRows = rows.slice(pagination.startIndex, pagination.endIndex)
+  const latestSnapshot = snapshots.reduce<WorkspaceSnapshot | undefined>(
+    (latest, snapshot) =>
+      !latest || Date.parse(snapshot.createdAt) > Date.parse(latest.createdAt)
+        ? snapshot
+        : latest,
+    undefined
+  )
+
+  if (comparison) {
+    return (
+      <SnapshotComparison
+        workspace={workspace}
+        snapshots={snapshots}
+        liveRates={liveExchangeRates.snapshot?.rates}
+        initialFromId={comparison.fromId}
+        initialToId={comparison.toId}
+        onBack={() => setComparison(null)}
+      />
+    )
+  }
 
   return (
     <PortfolioPage>
@@ -152,25 +182,42 @@ export function TimeMachine({
         <div>
           <h1 className="text-2xl font-semibold tracking-[-0.035em]">时间机器</h1>
         </div>
-        <Button
-          onClick={() => void onCreate()}
-          disabled={readOnly || selectedSnapshotId !== null || creating}
-          aria-busy={creating}
-          title={
-            readOnly
-              ? '示例工作区为只读'
-              : selectedSnapshotId
-                ? '请先切换到当前数据'
-                : undefined
-          }
-        >
-          {creating ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
-            <Plus data-icon="inline-start" />
-          )}
-          {creating ? '创建中…' : '创建快照'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            disabled={!latestSnapshot}
+            title={latestSnapshot ? undefined : '创建快照后即可对比'}
+            onClick={() =>
+              latestSnapshot &&
+              setComparison({
+                fromId: latestSnapshot.id,
+                toId: LATEST_COMPARISON_POINT
+              })
+            }
+          >
+            <GitCompareArrows data-icon="inline-start" />
+            对比
+          </Button>
+          <Button
+            onClick={() => void onCreate()}
+            disabled={readOnly || selectedSnapshotId !== null || creating}
+            aria-busy={creating}
+            title={
+              readOnly
+                ? '示例工作区为只读'
+                : selectedSnapshotId
+                  ? '请先切换到当前数据'
+                  : undefined
+            }
+          >
+            {creating ? (
+              <Spinner data-icon="inline-start" />
+            ) : (
+              <Plus data-icon="inline-start" />
+            )}
+            {creating ? '创建中…' : '创建快照'}
+          </Button>
+        </div>
       </PortfolioPageHeader>
 
       <section className="mt-5 overflow-hidden rounded-sm border border-border/70 bg-card">
@@ -316,6 +363,19 @@ export function TimeMachine({
                             <Eye className="size-4" />
                             {isSelected ? '当前数据' : '查看'}
                           </DropdownMenuItem>
+                          {row.kind === 'snapshot' && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setComparison({
+                                  fromId: row.id,
+                                  toId: LATEST_COMPARISON_POINT
+                                })
+                              }
+                            >
+                              <GitCompareArrows className="size-4" />
+                              与当前数据对比
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuGroup>
                         {row.kind === 'snapshot' && !readOnly && (
                           <>

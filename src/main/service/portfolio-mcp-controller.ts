@@ -1,5 +1,6 @@
 import {
   DEFAULT_MCP_ACCESS_SETTINGS,
+  compareSnapshotsInputSchema,
   createAccountInputSchema,
   createPositionInputSchema,
   createSnapshotInputSchema,
@@ -88,6 +89,8 @@ export class PortfolioMcpController {
         return await this.queries.listPositions(listPositionsInputSchema.parse(parsed.data))
       case 'chromie_list_snapshots':
         return await this.queries.listSnapshots(listSnapshotsInputSchema.parse(parsed.data))
+      case 'chromie_compare_snapshots':
+        return await this.queries.compareSnapshots(compareSnapshotsInputSchema.parse(parsed.data))
       case 'chromie_create_workspace':
         return await this.commands.createWorkspace(createWorkspaceInputSchema.parse(parsed.data))
       case 'chromie_update_workspace':
