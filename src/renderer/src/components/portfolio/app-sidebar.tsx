@@ -1,6 +1,6 @@
 import {
   ArrowLeftRight,
-  ChartSpline,
+  ChartPie,
   ChevronUp,
   History,
   LogOut,
@@ -178,7 +178,7 @@ export function AppSidebar({
                 )}
                 onClick={onShowOverview}
               >
-                <ChartSpline />
+                <ChartPie />
                 资产概览
               </Button>
               <Button
