@@ -102,6 +102,7 @@ export type PortfolioComparison = {
   marketChange: number
   marketChangePercent?: number
   tradeChange: number
+  rebalanceAmount: number
   effects: ComparisonEffects
   positions: PositionComparison[]
   accounts: AccountComparison[]
@@ -269,6 +270,11 @@ export function tradeEffect(effects: ComparisonEffects): number {
   return effects.bought + effects.sold
 }
 
+// 卖出所得又买入其他持仓的部分视为内部调仓，不改变总资产；剩余部分才是资金净转入或转出。
+export function rebalanceEffect(effects: ComparisonEffects): number {
+  return Math.max(0, Math.min(effects.bought, -effects.sold))
+}
+
 export function comparePortfolios(
   from: ComparisonPoint,
   to: ComparisonPoint,
@@ -373,6 +379,7 @@ export function comparePortfolios(
     marketChange,
     ...(marketChangePercent === undefined ? {} : { marketChangePercent }),
     tradeChange: tradeEffect(effects),
+    rebalanceAmount: rebalanceEffect(effects),
     effects,
     positions: positions.sort((left, right) => {
       if (!left.effects || !right.effects) {
@@ -455,6 +462,7 @@ export type ComparisonDriver = {
 export type ComparisonInsights = {
   headline: string
   summary: string
+  tradeSummary?: string
   drivers: ComparisonDriver[]
   notes: string[]
 }
@@ -513,6 +521,28 @@ function driverItems(
   return contributors.sort((left, right) => right.value * direction - left.value * direction)
 }
 
+export function netFlowLabel(value: number): string {
+  if (!isMeaningfulChange(value)) return '资金进出'
+  return value > 0 ? '净转入' : '净转出'
+}
+
+function describeTrades(comparison: PortfolioComparison): string | undefined {
+  const bought = comparison.effects.bought
+  const sold = -comparison.effects.sold
+  const rebalance = comparison.rebalanceAmount
+  const net = comparison.tradeChange
+  const amount = (value: number) => formatCompactAmount(Math.abs(value))
+  if (!isMeaningfulChange(bought) && !isMeaningfulChange(sold)) return undefined
+  if (!isMeaningfulChange(sold)) return `买入 ${amount(bought)}，全部是新投入的资金`
+  if (!isMeaningfulChange(bought)) return `卖出 ${amount(sold)}，所得没有再买入其他持仓，全部转出`
+  if (!isMeaningfulChange(net)) {
+    return `卖出 ${amount(sold)}，又全部买入了其他持仓，属于内部调仓，总资产不变`
+  }
+  return net < 0
+    ? `卖出 ${amount(sold)}，其中 ${amount(rebalance)}又买入了其他持仓（内部调仓），其余 ${amount(net)}转出`
+    : `买入 ${amount(bought)}，其中 ${amount(rebalance)}来自卖出其他持仓（内部调仓），其余 ${amount(net)}是新投入的资金`
+}
+
 export function describeComparison(comparison: PortfolioComparison): ComparisonInsights {
   const currency = comparison.baseCurrency
   const { effects } = comparison
@@ -532,8 +562,13 @@ export function describeComparison(comparison: PortfolioComparison): ComparisonI
   }
   if (isMeaningfulChange(comparison.tradeChange)) {
     parts.push(
-      `买卖调仓${comparison.tradeChange > 0 ? '净投入' : '净取出'} ${formatCompactAmount(Math.abs(comparison.tradeChange))}`
+      `${netFlowLabel(comparison.tradeChange)} ${formatCompactAmount(Math.abs(comparison.tradeChange))}` +
+        (isMeaningfulChange(comparison.rebalanceAmount)
+          ? `（另有 ${formatCompactAmount(comparison.rebalanceAmount)}在持仓间调仓）`
+          : '')
     )
+  } else if (isMeaningfulChange(comparison.rebalanceAmount)) {
+    parts.push(`${formatCompactAmount(comparison.rebalanceAmount)}在持仓间调仓，没有资金转入或转出`)
   }
   const summary = parts.length === 0
     ? '这段时间价格、汇率和持仓数量都没有明显变化'
@@ -563,7 +598,14 @@ export function describeComparison(comparison: PortfolioComparison): ComparisonI
     notes.push('买入和卖出金额按终点价格估算；卖出所得如果没有记为持仓，会体现为资金取出')
   }
 
-  return { headline, summary, drivers, notes }
+  const tradeSummary = describeTrades(comparison)
+  return {
+    headline,
+    summary,
+    ...(tradeSummary ? { tradeSummary } : {}),
+    drivers,
+    notes
+  }
 }
 
 // 每条原因压缩成一句话，供报告和 MCP 使用。
@@ -607,13 +649,14 @@ export function formatComparisonReport(
     '',
     `**${insights.headline}**，${insights.summary}。`,
     '',
+    ...(insights.tradeSummary ? [`${insights.tradeSummary}。`, ''] : []),
     '| 项目 | 金额 |',
     '| --- | ---: |',
     `| 起点市值 | ${formatMoney(comparison.fromValue, currency)} |`,
     `| 市场涨跌 | ${formatSignedMoney(comparison.marketChange, currency)}${comparison.marketChangePercent === undefined ? '' : `（${formatSignedPercent(comparison.marketChangePercent)}）`} |`,
     `| 　价格涨跌 | ${formatSignedMoney(comparison.effects.price, currency)} |`,
     `| 　汇率变动 | ${formatSignedMoney(comparison.effects.exchangeRate, currency)} |`,
-    `| 买卖调仓 | ${formatSignedMoney(comparison.tradeChange, currency)} |`,
+    `| ${netFlowLabel(comparison.tradeChange)} | ${formatSignedMoney(comparison.tradeChange, currency)} |`,
     `| 　买入 | ${formatSignedMoney(comparison.effects.bought, currency)} |`,
     `| 　卖出 | ${formatSignedMoney(comparison.effects.sold, currency)} |`,
     `| 终点市值 | ${formatMoney(comparison.toValue, currency)} |`

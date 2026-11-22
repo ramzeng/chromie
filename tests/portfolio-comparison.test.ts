@@ -149,7 +149,8 @@ test('comparison insights separate market moves from trades', () => {
 
   assert.equal(result.direction, 'up')
   assert.equal(insights.headline, '资产增加 5,600.00 CNY（+80.00%）')
-  assert.equal(insights.summary, '其中市场下跌亏了 700.00，买卖调仓净投入 6,300.00')
+  assert.equal(insights.summary, '其中市场下跌亏了 700.00，净转入 6,300.00')
+  assert.equal(insights.tradeSummary, '买入 6,300.00，全部是新投入的资金')
   assert.deepEqual(insights.drivers.map((driver) => driver.key), ['price', 'bought'])
   assert.equal(insights.drivers[0].title, '价格下跌')
   assert.deepEqual(insights.drivers[0].items.map((item) => item.label), ['Apple'])
@@ -182,6 +183,15 @@ test('comparison driver items only list contributors in the same direction as th
   assert.deepEqual(bought.items.map((item) => [item.label, item.detail]), [['Apple', '加仓']])
   assert.deepEqual(sold.items.map((item) => [item.label, item.detail]), [['Microsoft', '减仓']])
   assert.equal(insights.headline, '资产增加 63.00 万 CNY（+45.00%）')
+  assertClose(result.rebalanceAmount, 100 * 100 * 7)
+  assert.equal(
+    insights.summary,
+    '其中净转入 63.00 万（另有 7.00 万在持仓间调仓）'
+  )
+  assert.equal(
+    insights.tradeSummary,
+    '买入 70.00 万，其中 7.00 万来自卖出其他持仓（内部调仓），其余 63.00 万是新投入的资金'
+  )
 })
 
 test('comparison report renders a markdown summary', () => {
