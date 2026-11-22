@@ -419,6 +419,7 @@ export const mcpToolOutputSchemas = {
     direction: z.enum(['up', 'down', 'flat']),
     headline: z.string(),
     summary: z.string(),
+    trade_summary: z.string().optional(),
     reasons: z.array(z.string()),
     notes: z.array(z.string()),
     total: z.object({
@@ -429,6 +430,7 @@ export const mcpToolOutputSchemas = {
       market_change: z.number(),
       market_change_percent: z.number().optional(),
       trade_change: z.number(),
+      rebalance_amount: z.number(),
       effects: comparisonEffectsOutputSchema,
       complete: z.boolean(),
       unavailable_count: count

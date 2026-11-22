@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { AppContent } from '@/components/portfolio/app-content'
 import { AppSidebar } from '@/components/portfolio/app-sidebar'
+import type { MainView } from '@/components/portfolio/portfolio-navigation'
 import {
   AccountDialog,
   DeleteConfirmDialog,
@@ -98,7 +99,7 @@ export function App(): React.JSX.Element {
     : currentExchangeRates
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
-  const [showTimeMachine, setShowTimeMachine] = useState(false)
+  const [mainView, setMainView] = useState<MainView>('portfolio')
   const [workspaceDialog, setWorkspaceDialog] = useState<WorkspaceDialogState>({ open: false })
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false)
   const [workspaceSettingsOpen, setWorkspaceSettingsOpen] = useState(false)
@@ -427,25 +428,30 @@ export function App(): React.JSX.Element {
         selectedSnapshotId={selectedSnapshot?.id ?? null}
         selectedAccountId={selectedAccountId}
         selectedTagId={selectedTag?.id ?? null}
-        showTimeMachine={showTimeMachine}
+        mainView={mainView}
         onExitExampleWorkspace={() => setViewingExampleWorkspace(false)}
         onOpenWorkspaceSettings={() => {
           setWorkspaceSettingsSection('basic')
           setWorkspaceSettingsOpen(true)
         }}
         onShowOverview={() => {
-          setShowTimeMachine(false)
+          setMainView('portfolio')
+          setSelectedAccountId(null)
+          setSelectedTagId(null)
+        }}
+        onShowTrend={() => {
+          setMainView('trend')
           setSelectedAccountId(null)
           setSelectedTagId(null)
         }}
         onShowTimeMachine={() => {
-          setShowTimeMachine(true)
+          setMainView('timeMachine')
           setSelectedAccountId(null)
           setSelectedTagId(null)
         }}
         onAddAccount={() => setAccountDialog({ open: true })}
         onSelectAccount={(account) => {
-          setShowTimeMachine(false)
+          setMainView('portfolio')
           setSelectedTagId(null)
           setSelectedAccountId(account.id)
         }}
@@ -453,7 +459,7 @@ export function App(): React.JSX.Element {
         onDeleteAccount={(account) => setDeleteTarget({ kind: 'account', account })}
         onAddTag={() => setTagDialog({ open: true })}
         onSelectTag={(tag) => {
-          setShowTimeMachine(false)
+          setMainView('portfolio')
           setSelectedAccountId(null)
           setSelectedTagId(tag.id)
         }}
@@ -471,7 +477,7 @@ export function App(): React.JSX.Element {
         selectedAccount={selectedAccount}
         selectedTag={selectedTag}
         viewingExampleWorkspace={viewingExampleWorkspace}
-        showTimeMachine={showTimeMachine}
+        mainView={mainView}
         readOnly={readOnly}
         exchangeRates={exchangeRates}
         liveExchangeRates={currentExchangeRates}
@@ -482,11 +488,11 @@ export function App(): React.JSX.Element {
         onCreateSnapshot={createCurrentSnapshot}
         onViewLatest={() => {
           setSelectedSnapshotId(null)
-          setShowTimeMachine(false)
+          setMainView('portfolio')
         }}
         onViewSnapshot={(snapshotId) => {
           setSelectedSnapshotId(snapshotId)
-          setShowTimeMachine(false)
+          setMainView('portfolio')
         }}
         onDeleteSnapshot={(snapshot) => setDeleteTarget({ kind: 'snapshot', snapshot })}
         onOpenAccount={(accountId) => {
@@ -602,7 +608,7 @@ export function App(): React.JSX.Element {
             return
           }
           const tagId = await createTag(input)
-          setShowTimeMachine(false)
+          setMainView('portfolio')
           setSelectedAccountId(null)
           setSelectedTagId(tagId)
         }}

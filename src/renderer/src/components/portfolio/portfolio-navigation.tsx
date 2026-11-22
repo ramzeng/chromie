@@ -14,6 +14,9 @@ import type { Account, Tag } from '@/lib/portfolio'
 import { TagColorDot } from './tag-badge'
 import { AccountTypeIcon } from './view-helpers'
 
+// 侧边栏顶部的主页面；portfolio 时内容由所选账户或标签决定，未选择时显示资产概览。
+export type MainView = 'portfolio' | 'trend' | 'timeMachine'
+
 export const SELECTED_NAVIGATION_CLASS_NAME =
   'bg-sidebar-accent text-sidebar-accent-foreground'
 

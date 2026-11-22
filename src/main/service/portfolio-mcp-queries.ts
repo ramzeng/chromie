@@ -345,6 +345,7 @@ export class PortfolioMcpQueries {
       direction: comparison.direction,
       headline: insights.headline,
       summary: insights.summary,
+      ...(insights.tradeSummary ? { trade_summary: insights.tradeSummary } : {}),
       reasons: comparisonReasons(insights, comparison.baseCurrency),
       notes: insights.notes,
       total: {
@@ -359,6 +360,7 @@ export class PortfolioMcpQueries {
           ? {}
           : { market_change_percent: comparison.marketChangePercent }),
         trade_change: comparison.tradeChange,
+        rebalance_amount: comparison.rebalanceAmount,
         effects: effects(comparison.effects),
         complete: comparison.isComplete,
         unavailable_count: comparison.unavailableCount

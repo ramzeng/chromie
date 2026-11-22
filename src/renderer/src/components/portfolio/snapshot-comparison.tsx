@@ -65,6 +65,7 @@ import {
   formatSignedPercent,
   isMeaningfulChange,
   marketEffect,
+  netFlowLabel,
   positionChangeKindLabels,
   positionComparisonLabel,
   tradeEffect,
@@ -305,12 +306,18 @@ function ComparisonConclusion({
         </EquationTile>
         <EquationOperator>+</EquationOperator>
         <EquationTile
-          label="买卖调仓"
+          label={netFlowLabel(comparison.tradeChange)}
           detail={
-            <>
-              买入 <SignedValue value={effects.bought} compact />
-              {' · '}卖出 <SignedValue value={effects.sold} compact />
-            </>
+            isMeaningfulChange(comparison.rebalanceAmount) ? (
+              <>
+                另有 {formatCompactAmount(comparison.rebalanceAmount)} 内部调仓
+              </>
+            ) : (
+              <>
+                买入 <SignedValue value={effects.bought} compact />
+                {' · '}卖出 <SignedValue value={effects.sold} compact />
+              </>
+            )
           }
         >
           <SignedValue value={comparison.tradeChange} compact />
@@ -359,11 +366,13 @@ function DriverBlock({ driver }: { driver: ComparisonDriver }) {
 function DriverGroup({
   title,
   value,
+  summary,
   drivers,
   emptyText
 }: {
   title: string
   value: number
+  summary?: string
   drivers: ComparisonDriver[]
   emptyText: string
 }) {
@@ -373,6 +382,11 @@ function DriverGroup({
         <h3 className="text-sm font-medium text-muted-foreground">{title}</h3>
         <SignedValue value={value} compact className="text-base font-semibold" />
       </div>
+      {summary && (
+        <p className="mt-3 rounded-sm bg-muted/40 px-3 py-2 text-sm leading-6">
+          <MaskedAssetValue>{summary}</MaskedAssetValue>
+        </p>
+      )}
       {drivers.length > 0 ? (
         <div className="divide-y divide-border/50 pt-3">
           {drivers.map((driver) => (
@@ -407,6 +421,7 @@ function ComparisonReasons({ comparison }: { comparison: PortfolioComparison }) 
         <DriverGroup
           title="你的买卖操作"
           value={comparison.tradeChange}
+          summary={insights.tradeSummary}
           drivers={tradeDrivers}
           emptyText="没有买入或卖出"
         />
@@ -676,7 +691,7 @@ export function SnapshotComparison({
     <PortfolioPage>
       <PortfolioPageHeader>
         <div className="flex min-w-0 items-center gap-2">
-          <Button variant="ghost" size="icon-sm" aria-label="返回时间机器" onClick={onBack}>
+          <Button variant="ghost" size="icon-sm" aria-label="返回" onClick={onBack}>
             <ArrowLeft data-icon="icon-only" />
           </Button>
           <h1 className="text-2xl font-semibold tracking-[-0.035em]">快照对比</h1>
