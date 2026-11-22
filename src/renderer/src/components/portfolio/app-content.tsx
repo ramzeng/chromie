@@ -1,6 +1,8 @@
 import { AccountDetail, type AccountSyncState } from './account-detail'
 import { ExampleWorkspaceBanner, HistoricalVersionBanner } from './page-shell'
 import { Overview } from './overview'
+import { PortfolioTrend } from './portfolio-trend'
+import type { MainView } from './portfolio-navigation'
 import { TagDetail } from './tag-detail'
 import { TimeMachine } from './time-machine'
 import type { ExchangeRateView } from './view-helpers'
@@ -25,7 +27,7 @@ type AppContentProps = {
   selectedAccount: Account | null
   selectedTag: Tag | null
   viewingExampleWorkspace: boolean
-  showTimeMachine: boolean
+  mainView: MainView
   readOnly: boolean
   exchangeRates: ExchangeRateView
   liveExchangeRates: ExchangeRateView
@@ -63,7 +65,7 @@ export function AppContent({
   selectedAccount,
   selectedTag,
   viewingExampleWorkspace,
-  showTimeMachine,
+  mainView,
   readOnly,
   exchangeRates,
   liveExchangeRates,
@@ -102,7 +104,7 @@ export function AppContent({
           }
         >
           {viewingExampleWorkspace && <ExampleWorkspaceBanner onExit={onExitExampleWorkspace} />}
-          {selectedSnapshot && !showTimeMachine && (
+          {selectedSnapshot && mainView === 'portfolio' && (
             <HistoricalVersionBanner
               snapshotId={selectedSnapshot.id}
               createdAt={selectedSnapshot.createdAt}
@@ -110,7 +112,13 @@ export function AppContent({
               className={viewingExampleWorkspace ? 'pt-3' : undefined}
             />
           )}
-          {showTimeMachine ? (
+          {mainView === 'trend' ? (
+            <PortfolioTrend
+              workspace={latestWorkspace ?? workspace}
+              snapshots={activeSnapshots}
+              liveRates={liveExchangeRates.snapshot?.rates}
+            />
+          ) : mainView === 'timeMachine' ? (
             <TimeMachine
               workspace={latestWorkspace ?? workspace}
               snapshots={activeSnapshots}

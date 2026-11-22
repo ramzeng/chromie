@@ -5,7 +5,8 @@ import {
   History,
   LogOut,
   Plus,
-  Settings
+  Settings,
+  TrendingUp
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -23,7 +24,8 @@ import { cn } from '@/lib/utils'
 import {
   AccountNavigation,
   SELECTED_NAVIGATION_CLASS_NAME,
-  TagNavigation
+  TagNavigation,
+  type MainView
 } from './portfolio-navigation'
 
 type AppSidebarProps = {
@@ -33,10 +35,11 @@ type AppSidebarProps = {
   selectedSnapshotId: string | null
   selectedAccountId: string | null
   selectedTagId: string | null
-  showTimeMachine: boolean
+  mainView: MainView
   onExitExampleWorkspace: () => void
   onOpenWorkspaceSettings: () => void
   onShowOverview: () => void
+  onShowTrend: () => void
   onShowTimeMachine: () => void
   onAddAccount: () => void
   onSelectAccount: (account: Account) => void
@@ -57,10 +60,11 @@ export function AppSidebar({
   selectedSnapshotId,
   selectedAccountId,
   selectedTagId,
-  showTimeMachine,
+  mainView,
   onExitExampleWorkspace,
   onOpenWorkspaceSettings,
   onShowOverview,
+  onShowTrend,
   onShowTimeMachine,
   onAddAccount,
   onSelectAccount,
@@ -169,7 +173,7 @@ export function AppSidebar({
                   'w-full justify-start px-3 font-normal',
                   !selectedAccountId &&
                     !selectedTagId &&
-                    !showTimeMachine &&
+                    mainView === 'portfolio' &&
                     cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
                 )}
                 onClick={onShowOverview}
@@ -181,7 +185,18 @@ export function AppSidebar({
                 variant="ghost"
                 className={cn(
                   'w-full justify-start px-3 font-normal',
-                  showTimeMachine && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
+                  mainView === 'trend' && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
+                )}
+                onClick={onShowTrend}
+              >
+                <TrendingUp />
+                资产走势
+              </Button>
+              <Button
+                variant="ghost"
+                className={cn(
+                  'w-full justify-start px-3 font-normal',
+                  mainView === 'timeMachine' && cn(SELECTED_NAVIGATION_CLASS_NAME, 'font-medium')
                 )}
                 onClick={onShowTimeMachine}
               >

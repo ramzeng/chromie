@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowLeft, CircleAlert, GitCompareArrows } from 'lucide-react'
+import { CircleAlert, GitCompareArrows } from 'lucide-react'
 import {
   CartesianGrid,
   Line,
@@ -47,7 +47,7 @@ import {
 } from '@/lib/portfolio-comparison'
 import { buildPortfolioTrend, type TrendPoint } from '@/lib/portfolio-trend'
 import { cn } from '@/lib/utils'
-import { LATEST_COMPARISON_POINT } from './snapshot-comparison'
+import { LATEST_COMPARISON_POINT, SnapshotComparison } from './snapshot-comparison'
 
 type TrendMetric = 'value' | 'return'
 
@@ -290,16 +290,16 @@ function TrendChart({
 export function PortfolioTrend({
   workspace,
   snapshots,
-  liveRates,
-  onBack,
-  onCompare
+  liveRates
 }: {
   workspace: Workspace
   snapshots: WorkspaceSnapshot[]
   liveRates?: Record<string, number>
-  onBack: () => void
-  onCompare: (fromId: string, toId: string) => void
 }) {
+  const [comparison, setComparison] = useState<{
+    fromId: string
+    toId: string
+  } | null>(null)
   const baseCurrency = workspace.baseCurrency
   const trend = buildPortfolioTrend(
     [
@@ -320,19 +320,29 @@ export function PortfolioTrend({
   const last = trend.points.at(-1)!
   const periods = [...trend.periods].reverse()
 
+  if (comparison) {
+    return (
+      <SnapshotComparison
+        workspace={workspace}
+        snapshots={snapshots}
+        liveRates={liveRates}
+        initialFromId={comparison.fromId}
+        initialToId={comparison.toId}
+        onBack={() => setComparison(null)}
+      />
+    )
+  }
+
   return (
     <PortfolioPage>
       <PortfolioPageHeader>
-        <div className="flex min-w-0 items-center gap-2">
-          <Button variant="ghost" size="icon-sm" aria-label="返回时间机器" onClick={onBack}>
-            <ArrowLeft data-icon="icon-only" />
-          </Button>
-          <h1 className="text-2xl font-semibold tracking-[-0.035em]">资产走势</h1>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-[-0.035em]">资产走势</h1>
       </PortfolioPageHeader>
 
       {trend.periods.length === 0 ? (
-        <TableEmptyState className="mt-5">创建快照后即可查看走势</TableEmptyState>
+        <TableEmptyState className="mt-5">
+          还没有快照。在「时间机器」中创建快照后，即可查看资产走势
+        </TableEmptyState>
       ) : (
         <>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -447,7 +457,9 @@ export function PortfolioTrend({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => onCompare(period.fromId, period.toId)}
+                          onClick={() =>
+                            setComparison({ fromId: period.fromId, toId: period.toId })
+                          }
                         >
                           <GitCompareArrows data-icon="inline-start" />
                           对比

@@ -691,7 +691,7 @@ export function SnapshotComparison({
     <PortfolioPage>
       <PortfolioPageHeader>
         <div className="flex min-w-0 items-center gap-2">
-          <Button variant="ghost" size="icon-sm" aria-label="返回时间机器" onClick={onBack}>
+          <Button variant="ghost" size="icon-sm" aria-label="返回" onClick={onBack}>
             <ArrowLeft data-icon="icon-only" />
           </Button>
           <h1 className="text-2xl font-semibold tracking-[-0.035em]">快照对比</h1>

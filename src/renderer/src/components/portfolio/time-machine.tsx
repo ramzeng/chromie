@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import {
-  ChartLine,
   Ellipsis,
   Eye,
   GitCompareArrows,
@@ -27,7 +26,6 @@ import {
   useTablePagination
 } from '@/components/portfolio/table-pagination'
 import { PortfolioPage, PortfolioPageHeader } from '@/components/portfolio/page-shell'
-import { PortfolioTrend } from '@/components/portfolio/portfolio-trend'
 import {
   LATEST_COMPARISON_POINT,
   SnapshotComparison
@@ -82,7 +80,6 @@ export function TimeMachine({
   onViewSnapshot: (snapshotId: string) => void
   onDeleteSnapshot: (snapshot: WorkspaceSnapshot) => void
 }) {
-  const [showTrend, setShowTrend] = useState(false)
   const [comparison, setComparison] = useState<{
     fromId: string
     toId: string
@@ -179,18 +176,6 @@ export function TimeMachine({
     )
   }
 
-  if (showTrend) {
-    return (
-      <PortfolioTrend
-        workspace={workspace}
-        snapshots={snapshots}
-        liveRates={liveExchangeRates.snapshot?.rates}
-        onBack={() => setShowTrend(false)}
-        onCompare={(fromId, toId) => setComparison({ fromId, toId })}
-      />
-    )
-  }
-
   return (
     <PortfolioPage>
       <PortfolioPageHeader>
@@ -198,15 +183,6 @@ export function TimeMachine({
           <h1 className="text-2xl font-semibold tracking-[-0.035em]">时间机器</h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            disabled={!latestSnapshot}
-            title={latestSnapshot ? undefined : '创建快照后即可查看走势'}
-            onClick={() => setShowTrend(true)}
-          >
-            <ChartLine data-icon="inline-start" />
-            走势
-          </Button>
           <Button
             variant="secondary"
             disabled={!latestSnapshot}
